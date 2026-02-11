@@ -10,6 +10,14 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 
+from .errors import (
+    DuplicateTokenizerAliasError,
+    InvalidArgumentError,
+    InvalidBM25FieldError,
+    InvalidKeyFieldError,
+    MissingKeyFieldError,
+)
+
 
 @dataclass(frozen=True)
 class TokenizerSpec:
@@ -23,7 +31,7 @@ class TokenizerSpec:
             return self.raw_sql
 
         if self.name is None:
-            raise ValueError("tokenizer name is required unless raw_sql is provided")
+            raise InvalidArgumentError("tokenizer name is required unless raw_sql is provided")
 
         if not self.options:
             return f"pdb.{self.name}()"
@@ -135,10 +143,10 @@ def validate_bm25_index(index: Index) -> None:
         return
 
     if not index.expressions:
-        raise ValueError("BM25 indexes must include at least one BM25Field")
+        raise InvalidBM25FieldError("BM25 indexes must include at least one BM25Field")
 
     if not all(isinstance(expr, BM25Field) for expr in index.expressions):
-        raise ValueError("BM25 indexes must use BM25Field for every indexed field")
+        raise InvalidBM25FieldError("BM25 indexes must use BM25Field for every indexed field")
 
     aliases: set[str] = set()
     for expr in index.expressions:
@@ -146,17 +154,17 @@ def validate_bm25_index(index: Index) -> None:
         if tokenizer is None or tokenizer.alias is None:
             continue
         if tokenizer.alias in aliases:
-            raise ValueError(f"Duplicate tokenizer alias '{tokenizer.alias}' in BM25 index")
+            raise DuplicateTokenizerAliasError(f"Duplicate tokenizer alias '{tokenizer.alias}' in BM25 index")
         aliases.add(tokenizer.alias)
 
     with_options = index.dialect_options["postgresql"].get("with") or {}
     key_field = with_options.get("key_field")
     if not key_field:
-        raise ValueError("BM25 indexes require postgresql_with={'key_field': '<column>'}")
+        raise MissingKeyFieldError("BM25 indexes require postgresql_with={'key_field': '<column>'}")
 
     field_names = {_bm25_field_name(expr) for expr in index.expressions}
     if key_field not in field_names:
-        raise ValueError(f"BM25 key_field '{key_field}' must match one of the indexed BM25Field columns")
+        raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must match one of the indexed BM25Field columns")
 
 
 @event.listens_for(Index, "before_create")

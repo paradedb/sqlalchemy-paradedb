@@ -16,6 +16,7 @@ dependencies = [
 test = [
   "pytest>=8.0.0",
   "psycopg[binary]>=3.1.18",
+  "alembic>=1.13.0",
 ]
 
 [tool.pytest.ini_options]
