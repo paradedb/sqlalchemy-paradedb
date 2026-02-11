@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from paradedb.sqlalchemy import pdb, search, select_with
 from conftest import Product, assert_uses_paradedb_scan
+from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
 
 
 pytestmark = pytest.mark.integration
@@ -79,6 +80,18 @@ def test_select_with_helpers(session):
     rows = session.execute(stmt.order_by(Product.id)).all()
     assert len(rows) == 2
     assert rows[0][1] is not None
+
+
+def test_select_with_snippet_rejects_fuzzy_predicate():
+    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    with pytest.raises(SnippetWithFuzzyPredicateError):
+        select_with.snippet(base, Product.description)
+
+
+def test_select_with_snippets_rejects_fuzzy_predicate():
+    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    with pytest.raises(SnippetWithFuzzyPredicateError):
+        select_with.snippets(base, Product.description)
 
 
 def test_snippets_and_positions_projection(session):

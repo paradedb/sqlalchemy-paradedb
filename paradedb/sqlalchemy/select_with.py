@@ -3,7 +3,14 @@ from __future__ import annotations
 from sqlalchemy import Select
 from sqlalchemy.sql.elements import ColumnElement
 
+from . import inspect as pdb_inspect
 from . import pdb
+from .errors import SnippetWithFuzzyPredicateError
+
+
+def _assert_snippet_supported(stmt: Select) -> None:
+    if pdb_inspect.has_fuzzy_predicate(stmt):
+        raise SnippetWithFuzzyPredicateError("Snippets are not supported with fuzzy search predicates")
 
 
 def score(stmt: Select, field: ColumnElement, *, label: str = "score") -> Select:
@@ -19,6 +26,7 @@ def snippet(
     end_tag: str | None = None,
     max_num_chars: int | None = None,
 ) -> Select:
+    _assert_snippet_supported(stmt)
     return stmt.add_columns(
         pdb.snippet(
             field,
@@ -39,6 +47,7 @@ def snippets(
     offset: int | None = None,
     sort_by: str | None = None,
 ) -> Select:
+    _assert_snippet_supported(stmt)
     return stmt.add_columns(
         pdb.snippets(
             field,

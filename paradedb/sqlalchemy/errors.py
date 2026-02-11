@@ -27,3 +27,11 @@ class DuplicateTokenizerAliasError(BM25ValidationError):
 
 class InvalidBM25FieldError(BM25ValidationError):
     """Raised when non-BM25Field expressions are used in a BM25 index."""
+
+
+class RuntimeGuardError(ParadeDBError, ValueError):
+    """Base class for runtime guardrail violations on statement builders."""
+
+
+class SnippetWithFuzzyPredicateError(RuntimeGuardError):
+    """Raised when snippet/snippets helpers are used with fuzzy predicates."""
