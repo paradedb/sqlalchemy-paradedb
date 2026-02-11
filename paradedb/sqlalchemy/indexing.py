@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -180,6 +181,99 @@ class IndexMeta:
     aliases: dict[str, str]
 
 
+_KEY_FIELD_RE = re.compile(r"key_field\s*=\s*'?\"?([^'\",)\s]+)\"?'?", re.IGNORECASE)
+_ALIAS_RE = re.compile(r"alias\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+_CAST_FIELD_RE = re.compile(r"^\(*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\)*\s*::\s*pdb\.", re.IGNORECASE)
+_PLAIN_FIELD_RE = re.compile(r'^\(*"?([A-Za-z_][A-Za-z0-9_]*)"?\)*$')
+
+
+def _split_top_level_csv(expr: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_single = False
+    in_double = False
+
+    for ch in expr:
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            current.append(ch)
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            current.append(ch)
+            continue
+        if not in_single and not in_double:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth = max(0, depth - 1)
+            elif ch == "," and depth == 0:
+                piece = "".join(current).strip()
+                if piece:
+                    parts.append(piece)
+                current = []
+                continue
+        current.append(ch)
+
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _extract_bm25_field_list(indexdef: str) -> list[str]:
+    marker = re.search(r"USING\s+bm25\s*\(", indexdef, re.IGNORECASE)
+    if marker is None:
+        return []
+
+    start = marker.end()
+    depth = 1
+    in_single = False
+    in_double = False
+    i = start
+    while i < len(indexdef):
+        ch = indexdef[i]
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif not in_single and not in_double:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return _split_top_level_csv(indexdef[start:i])
+        i += 1
+    return []
+
+
+def _extract_field_name(field_expr: str) -> str | None:
+    expr = field_expr.strip()
+    cast_match = _CAST_FIELD_RE.match(expr)
+    if cast_match:
+        return cast_match.group(1)
+    plain_match = _PLAIN_FIELD_RE.match(expr)
+    if plain_match:
+        return plain_match.group(1)
+    return None
+
+
+def _extract_key_field(indexdef: str) -> str | None:
+    match = _KEY_FIELD_RE.search(indexdef)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _extract_alias(index_expr: str) -> str | None:
+    match = _ALIAS_RE.search(index_expr)
+    if match:
+        return match.group(1)
+    return None
+
+
 def describe(engine: Engine, table) -> list[IndexMeta]:
     query = text(
         """
@@ -196,21 +290,26 @@ def describe(engine: Engine, table) -> list[IndexMeta]:
     output: list[IndexMeta] = []
     for row in rows:
         indexdef: str = row.indexdef
-        key_field: str | None = None
-        marker = "key_field='"
-        marker_idx = indexdef.find(marker)
-        if marker_idx != -1:
-            key_start = marker_idx + len(marker)
-            key_end = indexdef.find("'", key_start)
-            if key_end != -1:
-                key_field = indexdef[key_start:key_end]
+        key_field = _extract_key_field(indexdef)
+        raw_fields = _extract_bm25_field_list(indexdef)
+        aliases: dict[str, str] = {}
+        fields_ordered: list[str] = []
+        for raw in raw_fields:
+            field_name = _extract_field_name(raw)
+            if field_name is None:
+                continue
+            if field_name not in fields_ordered:
+                fields_ordered.append(field_name)
+            alias = _extract_alias(raw)
+            if alias is not None:
+                aliases[alias] = field_name
 
         output.append(
             IndexMeta(
                 index_name=row.indexname,
                 key_field=key_field,
-                fields=(),
-                aliases={},
+                fields=tuple(fields_ordered),
+                aliases=aliases,
             )
         )
     return output
