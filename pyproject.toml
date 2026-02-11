@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.24.2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sqlalchemy-paradedb"
+version = "0.1.0"
+description = "Typed SQLAlchemy helpers for ParadeDB"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "sqlalchemy>=2.0.32",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
+  "psycopg[binary]>=3.1.18",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+markers = [
+  "integration: marks tests that require a running ParadeDB instance",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["paradedb"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "paradedb",
+  "tests",
+  "scripts",
+  "pyproject.toml",
+]
