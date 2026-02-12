@@ -172,6 +172,37 @@ def more_like_this(
 ) -> ColumnElement[bool]:
     if (document_id is None) == (document is None):
         raise InvalidArgumentError("exactly one of document_id or document must be provided")
+    if document is not None and fields is not None:
+        raise InvalidArgumentError("fields can only be used with document_id")
+
+    if min_term_frequency is not None and min_term_frequency < 0:
+        raise InvalidArgumentError("min_term_frequency must be >= 0")
+    if max_query_terms is not None and max_query_terms <= 0:
+        raise InvalidArgumentError("max_query_terms must be > 0")
+    if min_doc_frequency is not None and min_doc_frequency < 0:
+        raise InvalidArgumentError("min_doc_frequency must be >= 0")
+    if max_doc_frequency is not None and max_doc_frequency < 0:
+        raise InvalidArgumentError("max_doc_frequency must be >= 0")
+    if (
+        min_doc_frequency is not None
+        and max_doc_frequency is not None
+        and min_doc_frequency > max_doc_frequency
+    ):
+        raise InvalidArgumentError("min_doc_frequency cannot be greater than max_doc_frequency")
+    if min_word_length is not None and min_word_length < 0:
+        raise InvalidArgumentError("min_word_length must be >= 0")
+    if max_word_length is not None and max_word_length < 0:
+        raise InvalidArgumentError("max_word_length must be >= 0")
+    if (
+        min_word_length is not None
+        and max_word_length is not None
+        and min_word_length > max_word_length
+    ):
+        raise InvalidArgumentError("min_word_length cannot be greater than max_word_length")
+    if boost_factor is not None and boost_factor < 0:
+        raise InvalidArgumentError("boost_factor must be >= 0")
+    if stopwords is not None and any((not isinstance(word, str)) or (not word.strip()) for word in stopwords):
+        raise InvalidArgumentError("stopwords entries must be non-empty strings")
 
     options_provided = any(
         option is not None

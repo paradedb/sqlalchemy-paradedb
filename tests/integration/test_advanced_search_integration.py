@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from conftest import Product, assert_uses_paradedb_scan
 from paradedb.sqlalchemy import search
+from paradedb.sqlalchemy.errors import InvalidArgumentError
 
 
 pytestmark = pytest.mark.integration
@@ -60,3 +61,30 @@ def test_more_like_this_by_document_payload(session):
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert 3 in ids
+
+
+def test_more_like_this_rejects_fields_with_document():
+    with pytest.raises(InvalidArgumentError, match="fields can only be used with document_id"):
+        search.more_like_this(Product.id, document={"description": "x"}, fields=["description"])
+
+
+def test_more_like_this_rejects_invalid_numeric_options():
+    with pytest.raises(InvalidArgumentError, match="min_term_frequency must be >= 0"):
+        search.more_like_this(Product.id, document_id=1, min_term_frequency=-1)
+
+    with pytest.raises(InvalidArgumentError, match="max_query_terms must be > 0"):
+        search.more_like_this(Product.id, document_id=1, max_query_terms=0)
+
+    with pytest.raises(InvalidArgumentError, match="min_doc_frequency cannot be greater than max_doc_frequency"):
+        search.more_like_this(Product.id, document_id=1, min_doc_frequency=10, max_doc_frequency=2)
+
+    with pytest.raises(InvalidArgumentError, match="min_word_length cannot be greater than max_word_length"):
+        search.more_like_this(Product.id, document_id=1, min_word_length=10, max_word_length=2)
+
+    with pytest.raises(InvalidArgumentError, match="boost_factor must be >= 0"):
+        search.more_like_this(Product.id, document_id=1, boost_factor=-1.0)
+
+
+def test_more_like_this_rejects_invalid_stopwords():
+    with pytest.raises(InvalidArgumentError, match="stopwords entries must be non-empty strings"):
+        search.more_like_this(Product.id, document_id=1, stopwords=["ok", ""])
