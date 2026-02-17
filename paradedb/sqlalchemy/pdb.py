@@ -62,4 +62,4 @@ def agg(spec: dict[str, Any], *, approximate: bool | None = None) -> ClauseEleme
     payload_expr = cast(literal(payload), JSONB)
     if approximate is None:
         return func.pdb.agg(payload_expr)
-    return func.pdb.agg(payload_expr, approximate=approximate)
+    return PDBFunctionWithNamedArgs("agg", [payload_expr], [("approximate", approximate)])
