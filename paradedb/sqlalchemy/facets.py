@@ -8,7 +8,12 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from . import inspect as pdb_inspect
 from . import pdb, search
-from .errors import InvalidArgumentError
+from .errors import (
+    FacetRequiresLimitError,
+    FacetRequiresOrderByError,
+    FacetRequiresParadeDBPredicateError,
+)
+from .validation import require_non_empty_sequence
 
 
 def _field_spec(name: str, field: str) -> dict[str, dict[str, str]]:
@@ -40,8 +45,7 @@ def stats(*, field: str) -> dict[str, dict[str, str]]:
 
 
 def percentiles(*, field: str, percents: list[float | int]) -> dict[str, dict[str, object]]:
-    if not percents:
-        raise InvalidArgumentError("percents must contain at least one value")
+    require_non_empty_sequence(percents, field_name="percents")
     return {"percentiles": {"field": field, "percents": list(percents)}}
 
 
@@ -119,15 +123,13 @@ def with_rows(
     ensure_predicate: bool = True,
 ) -> tuple[Select, FacetPlan]:
     if not base_stmt._order_by_clauses:
-        raise InvalidArgumentError("with_rows requires ORDER BY")
+        raise FacetRequiresOrderByError("with_rows requires ORDER BY")
     if base_stmt._limit_clause is None:
-        raise InvalidArgumentError("with_rows requires LIMIT")
+        raise FacetRequiresLimitError("with_rows requires LIMIT")
 
-    stmt = base_stmt
-    if ensure_predicate:
-        stmt = stmt.where(search.all(key_field))
-    elif not pdb_inspect.has_paradedb_predicate(stmt):
-        raise InvalidArgumentError("with_rows requires a ParadeDB predicate")
+    stmt = ensure_operator(base_stmt, key_field=key_field) if ensure_predicate else base_stmt
+    if not ensure_predicate and not pdb_inspect.has_paradedb_predicate(stmt):
+        raise FacetRequiresParadeDBPredicateError("with_rows requires a ParadeDB predicate")
 
     stmt = stmt.add_columns(pdb.agg(agg).over().label(label))
     return stmt, FacetPlan(label=label)

@@ -9,6 +9,10 @@ class InvalidArgumentError(ParadeDBError, ValueError):
     """Raised when a helper receives invalid user arguments."""
 
 
+class InvalidMoreLikeThisOptionsError(InvalidArgumentError):
+    """Raised when more_like_this options are missing/conflicting/out-of-range."""
+
+
 class BM25ValidationError(ParadeDBError, ValueError):
     """Base class for BM25 index validation errors."""
 
@@ -35,3 +39,19 @@ class RuntimeGuardError(ParadeDBError, ValueError):
 
 class SnippetWithFuzzyPredicateError(RuntimeGuardError):
     """Raised when snippet/snippets helpers are used with fuzzy predicates."""
+
+
+class FacetRuntimeError(RuntimeGuardError):
+    """Base class for facet runtime guardrail violations."""
+
+
+class FacetRequiresOrderByError(FacetRuntimeError):
+    """Raised when rows+facets helper is missing ORDER BY."""
+
+
+class FacetRequiresLimitError(FacetRuntimeError):
+    """Raised when rows+facets helper is missing LIMIT."""
+
+
+class FacetRequiresParadeDBPredicateError(FacetRuntimeError):
+    """Raised when rows+facets helper is used without ParadeDB predicate/sentinel."""

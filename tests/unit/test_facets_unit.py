@@ -5,7 +5,7 @@ from sqlalchemy import Integer, String, Text, column, select, table
 from sqlalchemy.dialects import postgresql
 
 from paradedb.sqlalchemy import facets, pdb
-from paradedb.sqlalchemy.errors import InvalidArgumentError
+from paradedb.sqlalchemy.errors import FacetRequiresLimitError, FacetRequiresOrderByError, InvalidArgumentError
 
 
 products = table(
@@ -54,11 +54,11 @@ def test_multi_merges_specs():
 
 def test_with_rows_requires_order_and_limit():
     base_missing_order = select(products.c.id).limit(5)
-    with pytest.raises(InvalidArgumentError, match="requires ORDER BY"):
+    with pytest.raises(FacetRequiresOrderByError, match="requires ORDER BY"):
         facets.with_rows(base_missing_order, agg=facets.terms(field="category", size=10), key_field=products.c.id)
 
     base_missing_limit = select(products.c.id).order_by(products.c.id)
-    with pytest.raises(InvalidArgumentError, match="requires LIMIT"):
+    with pytest.raises(FacetRequiresLimitError, match="requires LIMIT"):
         facets.with_rows(base_missing_limit, agg=facets.terms(field="category", size=10), key_field=products.c.id)
 
 
