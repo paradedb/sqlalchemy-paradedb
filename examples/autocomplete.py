@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import os
-
 from sqlalchemy import Integer, String, Text, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from sqlalchemy import create_engine
 
+from common import engine_from_env, setup_products
 from paradedb.sqlalchemy import search
 
 
@@ -22,12 +20,12 @@ class Product(Base):
 
 
 def main() -> None:
-    dsn = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/postgres")
-    engine = create_engine(dsn)
+    engine = engine_from_env()
+    setup_products(engine)
 
     stmt = (
         select(Product.id, Product.description)
-        .where(search.phrase_prefix(Product.description, ["run", "sh"]))
+        .where(search.phrase_prefix(Product.description, ["running", "sh"]))
         .order_by(Product.id)
         .limit(10)
     )

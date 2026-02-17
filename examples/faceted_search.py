@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import os
-
 from sqlalchemy import Integer, String, Text, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from sqlalchemy import create_engine
 
+from common import engine_from_env, setup_products
 from paradedb.sqlalchemy import facets, pdb, search
 
 
@@ -23,8 +21,8 @@ class Product(Base):
 
 
 def main() -> None:
-    dsn = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/postgres")
-    engine = create_engine(dsn)
+    engine = engine_from_env()
+    setup_products(engine)
 
     stmt = (
         select(

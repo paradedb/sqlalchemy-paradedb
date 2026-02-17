@@ -65,3 +65,13 @@ jobs:
         env:
           PARADEDB_TEST_DSN: postgres://postgres:postgres@localhost:5432/postgres
         run: python -m pytest -m integration
+      - name: Run examples
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+        run: |
+          python examples/quickstart.py
+          python examples/autocomplete.py
+          python examples/more_like_this.py
+          python examples/faceted_search.py
+          python examples/hybrid_rrf.py
+          python examples/rag.py

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-# Minimal retrieval query for RAG pipelines.
-
-import os
-
 from sqlalchemy import Integer, Text, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from sqlalchemy import create_engine
 
+from common import engine_from_env, setup_documents
 from paradedb.sqlalchemy import pdb, search, select_with
 
 
@@ -23,8 +19,8 @@ class Document(Base):
 
 
 def retrieve(query: str, limit: int = 5) -> None:
-    dsn = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/postgres")
-    engine = create_engine(dsn)
+    engine = engine_from_env()
+    setup_documents(engine)
 
     base = (
         select(Document.id, Document.content)
