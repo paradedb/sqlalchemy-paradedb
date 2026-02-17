@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from alembic.autogenerate import renderers
 from alembic.operations import Operations
 from alembic.operations.ops import MigrateOperation
 
 
 def _quote_ident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
+
+
+def _quote_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 @Operations.register_operation("create_bm25_index")
@@ -34,9 +39,17 @@ def _create_bm25_index_impl(operations: Operations, operation: CreateBM25IndexOp
     fields_sql = ", ".join(_quote_ident(field) for field in operation.fields)
     sql = (
         f"CREATE INDEX {_quote_ident(operation.index_name)} ON {_quote_ident(operation.table_name)} "
-        f"USING bm25 ({fields_sql}) WITH (key_field='{operation.key_field}')"
+        f"USING bm25 ({fields_sql}) WITH (key_field={_quote_literal(operation.key_field)})"
     )
     operations.execute(sql)
+
+
+@renderers.dispatch_for(CreateBM25IndexOp)
+def _render_create_bm25_index_op(autogen_context, op: CreateBM25IndexOp) -> str:
+    return (
+        f"op.create_bm25_index({op.index_name!r}, {op.table_name!r}, {op.fields!r}, "
+        f"key_field={op.key_field!r})"
+    )
 
 
 @Operations.register_operation("drop_bm25_index")
@@ -56,6 +69,11 @@ def _drop_bm25_index_impl(operations: Operations, operation: DropBM25IndexOp) ->
     operations.execute(f"DROP INDEX{if_exists_sql} {_quote_ident(operation.index_name)}")
 
 
+@renderers.dispatch_for(DropBM25IndexOp)
+def _render_drop_bm25_index_op(autogen_context, op: DropBM25IndexOp) -> str:
+    return f"op.drop_bm25_index({op.index_name!r}, if_exists={op.if_exists!r})"
+
+
 @Operations.register_operation("reindex_bm25")
 class ReindexBM25Op(MigrateOperation):
     def __init__(self, index_name: str, concurrently: bool = False) -> None:
@@ -71,3 +89,8 @@ class ReindexBM25Op(MigrateOperation):
 def _reindex_bm25_impl(operations: Operations, operation: ReindexBM25Op) -> None:
     concurrently_sql = " CONCURRENTLY" if operation.concurrently else ""
     operations.execute(f"REINDEX INDEX{concurrently_sql} {_quote_ident(operation.index_name)}")
+
+
+@renderers.dispatch_for(ReindexBM25Op)
+def _render_reindex_bm25_op(autogen_context, op: ReindexBM25Op) -> str:
+    return f"op.reindex_bm25({op.index_name!r}, concurrently={op.concurrently!r})"
