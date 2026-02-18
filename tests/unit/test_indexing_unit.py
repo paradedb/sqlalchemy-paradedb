@@ -6,7 +6,15 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import CompileError
 from sqlalchemy.schema import CreateIndex
 
-from paradedb.sqlalchemy.indexing import BM25Field, tokenize, validate_bm25_index
+from paradedb.sqlalchemy.indexing import (
+    BM25Field,
+    _extract_alias,
+    _extract_bm25_field_list,
+    _extract_field_name,
+    _extract_key_field,
+    tokenize,
+    validate_bm25_index,
+)
 
 
 metadata = MetaData()
@@ -79,3 +87,26 @@ def test_key_field_must_exist_in_fields():
 
     with pytest.raises(ValueError, match="must match one of the indexed"):
         validate_bm25_index(idx)
+
+
+def test_extract_key_field_handles_normalized_indexdef():
+    indexdef = "CREATE INDEX idx ON public.products USING bm25 (id, description) WITH (key_field=id)"
+    assert _extract_key_field(indexdef) == "id"
+
+
+def test_extract_bm25_field_list_parses_tokenizer_casts():
+    indexdef = (
+        "CREATE INDEX idx ON public.products USING bm25 "
+        "(id, ((description)::pdb.unicode_words(lowercase=true)), "
+        "((category)::pdb.literal_normalized(alias=category_exact))) WITH (key_field=id)"
+    )
+    parts = _extract_bm25_field_list(indexdef)
+    assert parts == [
+        "id",
+        "((description)::pdb.unicode_words(lowercase=true))",
+        "((category)::pdb.literal_normalized(alias=category_exact))",
+    ]
+    assert _extract_field_name(parts[0]) == "id"
+    assert _extract_field_name(parts[1]) == "description"
+    assert _extract_field_name(parts[2]) == "category"
+    assert _extract_alias(parts[2]) == "category_exact"

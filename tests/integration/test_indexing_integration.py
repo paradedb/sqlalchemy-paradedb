@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
 
-from paradedb.sqlalchemy.indexing import BM25Field, tokenize
+from paradedb.sqlalchemy.indexing import BM25Field, describe, tokenize
 
 
 pytestmark = pytest.mark.integration
@@ -223,5 +223,40 @@ def test_missing_key_field_is_rejected(engine):
 
     with pytest.raises(ValueError, match="key_field"):
         idx.create(engine)
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_describe_returns_fields_and_aliases(engine):
+    table_name = "describe_products"
+    index_name = "describe_products_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("category", String(120), nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description, tokenizer=tokenize.unicode(lowercase=True)),
+        BM25Field(products.c.category, tokenizer=tokenize.literal_normalized(alias="category_exact")),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    metas = describe(engine, products)
+    meta = next(m for m in metas if m.index_name == index_name)
+
+    assert meta.key_field == "id"
+    assert meta.fields == ("id", "description", "category")
+    assert meta.aliases == {"category_exact": "category"}
 
     _drop_table_and_index(engine, table_name, index_name)

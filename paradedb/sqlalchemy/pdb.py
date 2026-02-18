@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import cast, func, literal
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
+from .errors import InvalidArgumentError
 from ._functions import PDBFunctionWithNamedArgs
 
 
@@ -21,7 +23,7 @@ def snippet(
     max_num_chars: int | None = None,
 ) -> ClauseElement:
     if (start_tag is None) != (end_tag is None):
-        raise ValueError("start_tag and end_tag must be provided together")
+        raise InvalidArgumentError("start_tag and end_tag must be provided together")
 
     args: list[Any] = [field]
     if start_tag is not None and end_tag is not None:
@@ -57,6 +59,7 @@ def snippet_positions(field: ColumnElement) -> ClauseElement:
 
 def agg(spec: dict[str, Any], *, approximate: bool | None = None) -> ClauseElement:
     payload = json.dumps(spec, separators=(",", ":"), sort_keys=True)
+    payload_expr = cast(literal(payload), JSONB)
     if approximate is None:
-        return func.pdb.agg(payload)
-    return func.pdb.agg(payload, approximate=approximate)
+        return func.pdb.agg(payload_expr)
+    return func.pdb.agg(payload_expr, approximate=approximate)

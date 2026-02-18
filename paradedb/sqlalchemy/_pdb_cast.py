@@ -37,7 +37,7 @@ def _compile_pdb_cast(element: PDBCast, compiler, **kw: Any) -> str:
     if element.args:
         args_sql = ", ".join(_render_cast_arg(arg, compiler, **kw) for arg in element.args)
         return f"{expr_sql}::pdb.{element.type_name}({args_sql})"
-    return f"{expr_sql}::pdb.{element.type_name}()"
+    return f"{expr_sql}::pdb.{element.type_name}"
 
 
 @compiles(PDBCast)
