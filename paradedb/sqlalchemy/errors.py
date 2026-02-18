@@ -55,3 +55,7 @@ class FacetRequiresLimitError(FacetRuntimeError):
 
 class FacetRequiresParadeDBPredicateError(FacetRuntimeError):
     """Raised when rows+facets helper is used without ParadeDB predicate/sentinel."""
+
+
+class FieldNotIndexedError(ParadeDBError):
+    """Raised when a column is not covered by any BM25 index on its table."""

@@ -17,6 +17,8 @@ from .validation import (
     require_positive,
 )
 
+_VALID_RANGE_RELATIONS: frozenset[str] = frozenset({"Intersects", "Contains", "Within", "ContainsOrIntersects"})
+
 _MATCH_ALL = operators.custom_op("&&&", precedence=5, is_comparison=True)
 _MATCH_ANY = operators.custom_op("|||", precedence=5, is_comparison=True)
 _TERM = operators.custom_op("===", precedence=5, is_comparison=True)
@@ -166,6 +168,31 @@ def prox_array(*clauses: str | ClauseElement | ProximityExpr) -> ProximityExpr:
 def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
     prox_expr = prox.expr if isinstance(prox, ProximityExpr) else prox
     return field.operate(_QUERY, prox_expr)
+
+
+def range_term(
+    field: ColumnElement,
+    bounds: str,
+    *,
+    relation: str = "Intersects",
+) -> ColumnElement[bool]:
+    """Match rows where a range-typed field satisfies a range predicate.
+
+    Args:
+        field: A range-typed column (int4range, daterange, tstzrange, etc.).
+        bounds: A range literal string, e.g. ``"[3,9]"``, ``"(3,9]"``.
+        relation: One of ``"Intersects"``, ``"Contains"``, ``"Within"``,
+                  ``"ContainsOrIntersects"``. Defaults to ``"Intersects"``.
+
+    Generates::
+
+        field @@@ pdb.range_term('[3,9]', 'Contains')
+    """
+    if relation not in _VALID_RANGE_RELATIONS:
+        raise InvalidArgumentError(
+            f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
+        )
+    return field.operate(_QUERY, func.pdb.range_term(bounds, relation))
 
 
 def more_like_this(

@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
 
-from paradedb.sqlalchemy.indexing import BM25Field, describe, tokenize
+from paradedb.sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
+from paradedb.sqlalchemy.errors import FieldNotIndexedError
 
 
 pytestmark = pytest.mark.integration
@@ -260,3 +261,79 @@ def test_describe_returns_fields_and_aliases(engine):
     assert meta.aliases == {"category_exact": "category"}
 
     _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_describe_includes_tokenizers(engine):
+    """describe() populates IndexMeta.tokenizers from the index definition."""
+    if not _tokenizer_cast_supported(engine):
+        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
+
+    table_name = "describe_tokenizers_products"
+    index_name = "describe_tokenizers_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("category", String(120), nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description, tokenizer=tokenize.unicode(lowercase=True)),
+        BM25Field(products.c.category, tokenizer=tokenize.literal()),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    metas = describe(engine, products)
+    meta = next(m for m in metas if m.index_name == index_name)
+
+    assert "unicode_words" in meta.tokenizers.get("description", ())
+    assert "literal" in meta.tokenizers.get("category", ())
+    assert "id" not in meta.tokenizers  # no tokenizer for plain key field
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_assert_indexed_passes_and_raises(engine):
+    """assert_indexed passes for an indexed column and raises for an unindexed one."""
+    table_name = "assert_indexed_products"
+    index_name = "assert_indexed_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    tbl = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("extra", Text, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(tbl.c.id),
+        BM25Field(tbl.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    # 'description' is indexed → no error
+    assert_indexed(engine, tbl.c.description)
+
+    # 'extra' is not indexed → FieldNotIndexedError
+    with pytest.raises(FieldNotIndexedError, match="'extra'"):
+        assert_indexed(engine, tbl.c.extra)
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
