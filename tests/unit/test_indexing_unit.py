@@ -8,13 +8,17 @@ from sqlalchemy.schema import CreateIndex
 
 from paradedb.sqlalchemy.indexing import (
     BM25Field,
+    IndexMeta,
     _extract_alias,
     _extract_bm25_field_list,
     _extract_field_name,
     _extract_key_field,
+    _extract_tokenizer_name,
+    assert_indexed,
     tokenize,
     validate_bm25_index,
 )
+from paradedb.sqlalchemy.errors import FieldNotIndexedError, InvalidArgumentError
 
 
 metadata = MetaData()
@@ -110,3 +114,124 @@ def test_extract_bm25_field_list_parses_tokenizer_casts():
     assert _extract_field_name(parts[1]) == "description"
     assert _extract_field_name(parts[2]) == "category"
     assert _extract_alias(parts[2]) == "category_exact"
+
+
+# ---------------------------------------------------------------------------
+# _extract_tokenizer_name
+# ---------------------------------------------------------------------------
+
+def test_extract_tokenizer_name_unicode():
+    expr = "(description::pdb.unicode_words('lowercase=true'))"
+    assert _extract_tokenizer_name(expr) == "unicode_words"
+
+
+def test_extract_tokenizer_name_literal_normalized():
+    expr = "(category::pdb.literal_normalized('alias=category_exact'))"
+    assert _extract_tokenizer_name(expr) == "literal_normalized"
+
+
+def test_extract_tokenizer_name_no_options():
+    expr = "(category::pdb.literal)"
+    assert _extract_tokenizer_name(expr) == "literal"
+
+
+def test_extract_tokenizer_name_plain_field_returns_none():
+    assert _extract_tokenizer_name("id") is None
+
+
+# ---------------------------------------------------------------------------
+# IndexMeta.tokenizers population (unit-level, via describe helper stubs)
+# ---------------------------------------------------------------------------
+
+def test_index_meta_tokenizers_field_defaults_empty():
+    meta = IndexMeta(
+        index_name="idx",
+        key_field="id",
+        fields=("id",),
+        aliases={},
+    )
+    assert meta.tokenizers == {}
+
+
+def test_index_meta_tokenizers_stored():
+    meta = IndexMeta(
+        index_name="idx",
+        key_field="id",
+        fields=("id", "description"),
+        aliases={},
+        tokenizers={"description": ("unicode_words",)},
+    )
+    assert meta.tokenizers["description"] == ("unicode_words",)
+
+
+# ---------------------------------------------------------------------------
+# assert_indexed — error paths (no DB needed)
+# ---------------------------------------------------------------------------
+
+def test_assert_indexed_raises_when_column_has_no_table():
+    from sqlalchemy import column, Integer
+    bare_col = column("id", Integer)
+    with pytest.raises(InvalidArgumentError, match="table-bound"):
+        assert_indexed(None, bare_col)
+
+
+def test_assert_indexed_raises_field_not_indexed(monkeypatch):
+    """assert_indexed raises FieldNotIndexedError when describe() returns no matching index."""
+    from paradedb.sqlalchemy import indexing as idx_module
+
+    meta = IndexMeta(
+        index_name="products_bm25_idx",
+        key_field="id",
+        fields=("id", "description"),
+        aliases={},
+    )
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+
+    with pytest.raises(FieldNotIndexedError, match="'category'"):
+        assert_indexed(None, products.c.category)
+
+
+def test_assert_indexed_passes_when_field_found(monkeypatch):
+    from paradedb.sqlalchemy import indexing as idx_module
+
+    meta = IndexMeta(
+        index_name="products_bm25_idx",
+        key_field="id",
+        fields=("id", "description", "category"),
+        aliases={},
+    )
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+
+    # Should not raise
+    assert_indexed(None, products.c.category)
+
+
+def test_assert_indexed_tokenizer_match(monkeypatch):
+    from paradedb.sqlalchemy import indexing as idx_module
+
+    meta = IndexMeta(
+        index_name="products_bm25_idx",
+        key_field="id",
+        fields=("id", "category"),
+        aliases={},
+        tokenizers={"category": ("literal",)},
+    )
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+
+    assert_indexed(None, products.c.category, tokenizer="literal")  # passes
+
+
+def test_assert_indexed_tokenizer_mismatch_raises(monkeypatch):
+    from paradedb.sqlalchemy import indexing as idx_module
+
+    meta = IndexMeta(
+        index_name="products_bm25_idx",
+        key_field="id",
+        fields=("id", "category"),
+        aliases={},
+        tokenizers={"category": ("unicode_words",)},
+    )
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+
+    with pytest.raises(FieldNotIndexedError, match="tokenizer 'literal'"):
+        assert_indexed(None, products.c.category, tokenizer="literal")

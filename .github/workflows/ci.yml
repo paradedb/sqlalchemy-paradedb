@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  lint-type-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[test,dev]
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy paradedb
+      - name: Unit tests
+        run: python -m pytest tests/unit
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      paradedb:
+        image: paradedb/paradedb:latest
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[test,dev]
+      - name: Install pg client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Wait for ParadeDB
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 2
+          done
+          echo "ParadeDB did not become ready" >&2
+          exit 1
+      - name: Integration tests
+        env:
+          PARADEDB_TEST_DSN: postgres://postgres:postgres@localhost:5432/postgres
+        run: python -m pytest -m integration
+      - name: Run examples
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+        run: |
+          python examples/quickstart.py
+          python examples/autocomplete.py
+          python examples/more_like_this.py
+          python examples/faceted_search.py
+          python examples/hybrid_rrf.py
+          python examples/rag.py
