@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import Text, func, literal
+from sqlalchemy import Text, func, literal, literal_column, or_
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
@@ -18,6 +18,7 @@ from .validation import (
 )
 
 _VALID_RANGE_RELATIONS: frozenset[str] = frozenset({"Intersects", "Contains", "Within", "ContainsOrIntersects"})
+_VALID_RANGE_TYPES: frozenset[str] = frozenset({"int4range", "int8range", "numrange", "daterange", "tsrange", "tstzrange"})
 
 _MATCH_ALL = operators.custom_op("&&&", precedence=5, is_comparison=True)
 _MATCH_ANY = operators.custom_op("|||", precedence=5, is_comparison=True)
@@ -25,6 +26,7 @@ _TERM = operators.custom_op("===", precedence=5, is_comparison=True)
 _PHRASE = operators.custom_op("###", precedence=5, is_comparison=True)
 _QUERY = operators.custom_op("@@@", precedence=5, is_comparison=True)
 _NEAR = operators.custom_op("##", precedence=5)
+_NEAR_ORDERED = operators.custom_op("##>", precedence=5)
 
 
 def _to_term_payload(*terms: str) -> ClauseElement:
@@ -100,8 +102,8 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
-    def near(self, other: str | ClauseElement | ProximityExpr, *, distance: int) -> ProximityExpr:
-        return ProximityExpr(_near_chain(self.expr, other, distance=distance))
+    def near(self, other: str | ClauseElement | ProximityExpr, *, distance: int, ordered: bool = False) -> ProximityExpr:
+        return ProximityExpr(_near_chain(self.expr, other, distance=distance, ordered=ordered))
 
 
 def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseElement:
@@ -119,10 +121,11 @@ def _to_proximity_clause(value: str | ClauseElement | ProximityExpr) -> ClauseEl
     return PDBCast(operand, "proximityclause")
 
 
-def _near_chain(left: str | ClauseElement | ProximityExpr, right: str | ClauseElement | ProximityExpr, *, distance: int) -> ClauseElement:
+def _near_chain(left: str | ClauseElement | ProximityExpr, right: str | ClauseElement | ProximityExpr, *, distance: int, ordered: bool = False) -> ClauseElement:
     left_expr = _to_proximity_clause(left)
     right_expr = _to_proximity_clause(right)
-    return left_expr.operate(_NEAR, literal(distance)).operate(_NEAR, right_expr)
+    op = _NEAR_ORDERED if ordered else _NEAR
+    return left_expr.operate(op, literal(distance)).operate(op, right_expr)
 
 
 def parse(field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False) -> ColumnElement[bool]:
@@ -150,8 +153,8 @@ def regex_phrase(
     return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
 
 
-def near(field: ColumnElement, left: str | ClauseElement, right: str | ClauseElement, *, distance: int) -> ColumnElement[bool]:
-    return field.operate(_QUERY, _near_chain(left, right, distance=distance))
+def near(field: ColumnElement, left: str | ClauseElement, right: str | ClauseElement, *, distance: int, ordered: bool = False) -> ColumnElement[bool]:
+    return field.operate(_QUERY, _near_chain(left, right, distance=distance, ordered=ordered))
 
 
 def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
@@ -175,6 +178,7 @@ def range_term(
     bounds: str,
     *,
     relation: str = "Intersects",
+    range_type: str | None = None,
 ) -> ColumnElement[bool]:
     """Match rows where a range-typed field satisfies a range predicate.
 
@@ -183,22 +187,37 @@ def range_term(
         bounds: A range literal string, e.g. ``"[3,9]"``, ``"(3,9]"``.
         relation: One of ``"Intersects"``, ``"Contains"``, ``"Within"``,
                   ``"ContainsOrIntersects"``. Defaults to ``"Intersects"``.
+        range_type: Optional PostgreSQL range type for explicit casting, e.g.
+                    ``"int4range"``, ``"int8range"``, ``"numrange"``,
+                    ``"daterange"``, ``"tsrange"``, ``"tstzrange"``.
+                    When provided, generates ``'bounds'::range_type`` cast.
 
     Generates::
 
         field @@@ pdb.range_term('[3,9]', 'Contains')
+        field @@@ pdb.range_term('[3,9]'::int4range, 'Contains')
     """
     if relation not in _VALID_RANGE_RELATIONS:
         raise InvalidArgumentError(
             f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
         )
-    return field.operate(_QUERY, func.pdb.range_term(bounds, relation))
+    if range_type is not None:
+        if range_type not in _VALID_RANGE_TYPES:
+            raise InvalidArgumentError(
+                f"range_type must be one of: {', '.join(sorted(_VALID_RANGE_TYPES))}"
+            )
+        escaped = bounds.replace("'", "''")
+        bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
+    else:
+        bounds_arg = literal(bounds)
+    return field.operate(_QUERY, func.pdb.range_term(bounds_arg, relation))
 
 
 def more_like_this(
     field: ColumnElement,
     *,
     document_id: Any | None = None,
+    document_ids: list[Any] | None = None,
     document: dict[str, Any] | str | None = None,
     fields: list[str] | None = None,
     min_term_frequency: int | None = None,
@@ -212,10 +231,13 @@ def more_like_this(
 ) -> ColumnElement[bool]:
     error_cls = InvalidMoreLikeThisOptionsError
 
-    if (document_id is None) == (document is None):
-        raise error_cls("exactly one of document_id or document must be provided")
+    sources_provided = sum(x is not None for x in (document_id, document_ids, document))
+    if sources_provided != 1:
+        raise error_cls("exactly one of document_id, document_ids, or document must be provided")
+    if document_ids is not None and len(document_ids) == 0:
+        raise error_cls("document_ids must not be empty")
     if document is not None and fields is not None:
-        raise error_cls("fields can only be used with document_id")
+        raise error_cls("fields can only be used with document_id or document_ids")
 
     if min_term_frequency is not None:
         require_non_negative(min_term_frequency, field_name="min_term_frequency", error_cls=error_cls)
@@ -264,17 +286,35 @@ def more_like_this(
         )
     )
 
-    args: list[Any] = []
-    if document_id is not None:
-        args.append(document_id)
+    def _build_id_args(doc_id: Any) -> list[Any]:
+        id_args: list[Any] = [doc_id]
         if fields is not None or options_provided:
-            args.append(array(fields or [], type_=Text()))
-    else:
-        payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
-        args.append(payload)
+            id_args.append(array(fields or [], type_=Text()))
+        if options_provided:
+            id_args.extend(
+                [
+                    1 if min_term_frequency is None else min_term_frequency,
+                    25 if max_query_terms is None else max_query_terms,
+                    0 if min_doc_frequency is None else min_doc_frequency,
+                    1_000_000 if max_doc_frequency is None else max_doc_frequency,
+                    0 if min_word_length is None else min_word_length,
+                    1000 if max_word_length is None else max_word_length,
+                    0.0 if boost_factor is None else boost_factor,
+                    array(stopwords or [], type_=Text()),
+                ]
+            )
+        return id_args
 
+    if document_ids is not None:
+        return or_(*[field.operate(_QUERY, func.pdb.more_like_this(*_build_id_args(doc_id))) for doc_id in document_ids])
+
+    if document_id is not None:
+        return field.operate(_QUERY, func.pdb.more_like_this(*_build_id_args(document_id)))
+
+    payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
+    doc_args: list[Any] = [payload]
     if options_provided:
-        args.extend(
+        doc_args.extend(
             [
                 1 if min_term_frequency is None else min_term_frequency,
                 25 if max_query_terms is None else max_query_terms,
@@ -286,5 +326,4 @@ def more_like_this(
                 array(stopwords or [], type_=Text()),
             ]
         )
-
-    return field.operate(_QUERY, func.pdb.more_like_this(*args))
+    return field.operate(_QUERY, func.pdb.more_like_this(*doc_args))

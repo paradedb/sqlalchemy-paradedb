@@ -88,3 +88,50 @@ def test_more_like_this_rejects_invalid_numeric_options():
 def test_more_like_this_rejects_invalid_stopwords():
     with pytest.raises(InvalidArgumentError, match="stopwords entries must be non-empty strings"):
         search.more_like_this(Product.id, document_id=1, stopwords=["ok", ""])
+
+
+def test_more_like_this_by_document_ids(session):
+    """document_ids ORs results from multiple individual MLT queries."""
+    stmt_combined = (
+        select(Product.id)
+        .where(search.more_like_this(Product.id, document_ids=[1, 3], fields=["description"]))
+        .order_by(Product.id)
+    )
+    stmt_id1 = (
+        select(Product.id)
+        .where(search.more_like_this(Product.id, document_id=1, fields=["description"]))
+        .order_by(Product.id)
+    )
+    stmt_id3 = (
+        select(Product.id)
+        .where(search.more_like_this(Product.id, document_id=3, fields=["description"]))
+        .order_by(Product.id)
+    )
+    assert_uses_paradedb_scan(session, stmt_combined)
+    ids_combined = set(session.scalars(stmt_combined))
+    ids_1 = set(session.scalars(stmt_id1))
+    ids_3 = set(session.scalars(stmt_id3))
+    # Combined should be union of individual results
+    assert ids_1.issubset(ids_combined)
+    assert ids_3.issubset(ids_combined)
+
+
+def test_near_ordered_predicate(session):
+    """near() with ordered=True uses ##> and finds terms in sequence."""
+    stmt_ordered = (
+        select(Product.id)
+        .where(search.near(Product.description, "sleek", "shoes", distance=5, ordered=True))
+        .order_by(Product.id)
+    )
+    stmt_unordered = (
+        select(Product.id)
+        .where(search.near(Product.description, "sleek", "shoes", distance=5))
+        .order_by(Product.id)
+    )
+    assert_uses_paradedb_scan(session, stmt_ordered)
+    ids_ordered = set(session.scalars(stmt_ordered))
+    ids_unordered = set(session.scalars(stmt_unordered))
+    # Ordered proximity should be a subset of unordered
+    assert ids_ordered.issubset(ids_unordered)
+    # "Sleek running shoes" — sleek appears before shoes, so ordered should find it
+    assert 1 in ids_ordered
