@@ -23,7 +23,7 @@ DOCUMENT_ROWS = [
 
 
 def engine_from_env() -> Engine:
-    dsn = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/postgres")
+    dsn = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5443/postgres")
     return create_engine(dsn)
 
 

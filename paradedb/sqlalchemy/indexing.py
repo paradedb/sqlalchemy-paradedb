@@ -123,7 +123,7 @@ def _compile_bm25_field(element: BM25Field, compiler, **kw: Any) -> str:
     expr_sql = compiler.process(element.expr, **kw)
     if element.tokenizer is None:
         return expr_sql
-    return f"({expr_sql}::{element.tokenizer.render()})"
+    return f"(({expr_sql})::{element.tokenizer.render()})"
 
 
 @compiles(BM25Field)

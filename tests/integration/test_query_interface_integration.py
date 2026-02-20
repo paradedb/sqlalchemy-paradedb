@@ -73,13 +73,15 @@ def test_snippet_projection(session):
 
 
 def test_select_with_helpers(session):
-    base = select(Product.id).where(search.match_any(Product.description, "running"))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "running"))
     stmt = select_with.score(base, Product.id, label="search_score")
+    stmt = select_with.snippet_positions(stmt, Product.description, label="positions")
     assert_uses_paradedb_scan(session, stmt)
 
     rows = session.execute(stmt.order_by(Product.id)).all()
     assert len(rows) == 2
     assert rows[0][1] is not None
+    assert rows[0][2] is not None
 
 
 def test_select_with_snippet_rejects_fuzzy_predicate():
@@ -92,6 +94,12 @@ def test_select_with_snippets_rejects_fuzzy_predicate():
     base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippets(base, Product.description)
+
+
+def test_select_with_snippet_positions_rejects_fuzzy_predicate():
+    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    with pytest.raises(SnippetWithFuzzyPredicateError):
+        select_with.snippet_positions(base, Product.description)
 
 
 def test_snippets_and_positions_projection(session):

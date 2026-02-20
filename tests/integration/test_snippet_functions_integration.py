@@ -188,6 +188,19 @@ def test_select_with_snippets_adds_column(mock_session):
     assert len(rows) > 0
 
 
+def test_select_with_snippet_positions_adds_column(mock_session):
+    """select_with.snippet_positions() appends positions column to the statement."""
+    base = (
+        select(MockItem.id, MockItem.description)
+        .where(search.match_any(MockItem.description, "running"))
+    )
+    stmt = select_with.snippet_positions(base, MockItem.description, label="positions")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
+    assert len(rows) > 0
+    assert any(row[2] is not None for row in rows)
+
+
 def test_select_with_snippet_rejects_fuzzy_predicate(mock_session):
     """select_with.snippet() raises when the predicate is fuzzy (no positions)."""
     base = (
@@ -206,6 +219,16 @@ def test_select_with_snippets_rejects_fuzzy_predicate(mock_session):
     )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippets(base, MockItem.description)
+
+
+def test_select_with_snippet_positions_rejects_fuzzy_predicate(mock_session):
+    """select_with.snippet_positions() raises when the predicate is fuzzy."""
+    base = (
+        select(MockItem.id, MockItem.description)
+        .where(search.fuzzy(MockItem.description, "runnning", distance=1))
+    )
+    with pytest.raises(SnippetWithFuzzyPredicateError):
+        select_with.snippet_positions(base, MockItem.description)
 
 
 # ---------------------------------------------------------------------------

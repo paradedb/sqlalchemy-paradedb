@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text
 from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import CompileError
 from sqlalchemy.schema import CreateIndex
 
@@ -19,6 +20,7 @@ from paradedb.sqlalchemy.indexing import (
     validate_bm25_index,
 )
 from paradedb.sqlalchemy.errors import FieldNotIndexedError, InvalidArgumentError
+from paradedb.sqlalchemy.expr import json_text
 
 
 metadata = MetaData()
@@ -28,6 +30,7 @@ products = Table(
     Column("id", Integer, primary_key=True),
     Column("description", Text),
     Column("category", String),
+    Column("metadata", JSONB),
 )
 
 
@@ -44,9 +47,46 @@ def test_bm25_index_compile_with_tokenizers():
     sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
 
     assert "USING bm25" in sql
-    assert "(description::pdb.unicode_words('lowercase=true,stemmer=english'))" in sql
-    assert "category::pdb.literal_normalized('alias=category_exact')" in sql
+    assert "((description)::pdb.unicode_words('lowercase=true,stemmer=english'))" in sql
+    assert "((category)::pdb.literal_normalized('alias=category_exact'))" in sql
     assert "key_field = id" in sql
+
+
+def test_bm25_index_compile_json_key_with_tokenizer():
+    idx = Index(
+        "products_bm25_json_idx",
+        BM25Field(products.c.id),
+        BM25Field(
+            json_text(products.c.metadata, "color"),
+            tokenizer=tokenize.literal(alias="metadata_color"),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((metadata ->> 'color')::pdb.literal('alias=metadata_color'))" in sql
+
+
+def test_bm25_index_compile_multiple_json_keys():
+    idx = Index(
+        "products_bm25_json_multi_idx",
+        BM25Field(products.c.id),
+        BM25Field(
+            json_text(products.c.metadata, "color"),
+            tokenizer=tokenize.literal(alias="metadata_color"),
+        ),
+        BM25Field(
+            json_text(products.c.metadata, "location"),
+            tokenizer=tokenize.literal(alias="metadata_location"),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "alias=metadata_color" in sql
+    assert "alias=metadata_location" in sql
 
 
 def test_bm25_field_non_postgres_compile_raises():

@@ -6,10 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "${SCRIPT_DIR}/run_paradedb.sh"
 
-PORT="${PARADEDB_PORT:-5443}"
-USER="${PARADEDB_USER:-postgres}"
-PASSWORD="${PARADEDB_PASSWORD:-postgres}"
-DB="${PARADEDB_DB:-postgres}"
+PORT="${PARADEDB_PORT}"
+USER="${PARADEDB_USER}"
+PASSWORD="${PARADEDB_PASSWORD}"
+DB="${PARADEDB_DB}"
 
 export PARADEDB_INTEGRATION=1
 export PARADEDB_TEST_DSN="postgresql+psycopg://${USER}:${PASSWORD}@localhost:${PORT}/${DB}"

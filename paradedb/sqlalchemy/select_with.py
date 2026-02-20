@@ -57,3 +57,13 @@ def snippets(
             sort_by=sort_by,
         ).label(label)
     )
+
+
+def snippet_positions(
+    stmt: Select,
+    field: ColumnElement,
+    *,
+    label: str = "snippet_positions",
+) -> Select:
+    _assert_snippet_supported(stmt)
+    return stmt.add_columns(pdb.snippet_positions(field).label(label))

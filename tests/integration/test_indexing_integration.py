@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 
+from paradedb.sqlalchemy.expr import json_text
 from paradedb.sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
 from paradedb.sqlalchemy.errors import FieldNotIndexedError
 
@@ -129,6 +131,59 @@ def test_bm25_index_with_tokenizers_when_supported(engine):
     assert "pdb.unicode_words" in row.indexdef
     assert "lowercase=true" in row.indexdef
     assert "pdb.literal_normalized" in row.indexdef
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_bm25_index_json_keys_when_supported(engine):
+    if not _tokenizer_cast_supported(engine):
+        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
+
+    table_name = "indexing_products_json"
+    index_name = "indexing_products_json_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("metadata", JSONB, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(
+            json_text(products.c.metadata, "color"),
+            tokenizer=tokenize.literal(alias="metadata_color"),
+        ),
+        BM25Field(
+            json_text(products.c.metadata, "location"),
+            tokenizer=tokenize.literal(alias="metadata_location"),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE tablename = :table_name
+                  AND indexname = :index_name
+                """
+            ),
+            {"table_name": table_name, "index_name": index_name},
+        ).one()
+
+    assert "->>" in row.indexdef
+    assert "alias=metadata_color" in row.indexdef
+    assert "alias=metadata_location" in row.indexdef
 
     _drop_table_and_index(engine, table_name, index_name)
 
@@ -335,5 +390,3 @@ def test_assert_indexed_passes_and_raises(engine):
         assert_indexed(engine, tbl.c.extra)
 
     _drop_table_and_index(engine, table_name, index_name)
-
-

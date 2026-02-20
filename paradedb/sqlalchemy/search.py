@@ -102,8 +102,17 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
-    def near(self, other: str | ClauseElement | ProximityExpr, *, distance: int, ordered: bool = False) -> ProximityExpr:
-        return ProximityExpr(_near_chain(self.expr, other, distance=distance, ordered=ordered))
+    def near(
+        self,
+        other: str | ClauseElement | ProximityExpr | None = None,
+        *,
+        distance: int,
+        ordered: bool = False,
+        right_pattern: str | None = None,
+        max_expansions: int = 100,
+    ) -> ProximityExpr:
+        right = _resolve_near_operand(other, right_pattern=right_pattern, max_expansions=max_expansions)
+        return ProximityExpr(_near_chain(self.expr, right, distance=distance, ordered=ordered))
 
 
 def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseElement:
@@ -122,10 +131,27 @@ def _to_proximity_clause(value: str | ClauseElement | ProximityExpr) -> ClauseEl
 
 
 def _near_chain(left: str | ClauseElement | ProximityExpr, right: str | ClauseElement | ProximityExpr, *, distance: int, ordered: bool = False) -> ClauseElement:
+    require_non_negative(distance, field_name="distance")
     left_expr = _to_proximity_clause(left)
     right_expr = _to_proximity_clause(right)
     op = _NEAR_ORDERED if ordered else _NEAR
     return left_expr.operate(op, literal(distance)).operate(op, right_expr)
+
+
+def _resolve_near_operand(
+    right: str | ClauseElement | ProximityExpr | None,
+    *,
+    right_pattern: str | None,
+    max_expansions: int,
+) -> str | ClauseElement | ProximityExpr:
+    if right_pattern is not None:
+        if right is not None:
+            raise InvalidArgumentError("right and right_pattern cannot be used together")
+        require_non_negative(max_expansions, field_name="max_expansions")
+        return prox_regex(right_pattern, max_expansions)
+    if right is None:
+        raise InvalidArgumentError("right is required unless right_pattern is provided")
+    return right
 
 
 def parse(field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False) -> ColumnElement[bool]:
@@ -153,11 +179,22 @@ def regex_phrase(
     return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
 
 
-def near(field: ColumnElement, left: str | ClauseElement, right: str | ClauseElement, *, distance: int, ordered: bool = False) -> ColumnElement[bool]:
-    return field.operate(_QUERY, _near_chain(left, right, distance=distance, ordered=ordered))
+def near(
+    field: ColumnElement,
+    left: str | ClauseElement | ProximityExpr,
+    right: str | ClauseElement | ProximityExpr | None = None,
+    *,
+    distance: int,
+    ordered: bool = False,
+    right_pattern: str | None = None,
+    max_expansions: int = 100,
+) -> ColumnElement[bool]:
+    right_operand = _resolve_near_operand(right, right_pattern=right_pattern, max_expansions=max_expansions)
+    return field.operate(_QUERY, _near_chain(left, right_operand, distance=distance, ordered=ordered))
 
 
 def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
+    require_non_negative(max_expansions, field_name="max_expansions")
     return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
 
 

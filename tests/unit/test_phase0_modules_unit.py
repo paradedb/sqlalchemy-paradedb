@@ -79,3 +79,9 @@ def test_select_with_snippet_guard_raises_on_fuzzy():
     base = select(products.c.id, products.c.description).where(search.fuzzy(products.c.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet(base, products.c.description)
+
+
+def test_select_with_snippet_positions_guard_raises_on_fuzzy():
+    base = select(products.c.id, products.c.description).where(search.fuzzy(products.c.description, "wirless", distance=1))
+    with pytest.raises(SnippetWithFuzzyPredicateError):
+        select_with.snippet_positions(base, products.c.description)

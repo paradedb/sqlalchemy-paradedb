@@ -83,6 +83,13 @@ def test_select_with_score_compile():
     assert "pdb.score(products.id) AS search_score" in sql
 
 
+def test_select_with_snippet_positions_compile():
+    base = select(products.c.id, products.c.description).where(search.match_any(products.c.description, "running"))
+    stmt = select_with.snippet_positions(base, products.c.description, label="positions")
+    sql = _sql(stmt)
+    assert "pdb.snippet_positions(products.description) AS positions" in sql
+
+
 def test_match_all_requires_terms():
     with pytest.raises(ValueError, match="at least one search term"):
         search.match_all(products.c.description)
@@ -127,6 +134,15 @@ def test_near_and_proximity_compile():
     assert "pdb.prox_regex('sl.*', 100)" in prox_sql
     assert "pdb.prox_array" in prox_sql
     assert "## 1" in prox_sql
+
+
+def test_near_with_right_pattern_compile():
+    stmt = select(products.c.id).where(
+        search.near(products.c.description, "running", distance=1, right_pattern="sho.*", max_expansions=80)
+    )
+    sql = _sql(stmt)
+    assert "pdb.prox_regex('sho.*', 80)" in sql
+    assert "## 1" in sql
 
 
 def test_more_like_this_compile():
