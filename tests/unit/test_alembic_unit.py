@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from alembic.autogenerate.api import AutogenContext
 from alembic.autogenerate.render import render_op
 from alembic.migration import MigrationContext
@@ -80,6 +81,18 @@ def test_create_drop_reindex_sql_generation_with_schema():
     reindex_op = pdb_alembic.ReindexBM25Op(index_name="products_bm25_idx", concurrently=True, schema="analytics")
     pdb_alembic._reindex_bm25_impl(ops, reindex_op)
     assert ops.sql[-1] == 'REINDEX INDEX CONCURRENTLY "analytics"."products_bm25_idx"'
+
+
+def test_create_bm25_index_rejects_removed_index_schema_kwarg():
+    with pytest.raises(TypeError, match="index_schema"):
+        pdb_alembic.CreateBM25IndexOp.create_bm25_index(
+            object(),
+            "products_bm25_idx",
+            "products",
+            ["id", "description"],
+            key_field="id",
+            index_schema="analytics",
+        )
 
 
 def test_alembic_renderers_registered_and_emit_python():

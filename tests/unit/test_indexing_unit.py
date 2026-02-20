@@ -52,6 +52,21 @@ def test_bm25_index_compile_with_tokenizers():
     assert "key_field = id" in sql
 
 
+def test_bm25_index_compile_unicode_omits_none_options():
+    idx = Index(
+        "products_bm25_idx",
+        BM25Field(products.c.id),
+        BM25Field(products.c.description, tokenizer=tokenize.unicode(lowercase=True)),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((description)::pdb.unicode_words('lowercase=true'))" in sql
+    assert "stemmer=null" not in sql
+
+
 def test_bm25_index_compile_with_structured_tokenizer_config():
     idx = Index(
         "products_bm25_structured_idx",
@@ -98,25 +113,14 @@ def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
     assert "((description)::pdb.ngram(3,8,'alias=description_ngram,prefix_only=true,positions=true'))" in sql
 
 
-def test_bm25_index_compile_with_pre_rendered_tokenizer_name_and_named_args():
-    idx = Index(
-        "products_bm25_ngram_inline_idx",
-        BM25Field(products.c.id),
-        BM25Field(
-            products.c.description,
-            tokenizer=tokenize.from_config(
-                {
-                    "tokenizer": "ngram(3,8)",
-                    "named_args": {"prefix_only": True},
-                }
-            ),
-        ),
-        postgresql_using="bm25",
-        postgresql_with={"key_field": "id"},
-    )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((description)::pdb.ngram(3,8)('prefix_only=true'))" in sql
+def test_tokenizer_from_config_rejects_non_identifier_tokenizer_name():
+    with pytest.raises(InvalidArgumentError, match="bare identifier"):
+        tokenize.from_config(
+            {
+                "tokenizer": "ngram(3,8)",
+                "named_args": {"prefix_only": True},
+            }
+        )
 
 
 def test_bm25_index_compile_lindera_wrapper():
@@ -260,6 +264,11 @@ def test_tokenizer_from_config_unknown_key_raises():
 def test_tokenizer_from_config_options_key_raises_as_unknown():
     with pytest.raises(InvalidArgumentError, match="Unknown tokenizer config keys"):
         tokenize.from_config({"tokenizer": "simple", "options": {"lowercase": True}})
+
+
+def test_tokenizer_from_config_rejects_non_string_tokenizer():
+    with pytest.raises(InvalidArgumentError, match="must be a string"):
+        tokenize.from_config({"tokenizer": 123})
 
 
 def test_extract_key_field_handles_normalized_indexdef():

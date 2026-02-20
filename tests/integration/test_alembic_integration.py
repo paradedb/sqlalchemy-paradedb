@@ -92,6 +92,7 @@ def test_alembic_create_reindex_drop_with_schema(engine):
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
+        conn.execute(text("SET LOCAL search_path TO public"))
 
         op.create_bm25_index(
             index_name,

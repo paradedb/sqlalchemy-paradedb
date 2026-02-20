@@ -20,6 +20,8 @@ from .errors import (
     MissingKeyFieldError,
 )
 
+_VALID_TOKENIZER_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 @dataclass(frozen=True)
 class TokenizerSpec:
@@ -87,6 +89,11 @@ def _build_spec(
     stemmer: str | None = None,
     **kwargs: Any,
 ) -> TokenizerSpec:
+    if not _VALID_TOKENIZER_NAME_RE.match(name):
+        raise InvalidArgumentError(
+            "tokenizer name must be a bare identifier (letters, digits, underscore); "
+            "pass arguments via args/named_args"
+        )
     if args is not None and isinstance(args, str | bytes):
         raise InvalidArgumentError("tokenizer args must be a sequence, not a string")
     if named_args is not None and not isinstance(named_args, Mapping):
@@ -105,7 +112,8 @@ def _build_spec(
 
     if named_args is not None:
         for key, value in named_args.items():
-            normalized[str(key)] = value
+            if value is not None:
+                normalized[str(key)] = value
 
     for key, value in kwargs.items():
         if value is not None:
@@ -316,9 +324,11 @@ def from_config(config: Mapping[str, Any]) -> TokenizerSpec:
     tokenizer = config.get("tokenizer")
     if tokenizer is None:
         raise InvalidArgumentError("tokenizer config requires 'tokenizer'")
+    if not isinstance(tokenizer, str):
+        raise InvalidArgumentError("tokenizer config 'tokenizer' must be a string")
 
     return custom(
-        str(tokenizer),
+        tokenizer,
         args=config.get("args"),
         named_args=config.get("named_args"),
         filters=config.get("filters"),
