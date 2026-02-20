@@ -18,6 +18,10 @@ test = [
   "psycopg[binary]>=3.1.18",
   "alembic>=1.13.0",
 ]
+dev = [
+  "ruff>=0.15.0",
+  "mypy>=1.19.0",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -25,6 +29,24 @@ testpaths = ["tests"]
 markers = [
   "integration: marks tests that require a running ParadeDB instance",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+packages = ["paradedb"]
+disable_error_code = ["var-annotated", "type-arg", "assignment", "no-any-return", "attr-defined", "no-untyped-def", "index", "union-attr", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["paradedb"]

@@ -6,12 +6,18 @@ from typing import Any
 from sqlalchemy import literal
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
+from sqlalchemy.sql.visitors import InternalTraversal
 
 
 class PDBFunctionWithNamedArgs(ColumnElement[Any]):
     """Render pdb.<name>(..., key => value) SQL."""
 
     inherit_cache = True
+    _traverse_internals = [
+        ("name", InternalTraversal.dp_string),
+        ("positional_args", InternalTraversal.dp_clauseelement_list),
+        ("named_args", InternalTraversal.dp_plain_obj),
+    ]
 
     def __init__(
         self,

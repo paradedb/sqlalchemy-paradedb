@@ -6,12 +6,18 @@ from typing import Any
 from sqlalchemy import literal
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
+from sqlalchemy.sql.visitors import InternalTraversal
 
 
 class PDBCast(ColumnElement[Any]):
     """Render an expression cast to a ParadeDB pseudo type, e.g. expr::pdb.boost(2)."""
 
     inherit_cache = True
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+        ("type_name", InternalTraversal.dp_string),
+        ("args", InternalTraversal.dp_plain_obj),
+    ]
 
     def __init__(self, expr: ClauseElement, type_name: str, args: Sequence[Any] = ()) -> None:
         self.expr = expr

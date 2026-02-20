@@ -9,7 +9,15 @@ from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from ._pdb_cast import PDBCast
-from .errors import InvalidArgumentError
+from .errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
+from .validation import (
+    require_non_empty_strings,
+    require_non_negative,
+    require_ordered_bounds,
+    require_positive,
+)
+
+_VALID_RANGE_RELATIONS: frozenset[str] = frozenset({"Intersects", "Contains", "Within", "ContainsOrIntersects"})
 
 _MATCH_ALL = operators.custom_op("&&&", precedence=5, is_comparison=True)
 _MATCH_ANY = operators.custom_op("|||", precedence=5, is_comparison=True)
@@ -49,6 +57,8 @@ def term(field: ColumnElement, value: str, boost: float | None = None) -> Column
 
 
 def phrase(field: ColumnElement, value: str, *, slop: int | None = None, boost: float | None = None) -> ColumnElement[bool]:
+    if slop is not None:
+        require_non_negative(slop, field_name="slop")
     payload: ClauseElement = literal(value)
     if slop is not None:
         payload = PDBCast(payload, "slop", (slop,))
@@ -65,6 +75,8 @@ def fuzzy(
     transpose_cost_one: bool | None = None,
     boost: float | None = None,
 ) -> ColumnElement[bool]:
+    if distance < 0 or distance > 2:
+        raise InvalidArgumentError("distance must be between 0 and 2")
     args: list[object] = [distance]
     if prefix is not None or transpose_cost_one is not None:
         args.append(bool(prefix))
@@ -120,6 +132,7 @@ def parse(field: ColumnElement, query: str, *, lenient: bool = False, conjunctio
 def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int = 50) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("phrase_prefix requires at least one term")
+    require_positive(max_expansions, field_name="max_expansions")
     return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text()), max_expansions))
 
 
@@ -132,6 +145,8 @@ def regex_phrase(
 ) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("regex_phrase requires at least one term")
+    require_non_negative(slop, field_name="slop")
+    require_positive(max_expansions, field_name="max_expansions")
     return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
 
 
@@ -155,6 +170,31 @@ def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> Colu
     return field.operate(_QUERY, prox_expr)
 
 
+def range_term(
+    field: ColumnElement,
+    bounds: str,
+    *,
+    relation: str = "Intersects",
+) -> ColumnElement[bool]:
+    """Match rows where a range-typed field satisfies a range predicate.
+
+    Args:
+        field: A range-typed column (int4range, daterange, tstzrange, etc.).
+        bounds: A range literal string, e.g. ``"[3,9]"``, ``"(3,9]"``.
+        relation: One of ``"Intersects"``, ``"Contains"``, ``"Within"``,
+                  ``"ContainsOrIntersects"``. Defaults to ``"Intersects"``.
+
+    Generates::
+
+        field @@@ pdb.range_term('[3,9]', 'Contains')
+    """
+    if relation not in _VALID_RANGE_RELATIONS:
+        raise InvalidArgumentError(
+            f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
+        )
+    return field.operate(_QUERY, func.pdb.range_term(bounds, relation))
+
+
 def more_like_this(
     field: ColumnElement,
     *,
@@ -170,39 +210,45 @@ def more_like_this(
     boost_factor: float | None = None,
     stopwords: list[str] | None = None,
 ) -> ColumnElement[bool]:
-    if (document_id is None) == (document is None):
-        raise InvalidArgumentError("exactly one of document_id or document must be provided")
-    if document is not None and fields is not None:
-        raise InvalidArgumentError("fields can only be used with document_id")
+    error_cls = InvalidMoreLikeThisOptionsError
 
-    if min_term_frequency is not None and min_term_frequency < 0:
-        raise InvalidArgumentError("min_term_frequency must be >= 0")
-    if max_query_terms is not None and max_query_terms <= 0:
-        raise InvalidArgumentError("max_query_terms must be > 0")
-    if min_doc_frequency is not None and min_doc_frequency < 0:
-        raise InvalidArgumentError("min_doc_frequency must be >= 0")
-    if max_doc_frequency is not None and max_doc_frequency < 0:
-        raise InvalidArgumentError("max_doc_frequency must be >= 0")
-    if (
-        min_doc_frequency is not None
-        and max_doc_frequency is not None
-        and min_doc_frequency > max_doc_frequency
-    ):
-        raise InvalidArgumentError("min_doc_frequency cannot be greater than max_doc_frequency")
-    if min_word_length is not None and min_word_length < 0:
-        raise InvalidArgumentError("min_word_length must be >= 0")
-    if max_word_length is not None and max_word_length < 0:
-        raise InvalidArgumentError("max_word_length must be >= 0")
-    if (
-        min_word_length is not None
-        and max_word_length is not None
-        and min_word_length > max_word_length
-    ):
-        raise InvalidArgumentError("min_word_length cannot be greater than max_word_length")
-    if boost_factor is not None and boost_factor < 0:
-        raise InvalidArgumentError("boost_factor must be >= 0")
-    if stopwords is not None and any((not isinstance(word, str)) or (not word.strip()) for word in stopwords):
-        raise InvalidArgumentError("stopwords entries must be non-empty strings")
+    if (document_id is None) == (document is None):
+        raise error_cls("exactly one of document_id or document must be provided")
+    if document is not None and fields is not None:
+        raise error_cls("fields can only be used with document_id")
+
+    if min_term_frequency is not None:
+        require_non_negative(min_term_frequency, field_name="min_term_frequency", error_cls=error_cls)
+    if max_query_terms is not None:
+        require_positive(max_query_terms, field_name="max_query_terms", error_cls=error_cls)
+    if min_doc_frequency is not None:
+        require_non_negative(min_doc_frequency, field_name="min_doc_frequency", error_cls=error_cls)
+    if max_doc_frequency is not None:
+        require_non_negative(max_doc_frequency, field_name="max_doc_frequency", error_cls=error_cls)
+    if min_doc_frequency is not None and max_doc_frequency is not None:
+        require_ordered_bounds(
+            min_doc_frequency,
+            max_doc_frequency,
+            lower_name="min_doc_frequency",
+            upper_name="max_doc_frequency",
+            error_cls=error_cls,
+        )
+    if min_word_length is not None:
+        require_non_negative(min_word_length, field_name="min_word_length", error_cls=error_cls)
+    if max_word_length is not None:
+        require_non_negative(max_word_length, field_name="max_word_length", error_cls=error_cls)
+    if min_word_length is not None and max_word_length is not None:
+        require_ordered_bounds(
+            min_word_length,
+            max_word_length,
+            lower_name="min_word_length",
+            upper_name="max_word_length",
+            error_cls=error_cls,
+        )
+    if boost_factor is not None:
+        require_non_negative(boost_factor, field_name="boost_factor", error_cls=error_cls)
+    if stopwords is not None:
+        require_non_empty_strings(stopwords, field_name="stopwords", error_cls=error_cls)
 
     options_provided = any(
         option is not None

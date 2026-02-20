@@ -194,3 +194,73 @@ def test_alias_subquery_cte_compile():
     assert "sq.description &&& ARRAY['running', 'shoes']" in sq_sql
     assert "base.description ||| 'wireless'" in cte_sql
     assert "NOT (products.description ||| 'trail')" in bool_sql
+
+
+# ---------------------------------------------------------------------------
+# New feature: search.range_term
+# ---------------------------------------------------------------------------
+
+def test_range_term_default_relation_compile():
+    stmt = select(products.c.id).where(
+        search.range_term(products.c.id, "[3,9]")
+    )
+    sql = _sql(stmt)
+    assert "id @@@ pdb.range_term('[3,9]', 'Intersects')" in sql
+
+
+def test_range_term_explicit_relation_compile():
+    stmt = select(products.c.id).where(
+        search.range_term(products.c.id, "(3,9]", relation="Contains")
+    )
+    sql = _sql(stmt)
+    assert "id @@@ pdb.range_term('(3,9]', 'Contains')" in sql
+
+
+def test_range_term_invalid_relation_raises():
+    with pytest.raises(ValueError, match="relation must be one of"):
+        search.range_term(products.c.id, "[3,9]", relation="BadRelation")
+
+
+# ---------------------------------------------------------------------------
+# New feature: indexing.validate_pushdown
+# ---------------------------------------------------------------------------
+
+def test_validate_pushdown_no_paradedb_predicate():
+    from paradedb.sqlalchemy.indexing import validate_pushdown
+
+    stmt = select(products.c.id).where(products.c.id > 3)
+    warnings = validate_pushdown(stmt)
+    assert any("No ParadeDB predicate" in w for w in warnings)
+
+
+def test_validate_pushdown_no_where_clause():
+    from paradedb.sqlalchemy.indexing import validate_pushdown
+
+    stmt = select(products.c.id)
+    warnings = validate_pushdown(stmt)
+    assert any("No WHERE clause" in w for w in warnings)
+
+
+def test_validate_pushdown_order_by_without_limit():
+    from paradedb.sqlalchemy.indexing import validate_pushdown
+
+    stmt = (
+        select(products.c.id)
+        .where(search.match_any(products.c.description, "running"))
+        .order_by(products.c.id)
+    )
+    warnings = validate_pushdown(stmt)
+    assert any("LIMIT" in w for w in warnings)
+
+
+def test_validate_pushdown_clean_query_returns_empty():
+    from paradedb.sqlalchemy.indexing import validate_pushdown
+
+    stmt = (
+        select(products.c.id)
+        .where(search.match_any(products.c.description, "running"))
+        .order_by(products.c.id)
+        .limit(10)
+    )
+    warnings = validate_pushdown(stmt)
+    assert warnings == []
