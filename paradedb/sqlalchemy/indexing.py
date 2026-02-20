@@ -306,8 +306,6 @@ def custom(
 def from_config(config: Mapping[str, Any]) -> TokenizerSpec:
     if not isinstance(config, Mapping):
         raise InvalidArgumentError("tokenizer config must be a mapping")
-    if "options" in config:
-        raise InvalidArgumentError("tokenizer config uses deprecated 'options'. Use 'named_args' instead.")
 
     allowed_keys = {"tokenizer", "args", "named_args", "filters", "stemmer", "alias"}
     unknown = set(config.keys()) - allowed_keys

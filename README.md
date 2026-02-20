@@ -70,6 +70,39 @@ products_bm25_idx = Index(
 )
 ```
 
+Tokenizer configs can use a Django/Rails-style structured shape:
+
+```python
+products_bm25_idx = Index(
+    "products_bm25_idx",
+    indexing.BM25Field(Product.id),
+    indexing.BM25Field(
+        Product.description,
+        tokenizer=indexing.tokenize.from_config(
+            {
+                "tokenizer": "simple",
+                "filters": ["lowercase", "stemmer"],
+                "stemmer": "english",
+                "alias": "description_simple",
+            }
+        ),
+    ),
+    indexing.BM25Field(
+        Product.description,
+        tokenizer=indexing.tokenize.from_config(
+            {
+                "tokenizer": "ngram",
+                "args": [3, 8],
+                "named_args": {"prefix_only": True},
+                "alias": "description_ngram",
+            }
+        ),
+    ),
+    postgresql_using="bm25",
+    postgresql_with={"key_field": "id"},
+)
+```
+
 ## Query APIs
 
 - Basic predicates: `match_all`, `match_any`, `term`, `phrase`, `fuzzy`, `regex`, `all`
@@ -108,8 +141,24 @@ Usage:
 
 ```python
 op.create_bm25_index("products_bm25_idx", "products", ["id", "description"], key_field="id")
+# Tokenizer-aware expressions are supported too:
+op.create_bm25_index(
+    "products_bm25_idx",
+    "products",
+    ["id", "((description)::pdb.simple('alias=description_simple,lowercase=true'))"],
+    key_field="id",
+)
+# Schema-aware operations:
+op.create_bm25_index(
+    "products_bm25_idx",
+    "products",
+    ["id", "description"],
+    key_field="id",
+    table_schema="search",
+)
 op.reindex_bm25("products_bm25_idx", concurrently=True)
-op.drop_bm25_index("products_bm25_idx", if_exists=True)
+op.reindex_bm25("products_bm25_idx", concurrently=True, schema="search")
+op.drop_bm25_index("products_bm25_idx", if_exists=True, schema="search")
 ```
 
 ## Validation and Guardrails

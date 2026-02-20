@@ -257,8 +257,8 @@ def test_tokenizer_from_config_unknown_key_raises():
         tokenize.from_config({"tokenizer": "simple", "unknown": True})
 
 
-def test_tokenizer_from_config_options_deprecated_raises():
-    with pytest.raises(InvalidArgumentError, match="deprecated 'options'"):
+def test_tokenizer_from_config_options_key_raises_as_unknown():
+    with pytest.raises(InvalidArgumentError, match="Unknown tokenizer config keys"):
         tokenize.from_config({"tokenizer": "simple", "options": {"lowercase": True}})
 
 

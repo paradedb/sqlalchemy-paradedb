@@ -99,7 +99,6 @@ def test_alembic_create_reindex_drop_with_schema(engine):
             ["id", "description"],
             key_field="id",
             table_schema=schema,
-            index_schema=schema,
         )
 
         exists = conn.execute(
@@ -378,7 +377,6 @@ def test_autogenerate_emits_schema_on_create_for_non_default_schema(engine):
         create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp)]
         op = next(o for o in create_ops if o.index_name == _AG_SCHEMA_IDX)
         assert op.table_schema == _AG_SCHEMA
-        assert op.index_schema == _AG_SCHEMA
     finally:
         with engine.begin() as conn:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{_AG_SCHEMA}" CASCADE'))

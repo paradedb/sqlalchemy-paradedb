@@ -35,14 +35,12 @@ class CreateBM25IndexOp(MigrateOperation):
         key_field: str,
         *,
         table_schema: str | None = None,
-        index_schema: str | None = None,
     ) -> None:
         self.index_name = index_name
         self.table_name = table_name
         self.expressions = expressions
         self.key_field = key_field
         self.table_schema = table_schema
-        self.index_schema = index_schema
 
     @classmethod
     def create_bm25_index(
@@ -54,7 +52,6 @@ class CreateBM25IndexOp(MigrateOperation):
         *,
         key_field: str,
         table_schema: str | None = None,
-        index_schema: str | None = None,
     ) -> MigrateOperation:
         return operations.invoke(
             cls(
@@ -63,7 +60,6 @@ class CreateBM25IndexOp(MigrateOperation):
                 expressions,
                 key_field,
                 table_schema=table_schema,
-                index_schema=index_schema,
             )
         )
 
@@ -89,8 +85,6 @@ def _render_create_bm25_index_op(autogen_context, op: CreateBM25IndexOp) -> str:
     ]
     if op.table_schema is not None:
         parts.append(f"table_schema={op.table_schema!r}")
-    if op.index_schema is not None:
-        parts.append(f"index_schema={op.index_schema!r}")
     return f"op.create_bm25_index({', '.join(parts)})"
 
 
@@ -298,7 +292,6 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
                     expressions=expressions,
                     key_field=key_field,
                     table_schema=key[0],
-                    index_schema=key[0],
                 )
             )
         else:
@@ -313,7 +306,6 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
                         expressions=expressions,
                         key_field=key_field,
                         table_schema=key[0],
-                        index_schema=key[0],
                     )
                 )
 

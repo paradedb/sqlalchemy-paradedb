@@ -66,7 +66,6 @@ def test_create_drop_reindex_sql_generation_with_schema():
         expressions=["id", "description"],
         key_field="id",
         table_schema="analytics",
-        index_schema="analytics",
     )
     pdb_alembic._create_bm25_index_impl(ops, create_op)
     assert ops.sql[-1] == (
@@ -120,11 +119,10 @@ def test_alembic_renderers_registered_and_emit_python():
             expressions=["id", "description"],
             key_field="id",
             table_schema="analytics",
-            index_schema="analytics",
         ),
     )
     assert create_lines_with_schema == [
-        "op.create_bm25_index('products_bm25_idx', 'products', ['id', 'description'], key_field='id', table_schema='analytics', index_schema='analytics')"
+        "op.create_bm25_index('products_bm25_idx', 'products', ['id', 'description'], key_field='id', table_schema='analytics')"
     ]
 
 
