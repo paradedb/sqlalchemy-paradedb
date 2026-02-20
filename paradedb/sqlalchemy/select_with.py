@@ -42,6 +42,8 @@ def snippets(
     field: ColumnElement,
     *,
     label: str = "snippets",
+    start_tag: str | None = None,
+    end_tag: str | None = None,
     max_num_chars: int | None = None,
     limit: int | None = None,
     offset: int | None = None,
@@ -51,6 +53,8 @@ def snippets(
     return stmt.add_columns(
         pdb.snippets(
             field,
+            start_tag=start_tag,
+            end_tag=end_tag,
             max_num_chars=max_num_chars,
             limit=limit,
             offset=offset,

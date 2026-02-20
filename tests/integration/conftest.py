@@ -103,7 +103,9 @@ def explain_plan_json(session: Session, stmt) -> dict[str, Any]:
             compile_kwargs={"literal_binds": True},
         )
     )
-    explain_result = session.execute(text(f"EXPLAIN (FORMAT JSON) {sql}")).scalar_one()
+    # Use driver-level execution so SQLAlchemy doesn't treat JSON fragments like
+    # `...:2...` inside string literals as bind placeholders.
+    explain_result = session.connection().exec_driver_sql(f"EXPLAIN (FORMAT JSON) {sql}").scalar_one()
     return _normalize_explain_plan(explain_result)
 
 

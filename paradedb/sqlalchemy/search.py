@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
+from ._functions import PDBFunctionWithNamedArgs
 from ._pdb_cast import PDBCast
 from .errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
 from .validation import (
@@ -238,6 +239,8 @@ def range_term(
         raise InvalidArgumentError(
             f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
         )
+    escaped_relation = relation.replace("'", "''")
+    relation_arg: ClauseElement = literal_column(f"'{escaped_relation}'")
     if range_type is not None:
         if range_type not in _VALID_RANGE_TYPES:
             raise InvalidArgumentError(
@@ -247,7 +250,7 @@ def range_term(
         bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
     else:
         bounds_arg = literal(bounds)
-    return field.operate(_QUERY, func.pdb.range_term(bounds_arg, relation))
+    return field.operate(_QUERY, func.pdb.range_term(bounds_arg, relation_arg))
 
 
 def more_like_this(
@@ -309,58 +312,36 @@ def more_like_this(
     if stopwords is not None:
         require_non_empty_strings(stopwords, field_name="stopwords", error_cls=error_cls)
 
-    options_provided = any(
-        option is not None
-        for option in (
-            min_term_frequency,
-            max_query_terms,
-            min_doc_frequency,
-            max_doc_frequency,
-            min_word_length,
-            max_word_length,
-            boost_factor,
-            stopwords,
-        )
-    )
+    named_options: list[tuple[str, Any]] = []
+    if min_term_frequency is not None:
+        named_options.append(("min_term_frequency", min_term_frequency))
+    if max_query_terms is not None:
+        named_options.append(("max_query_terms", max_query_terms))
+    if min_doc_frequency is not None:
+        named_options.append(("min_doc_frequency", min_doc_frequency))
+    if max_doc_frequency is not None:
+        named_options.append(("max_doc_frequency", max_doc_frequency))
+    if min_word_length is not None:
+        named_options.append(("min_word_length", min_word_length))
+    if max_word_length is not None:
+        named_options.append(("max_word_length", max_word_length))
+    if boost_factor is not None:
+        named_options.append(("boost_factor", boost_factor))
+    if stopwords is not None:
+        named_options.append(("stopwords", array(stopwords, type_=Text())))
 
-    def _build_id_args(doc_id: Any) -> list[Any]:
-        id_args: list[Any] = [doc_id]
-        if fields is not None or options_provided:
-            id_args.append(array(fields or [], type_=Text()))
-        if options_provided:
-            id_args.extend(
-                [
-                    1 if min_term_frequency is None else min_term_frequency,
-                    25 if max_query_terms is None else max_query_terms,
-                    0 if min_doc_frequency is None else min_doc_frequency,
-                    1_000_000 if max_doc_frequency is None else max_doc_frequency,
-                    0 if min_word_length is None else min_word_length,
-                    1000 if max_word_length is None else max_word_length,
-                    0.0 if boost_factor is None else boost_factor,
-                    array(stopwords or [], type_=Text()),
-                ]
-            )
-        return id_args
+    def _build_mlt_call(source_arg: ClauseElement, *, include_fields: bool) -> ClauseElement:
+        positional_args: list[ClauseElement] = [source_arg]
+        if include_fields and fields is not None:
+            positional_args.append(array(fields, type_=Text()))
+        return PDBFunctionWithNamedArgs("more_like_this", positional_args, named_options)
 
     if document_ids is not None:
-        return or_(*[field.operate(_QUERY, func.pdb.more_like_this(*_build_id_args(doc_id))) for doc_id in document_ids])
+        clauses = [field.operate(_QUERY, _build_mlt_call(literal(doc_id), include_fields=True)) for doc_id in document_ids]
+        return or_(*clauses)
 
     if document_id is not None:
-        return field.operate(_QUERY, func.pdb.more_like_this(*_build_id_args(document_id)))
+        return field.operate(_QUERY, _build_mlt_call(literal(document_id), include_fields=True))
 
     payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
-    doc_args: list[Any] = [payload]
-    if options_provided:
-        doc_args.extend(
-            [
-                1 if min_term_frequency is None else min_term_frequency,
-                25 if max_query_terms is None else max_query_terms,
-                0 if min_doc_frequency is None else min_doc_frequency,
-                1_000_000 if max_doc_frequency is None else max_doc_frequency,
-                0 if min_word_length is None else min_word_length,
-                1000 if max_word_length is None else max_word_length,
-                0.0 if boost_factor is None else boost_factor,
-                array(stopwords or [], type_=Text()),
-            ]
-        )
-    return field.operate(_QUERY, func.pdb.more_like_this(*doc_args))
+    return field.operate(_QUERY, _build_mlt_call(literal(payload), include_fields=False))

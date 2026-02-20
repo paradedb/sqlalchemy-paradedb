@@ -25,6 +25,12 @@ def snippet(
     if (start_tag is None) != (end_tag is None):
         raise InvalidArgumentError("start_tag and end_tag must be provided together")
 
+    if max_num_chars is not None and start_tag is None and end_tag is None:
+        # ParadeDB versions in CI don't support pdb.snippet(field, max_num_chars)
+        # directly. Supplying default tags targets the supported 4-arg form.
+        start_tag = "<b>"
+        end_tag = "</b>"
+
     args: list[Any] = [field]
     if start_tag is not None and end_tag is not None:
         args.extend([start_tag, end_tag])
@@ -36,12 +42,21 @@ def snippet(
 def snippets(
     field: ColumnElement,
     *,
+    start_tag: str | None = None,
+    end_tag: str | None = None,
     max_num_chars: int | None = None,
     limit: int | None = None,
     offset: int | None = None,
     sort_by: str | None = None,
 ) -> ClauseElement:
+    if (start_tag is None) != (end_tag is None):
+        raise InvalidArgumentError("start_tag and end_tag must be provided together")
+
     named_args: list[tuple[str, Any]] = []
+    if start_tag is not None:
+        named_args.append(("start_tag", start_tag))
+    if end_tag is not None:
+        named_args.append(("end_tag", end_tag))
     if max_num_chars is not None:
         named_args.append(("max_num_chars", max_num_chars))
     if limit is not None:

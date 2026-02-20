@@ -182,8 +182,9 @@ def test_bm25_index_json_keys_when_supported(engine):
         ).one()
 
     assert "->>" in row.indexdef
-    assert "alias=metadata_color" in row.indexdef
-    assert "alias=metadata_location" in row.indexdef
+    assert "'color'" in row.indexdef
+    assert "'location'" in row.indexdef
+    assert row.indexdef.count("pdb.literal(") >= 2
 
     _drop_table_and_index(engine, table_name, index_name)
 
