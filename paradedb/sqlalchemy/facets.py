@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import Select
@@ -108,10 +109,9 @@ class FacetPlan:
         mapping = getattr(first, "_mapping", None)
         if mapping is not None and self.label in mapping:
             return mapping[self.label]
-        try:
+        if isinstance(first, Sequence) and not isinstance(first, (str, bytes)):
             return first[-1]
-        except Exception:
-            return None
+        return None
 
 
 def with_rows(

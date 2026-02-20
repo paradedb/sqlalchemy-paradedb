@@ -21,13 +21,13 @@ from .validation import (
 _VALID_RANGE_RELATIONS: frozenset[str] = frozenset({"Intersects", "Contains", "Within", "ContainsOrIntersects"})
 _VALID_RANGE_TYPES: frozenset[str] = frozenset({"int4range", "int8range", "numrange", "daterange", "tsrange", "tstzrange"})
 
-_MATCH_ALL = operators.custom_op("&&&", precedence=5, is_comparison=True)
-_MATCH_ANY = operators.custom_op("|||", precedence=5, is_comparison=True)
-_TERM = operators.custom_op("===", precedence=5, is_comparison=True)
-_PHRASE = operators.custom_op("###", precedence=5, is_comparison=True)
-_QUERY = operators.custom_op("@@@", precedence=5, is_comparison=True)
-_NEAR = operators.custom_op("##", precedence=5)
-_NEAR_ORDERED = operators.custom_op("##>", precedence=5)
+_MATCH_ALL: Any = operators.custom_op("&&&", precedence=5, is_comparison=True)
+_MATCH_ANY: Any = operators.custom_op("|||", precedence=5, is_comparison=True)
+_TERM: Any = operators.custom_op("===", precedence=5, is_comparison=True)
+_PHRASE: Any = operators.custom_op("###", precedence=5, is_comparison=True)
+_QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
+_NEAR: Any = operators.custom_op("##", precedence=5)
+_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
 
 
 def _to_term_payload(*terms: str) -> ClauseElement:
@@ -86,7 +86,7 @@ def fuzzy(
     if transpose_cost_one is not None:
         args.append(bool(transpose_cost_one))
 
-    payload = PDBCast(literal(value), "fuzzy", args)
+    payload: ClauseElement = PDBCast(literal(value), "fuzzy", args)
     payload = _apply_boost(payload, boost)
     return field.operate(_TERM, payload)
 

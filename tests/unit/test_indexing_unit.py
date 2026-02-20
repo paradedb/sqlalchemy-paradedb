@@ -52,6 +52,99 @@ def test_bm25_index_compile_with_tokenizers():
     assert "key_field = id" in sql
 
 
+def test_bm25_index_compile_with_structured_tokenizer_config():
+    idx = Index(
+        "products_bm25_structured_idx",
+        BM25Field(products.c.id),
+        BM25Field(
+            products.c.description,
+            tokenizer=tokenize.from_config(
+                {
+                    "tokenizer": "simple",
+                    "filters": ["lowercase", "stemmer"],
+                    "stemmer": "english",
+                    "alias": "description_simple",
+                }
+            ),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((description)::pdb.simple('alias=description_simple,lowercase=true,stemmer=english'))" in sql
+
+
+def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
+    idx = Index(
+        "products_bm25_ngram_idx",
+        BM25Field(products.c.id),
+        BM25Field(
+            products.c.description,
+            tokenizer=tokenize.from_config(
+                {
+                    "tokenizer": "ngram",
+                    "args": [3, 8],
+                    "named_args": {"prefix_only": True, "positions": True},
+                    "alias": "description_ngram",
+                }
+            ),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((description)::pdb.ngram(3,8,'alias=description_ngram,prefix_only=true,positions=true'))" in sql
+
+
+def test_bm25_index_compile_with_pre_rendered_tokenizer_name_and_named_args():
+    idx = Index(
+        "products_bm25_ngram_inline_idx",
+        BM25Field(products.c.id),
+        BM25Field(
+            products.c.description,
+            tokenizer=tokenize.from_config(
+                {
+                    "tokenizer": "ngram(3,8)",
+                    "named_args": {"prefix_only": True},
+                }
+            ),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((description)::pdb.ngram(3,8)('prefix_only=true'))" in sql
+
+
+def test_bm25_index_compile_lindera_wrapper():
+    idx = Index(
+        "products_bm25_lindera_idx",
+        BM25Field(products.c.id),
+        BM25Field(products.c.description, tokenizer=tokenize.lindera("japanese", alias="description_jp")),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((description)::pdb.lindera('japanese','alias=description_jp'))" in sql
+
+
+def test_bm25_index_compile_regex_pattern_wrapper():
+    idx = Index(
+        "products_bm25_regex_idx",
+        BM25Field(products.c.id),
+        BM25Field(products.c.description, tokenizer=tokenize.regex_pattern(r"(?i)\\bh\\w*", alias="description_regex")),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((description)::pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex'))" in sql
+
+
 def test_bm25_index_compile_json_key_with_tokenizer():
     idx = Index(
         "products_bm25_json_idx",
@@ -131,6 +224,42 @@ def test_key_field_must_exist_in_fields():
 
     with pytest.raises(ValueError, match="must match one of the indexed"):
         validate_bm25_index(idx)
+
+
+def test_key_field_must_be_first_field():
+    idx = Index(
+        "products_bm25_key_not_first_idx",
+        BM25Field(products.c.description),
+        BM25Field(products.c.id),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+
+    with pytest.raises(ValueError, match="must be the first indexed BM25Field"):
+        validate_bm25_index(idx)
+
+
+def test_key_field_must_be_untokenized():
+    idx = Index(
+        "products_bm25_key_tokenized_idx",
+        BM25Field(products.c.id, tokenizer=tokenize.literal(alias="id_alias")),
+        BM25Field(products.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+
+    with pytest.raises(ValueError, match="must be untokenized"):
+        validate_bm25_index(idx)
+
+
+def test_tokenizer_from_config_unknown_key_raises():
+    with pytest.raises(InvalidArgumentError, match="Unknown tokenizer config keys"):
+        tokenize.from_config({"tokenizer": "simple", "unknown": True})
+
+
+def test_tokenizer_from_config_options_deprecated_raises():
+    with pytest.raises(InvalidArgumentError, match="deprecated 'options'"):
+        tokenize.from_config({"tokenizer": "simple", "options": {"lowercase": True}})
 
 
 def test_extract_key_field_handles_normalized_indexdef():
@@ -225,7 +354,7 @@ def test_assert_indexed_raises_field_not_indexed(monkeypatch):
         fields=("id", "description"),
         aliases={},
     )
-    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table, schema=None: [meta])
 
     with pytest.raises(FieldNotIndexedError, match="'category'"):
         assert_indexed(None, products.c.category)
@@ -240,7 +369,7 @@ def test_assert_indexed_passes_when_field_found(monkeypatch):
         fields=("id", "description", "category"),
         aliases={},
     )
-    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table, schema=None: [meta])
 
     # Should not raise
     assert_indexed(None, products.c.category)
@@ -256,7 +385,7 @@ def test_assert_indexed_tokenizer_match(monkeypatch):
         aliases={},
         tokenizers={"category": ("literal",)},
     )
-    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table, schema=None: [meta])
 
     assert_indexed(None, products.c.category, tokenizer="literal")  # passes
 
@@ -271,7 +400,27 @@ def test_assert_indexed_tokenizer_mismatch_raises(monkeypatch):
         aliases={},
         tokenizers={"category": ("unicode_words",)},
     )
-    monkeypatch.setattr(idx_module, "describe", lambda engine, table: [meta])
+    monkeypatch.setattr(idx_module, "describe", lambda engine, table, schema=None: [meta])
 
     with pytest.raises(FieldNotIndexedError, match="tokenizer 'literal'"):
         assert_indexed(None, products.c.category, tokenizer="literal")
+
+
+def test_assert_indexed_passes_schema_override_to_describe(monkeypatch):
+    from paradedb.sqlalchemy import indexing as idx_module
+
+    meta = IndexMeta(
+        index_name="products_bm25_idx",
+        key_field="id",
+        fields=("id", "category"),
+        aliases={},
+    )
+    captured: dict[str, object] = {}
+
+    def _describe(engine, table, schema=None):
+        captured["schema"] = schema
+        return [meta]
+
+    monkeypatch.setattr(idx_module, "describe", _describe)
+    assert_indexed(None, products.c.category, schema="analytics")
+    assert captured["schema"] == "analytics"

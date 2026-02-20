@@ -391,3 +391,55 @@ def test_assert_indexed_passes_and_raises(engine):
         assert_indexed(engine, tbl.c.extra)
 
     _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_describe_and_assert_indexed_with_explicit_schema(engine):
+    schema_name = "indexing_schema"
+    table_name = "schema_products"
+    index_name = "schema_products_bm25_idx"
+
+    with engine.begin() as conn:
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+        conn.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("extra", Text, nullable=False),
+        schema=schema_name,
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    # Table carries schema; describe/assert_indexed should resolve correctly.
+    metas = describe(engine, products)
+    assert any(m.index_name == index_name for m in metas)
+    assert_indexed(engine, products.c.description)
+    with pytest.raises(FieldNotIndexedError, match="'extra'"):
+        assert_indexed(engine, products.c.extra)
+
+    # Schema override should work for an unqualified table definition too.
+    unqualified_meta = MetaData()
+    unqualified = Table(
+        table_name,
+        unqualified_meta,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+    )
+    metas_override = describe(engine, unqualified, schema=schema_name)
+    assert any(m.index_name == index_name for m in metas_override)
+    assert_indexed(engine, unqualified.c.description, schema=schema_name)
+
+    with engine.begin() as conn:
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
