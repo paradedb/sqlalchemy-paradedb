@@ -14,7 +14,7 @@ pip install -e .[test,dev]
 ruff check .
 mypy paradedb
 python -m pytest tests/unit
-PARADEDB_TEST_DSN=postgres://postgres:postgres@localhost:5432/postgres python -m pytest -m integration
+PARADEDB_TEST_DSN=postgres://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
 ```
 
 ## Guidelines

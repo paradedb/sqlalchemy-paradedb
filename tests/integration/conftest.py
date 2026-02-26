@@ -5,11 +5,11 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from sqlalchemy import Integer, String, Text, text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, create_engine, text
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from sqlalchemy import create_engine
 
 
 class Base(DeclarativeBase):
@@ -23,6 +23,20 @@ class Product(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String(120), nullable=False)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MockItem(Base):
+    """Maps to mock_items created by paradedb.create_bm25_test_table."""
+
+    __tablename__ = "mock_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(120), nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[Any] = mapped_column(DateTime, nullable=False)
+    metadata_: Mapped[Any] = mapped_column("metadata", JSONB, nullable=True)
 
 
 @pytest.fixture(scope="session")
@@ -89,7 +103,9 @@ def explain_plan_json(session: Session, stmt) -> dict[str, Any]:
             compile_kwargs={"literal_binds": True},
         )
     )
-    explain_result = session.execute(text(f"EXPLAIN (FORMAT JSON) {sql}")).scalar_one()
+    # Use driver-level execution so SQLAlchemy doesn't treat JSON fragments like
+    # `...:2...` inside string literals as bind placeholders.
+    explain_result = session.connection().exec_driver_sql(f"EXPLAIN (FORMAT JSON) {sql}").scalar_one()
     return _normalize_explain_plan(explain_result)
 
 
@@ -112,3 +128,31 @@ def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "prod
     ]
     assert parade_nodes, f"Expected ParadeDB Custom Scan in plan, got: {plan}"
     assert any(node.get("Index") == index_name for node in parade_nodes), f"Expected index {index_name} in plan: {plan}"
+
+
+@pytest.fixture(scope="session")
+def paradedb_ready(engine: Engine) -> None:
+    """Ensure ParadeDB mock_items table exists and is indexed."""
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
+        conn.execute(text("DROP INDEX IF EXISTS mock_items_bm25_idx"))
+        conn.execute(text("DROP TABLE IF EXISTS mock_items"))
+        conn.execute(
+            text(
+                "CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items')"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX mock_items_bm25_idx ON mock_items USING bm25 ("
+                "id, description, category, rating, in_stock"
+                ") WITH (key_field='id')"
+            )
+        )
+
+
+@pytest.fixture()
+def mock_session(engine: Engine, paradedb_ready: None) -> Iterator[Session]:
+    """Session fixture for tests using the mock_items table."""
+    with Session(engine) as session:
+        yield session

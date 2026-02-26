@@ -41,6 +41,36 @@ def test_multiple_agg_columns_with_search_all(session):
     assert row._mapping["count"] is not None
 
 
+def test_percentiles_agg_with_search_all(session):
+    stmt = (
+        select(pdb.agg(facets.percentiles(field="rating", percents=[50, 95])).label("pct"))
+        .select_from(Product)
+        .where(search.all(Product.id))
+    )
+    assert_uses_paradedb_scan(session, stmt)
+    row = session.execute(stmt).one()
+    assert row._mapping["pct"] is not None
+
+
+def test_top_hits_agg_with_search_all(session):
+    stmt = (
+        select(
+            pdb.agg(
+                facets.top_hits(
+                    size=2,
+                    sort=[{"rating": "desc"}],
+                    docvalue_fields=["id", "rating"],
+                )
+            ).label("hits")
+        )
+        .select_from(Product)
+        .where(search.all(Product.id))
+    )
+    assert_uses_paradedb_scan(session, stmt)
+    row = session.execute(stmt).one()
+    assert row._mapping["hits"] is not None
+
+
 def test_with_rows_adds_window_agg_and_extracts_payload(session):
     base = (
         select(Product.id, Product.description, Product.rating)

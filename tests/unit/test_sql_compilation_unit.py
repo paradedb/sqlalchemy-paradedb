@@ -61,7 +61,15 @@ def test_pdb_helpers_compile():
     stmt = select(
         pdb.score(products.c.id).label("score"),
         pdb.snippet(products.c.description, start_tag="<mark>", end_tag="</mark>", max_num_chars=100).label("snippet"),
-        pdb.snippets(products.c.description, max_num_chars=15, limit=1, offset=0, sort_by="position").label("snippets"),
+        pdb.snippets(
+            products.c.description,
+            start_tag="[",
+            end_tag="]",
+            max_num_chars=15,
+            limit=1,
+            offset=0,
+            sort_by="position",
+        ).label("snippets"),
         pdb.snippet_positions(products.c.description).label("positions"),
     )
     sql = _sql(stmt)
@@ -69,6 +77,8 @@ def test_pdb_helpers_compile():
     assert "pdb.score(products.id) AS score" in sql
     assert "pdb.snippet(products.description, '<mark>', '</mark>', 100) AS snippet" in sql
     assert "pdb.snippets(products.description" in sql
+    assert "start_tag => '['" in sql
+    assert "end_tag => ']'" in sql
     assert "max_num_chars => 15" in sql
     assert '"limit" => 1' in sql
     assert '"offset" => 0' in sql
@@ -81,6 +91,13 @@ def test_select_with_score_compile():
     stmt = select_with.score(base, products.c.id, label="search_score")
     sql = _sql(stmt)
     assert "pdb.score(products.id) AS search_score" in sql
+
+
+def test_select_with_snippet_positions_compile():
+    base = select(products.c.id, products.c.description).where(search.match_any(products.c.description, "running"))
+    stmt = select_with.snippet_positions(base, products.c.description, label="positions")
+    sql = _sql(stmt)
+    assert "pdb.snippet_positions(products.description) AS positions" in sql
 
 
 def test_match_all_requires_terms():
@@ -129,6 +146,15 @@ def test_near_and_proximity_compile():
     assert "## 1" in prox_sql
 
 
+def test_near_with_right_pattern_compile():
+    stmt = select(products.c.id).where(
+        search.near(products.c.description, "running", distance=1, right_pattern="sho.*", max_expansions=80)
+    )
+    sql = _sql(stmt)
+    assert "pdb.prox_regex('sho.*', 80)" in sql
+    assert "## 1" in sql
+
+
 def test_more_like_this_compile():
     by_id_stmt = select(products.c.id).where(search.more_like_this(products.c.id, document_id=3, fields=["description"]))
     by_doc_stmt = select(products.c.id).where(
@@ -151,7 +177,10 @@ def test_more_like_this_compile():
 
     assert "id @@@ pdb.more_like_this(3, ARRAY['description'])" in by_id_sql
     assert "id @@@ pdb.more_like_this('{\"description\":\"wireless earbuds\"}')" in by_doc_sql
-    assert "id @@@ pdb.more_like_this(3, ARRAY['description'], 2, 10" in with_opts_sql
+    assert "id @@@ pdb.more_like_this(3, ARRAY['description']" in with_opts_sql
+    assert "min_term_frequency => 2" in with_opts_sql
+    assert "max_query_terms => 10" in with_opts_sql
+    assert "stopwords => ARRAY['the', 'a']" in with_opts_sql
     assert "ARRAY['the', 'a']" in with_opts_sql
 
 

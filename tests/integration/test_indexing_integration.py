@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 
+from paradedb.sqlalchemy.expr import json_text
 from paradedb.sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
 from paradedb.sqlalchemy.errors import FieldNotIndexedError
 
@@ -129,6 +131,60 @@ def test_bm25_index_with_tokenizers_when_supported(engine):
     assert "pdb.unicode_words" in row.indexdef
     assert "lowercase=true" in row.indexdef
     assert "pdb.literal_normalized" in row.indexdef
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_bm25_index_json_keys_when_supported(engine):
+    if not _tokenizer_cast_supported(engine):
+        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
+
+    table_name = "indexing_products_json"
+    index_name = "indexing_products_json_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("metadata", JSONB, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(
+            json_text(products.c.metadata, "color"),
+            tokenizer=tokenize.literal(alias="metadata_color"),
+        ),
+        BM25Field(
+            json_text(products.c.metadata, "location"),
+            tokenizer=tokenize.literal(alias="metadata_location"),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE tablename = :table_name
+                  AND indexname = :index_name
+                """
+            ),
+            {"table_name": table_name, "index_name": index_name},
+        ).one()
+
+    assert "->>" in row.indexdef
+    assert "'color'" in row.indexdef
+    assert "'location'" in row.indexdef
+    assert row.indexdef.count("pdb.literal(") >= 2
 
     _drop_table_and_index(engine, table_name, index_name)
 
@@ -337,3 +393,53 @@ def test_assert_indexed_passes_and_raises(engine):
     _drop_table_and_index(engine, table_name, index_name)
 
 
+def test_describe_and_assert_indexed_with_explicit_schema(engine):
+    schema_name = "indexing_schema"
+    table_name = "schema_products"
+    index_name = "schema_products_bm25_idx"
+
+    with engine.begin() as conn:
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+        conn.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("extra", Text, nullable=False),
+        schema=schema_name,
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    # Table carries schema; describe/assert_indexed should resolve correctly.
+    metas = describe(engine, products)
+    assert any(m.index_name == index_name for m in metas)
+    assert_indexed(engine, products.c.description)
+    with pytest.raises(FieldNotIndexedError, match="'extra'"):
+        assert_indexed(engine, products.c.extra)
+
+    # Schema override should work for an unqualified table definition too.
+    unqualified_meta = MetaData()
+    unqualified = Table(
+        table_name,
+        unqualified_meta,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+    )
+    metas_override = describe(engine, unqualified, schema=schema_name)
+    assert any(m.index_name == index_name for m in metas_override)
+    assert_indexed(engine, unqualified.c.description, schema=schema_name)
+
+    with engine.begin() as conn:
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))

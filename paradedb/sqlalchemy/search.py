@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import Text, func, literal
+from sqlalchemy import Text, func, literal, literal_column, or_
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
+from ._functions import PDBFunctionWithNamedArgs
 from ._pdb_cast import PDBCast
 from .errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
 from .validation import (
@@ -18,13 +19,15 @@ from .validation import (
 )
 
 _VALID_RANGE_RELATIONS: frozenset[str] = frozenset({"Intersects", "Contains", "Within", "ContainsOrIntersects"})
+_VALID_RANGE_TYPES: frozenset[str] = frozenset({"int4range", "int8range", "numrange", "daterange", "tsrange", "tstzrange"})
 
-_MATCH_ALL = operators.custom_op("&&&", precedence=5, is_comparison=True)
-_MATCH_ANY = operators.custom_op("|||", precedence=5, is_comparison=True)
-_TERM = operators.custom_op("===", precedence=5, is_comparison=True)
-_PHRASE = operators.custom_op("###", precedence=5, is_comparison=True)
-_QUERY = operators.custom_op("@@@", precedence=5, is_comparison=True)
-_NEAR = operators.custom_op("##", precedence=5)
+_MATCH_ALL: Any = operators.custom_op("&&&", precedence=5, is_comparison=True)
+_MATCH_ANY: Any = operators.custom_op("|||", precedence=5, is_comparison=True)
+_TERM: Any = operators.custom_op("===", precedence=5, is_comparison=True)
+_PHRASE: Any = operators.custom_op("###", precedence=5, is_comparison=True)
+_QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
+_NEAR: Any = operators.custom_op("##", precedence=5)
+_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
 
 
 def _to_term_payload(*terms: str) -> ClauseElement:
@@ -83,7 +86,7 @@ def fuzzy(
     if transpose_cost_one is not None:
         args.append(bool(transpose_cost_one))
 
-    payload = PDBCast(literal(value), "fuzzy", args)
+    payload: ClauseElement = PDBCast(literal(value), "fuzzy", args)
     payload = _apply_boost(payload, boost)
     return field.operate(_TERM, payload)
 
@@ -100,8 +103,17 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
-    def near(self, other: str | ClauseElement | ProximityExpr, *, distance: int) -> ProximityExpr:
-        return ProximityExpr(_near_chain(self.expr, other, distance=distance))
+    def near(
+        self,
+        other: str | ClauseElement | ProximityExpr | None = None,
+        *,
+        distance: int,
+        ordered: bool = False,
+        right_pattern: str | None = None,
+        max_expansions: int = 100,
+    ) -> ProximityExpr:
+        right = _resolve_near_operand(other, right_pattern=right_pattern, max_expansions=max_expansions)
+        return ProximityExpr(_near_chain(self.expr, right, distance=distance, ordered=ordered))
 
 
 def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseElement:
@@ -119,10 +131,28 @@ def _to_proximity_clause(value: str | ClauseElement | ProximityExpr) -> ClauseEl
     return PDBCast(operand, "proximityclause")
 
 
-def _near_chain(left: str | ClauseElement | ProximityExpr, right: str | ClauseElement | ProximityExpr, *, distance: int) -> ClauseElement:
+def _near_chain(left: str | ClauseElement | ProximityExpr, right: str | ClauseElement | ProximityExpr, *, distance: int, ordered: bool = False) -> ClauseElement:
+    require_non_negative(distance, field_name="distance")
     left_expr = _to_proximity_clause(left)
     right_expr = _to_proximity_clause(right)
-    return left_expr.operate(_NEAR, literal(distance)).operate(_NEAR, right_expr)
+    op = _NEAR_ORDERED if ordered else _NEAR
+    return left_expr.operate(op, literal(distance)).operate(op, right_expr)
+
+
+def _resolve_near_operand(
+    right: str | ClauseElement | ProximityExpr | None,
+    *,
+    right_pattern: str | None,
+    max_expansions: int,
+) -> str | ClauseElement | ProximityExpr:
+    if right_pattern is not None:
+        if right is not None:
+            raise InvalidArgumentError("right and right_pattern cannot be used together")
+        require_non_negative(max_expansions, field_name="max_expansions")
+        return prox_regex(right_pattern, max_expansions)
+    if right is None:
+        raise InvalidArgumentError("right is required unless right_pattern is provided")
+    return right
 
 
 def parse(field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False) -> ColumnElement[bool]:
@@ -150,11 +180,22 @@ def regex_phrase(
     return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
 
 
-def near(field: ColumnElement, left: str | ClauseElement, right: str | ClauseElement, *, distance: int) -> ColumnElement[bool]:
-    return field.operate(_QUERY, _near_chain(left, right, distance=distance))
+def near(
+    field: ColumnElement,
+    left: str | ClauseElement | ProximityExpr,
+    right: str | ClauseElement | ProximityExpr | None = None,
+    *,
+    distance: int,
+    ordered: bool = False,
+    right_pattern: str | None = None,
+    max_expansions: int = 100,
+) -> ColumnElement[bool]:
+    right_operand = _resolve_near_operand(right, right_pattern=right_pattern, max_expansions=max_expansions)
+    return field.operate(_QUERY, _near_chain(left, right_operand, distance=distance, ordered=ordered))
 
 
 def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
+    require_non_negative(max_expansions, field_name="max_expansions")
     return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
 
 
@@ -175,6 +216,7 @@ def range_term(
     bounds: str,
     *,
     relation: str = "Intersects",
+    range_type: str | None = None,
 ) -> ColumnElement[bool]:
     """Match rows where a range-typed field satisfies a range predicate.
 
@@ -183,22 +225,39 @@ def range_term(
         bounds: A range literal string, e.g. ``"[3,9]"``, ``"(3,9]"``.
         relation: One of ``"Intersects"``, ``"Contains"``, ``"Within"``,
                   ``"ContainsOrIntersects"``. Defaults to ``"Intersects"``.
+        range_type: Optional PostgreSQL range type for explicit casting, e.g.
+                    ``"int4range"``, ``"int8range"``, ``"numrange"``,
+                    ``"daterange"``, ``"tsrange"``, ``"tstzrange"``.
+                    When provided, generates ``'bounds'::range_type`` cast.
 
     Generates::
 
         field @@@ pdb.range_term('[3,9]', 'Contains')
+        field @@@ pdb.range_term('[3,9]'::int4range, 'Contains')
     """
     if relation not in _VALID_RANGE_RELATIONS:
         raise InvalidArgumentError(
             f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
         )
-    return field.operate(_QUERY, func.pdb.range_term(bounds, relation))
+    escaped_relation = relation.replace("'", "''")
+    relation_arg: ClauseElement = literal_column(f"'{escaped_relation}'")
+    if range_type is not None:
+        if range_type not in _VALID_RANGE_TYPES:
+            raise InvalidArgumentError(
+                f"range_type must be one of: {', '.join(sorted(_VALID_RANGE_TYPES))}"
+            )
+        escaped = bounds.replace("'", "''")
+        bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
+    else:
+        bounds_arg = literal(bounds)
+    return field.operate(_QUERY, func.pdb.range_term(bounds_arg, relation_arg))
 
 
 def more_like_this(
     field: ColumnElement,
     *,
     document_id: Any | None = None,
+    document_ids: list[Any] | None = None,
     document: dict[str, Any] | str | None = None,
     fields: list[str] | None = None,
     min_term_frequency: int | None = None,
@@ -212,10 +271,13 @@ def more_like_this(
 ) -> ColumnElement[bool]:
     error_cls = InvalidMoreLikeThisOptionsError
 
-    if (document_id is None) == (document is None):
-        raise error_cls("exactly one of document_id or document must be provided")
+    sources_provided = sum(x is not None for x in (document_id, document_ids, document))
+    if sources_provided != 1:
+        raise error_cls("exactly one of document_id, document_ids, or document must be provided")
+    if document_ids is not None and len(document_ids) == 0:
+        raise error_cls("document_ids must not be empty")
     if document is not None and fields is not None:
-        raise error_cls("fields can only be used with document_id")
+        raise error_cls("fields can only be used with document_id or document_ids")
 
     if min_term_frequency is not None:
         require_non_negative(min_term_frequency, field_name="min_term_frequency", error_cls=error_cls)
@@ -250,41 +312,36 @@ def more_like_this(
     if stopwords is not None:
         require_non_empty_strings(stopwords, field_name="stopwords", error_cls=error_cls)
 
-    options_provided = any(
-        option is not None
-        for option in (
-            min_term_frequency,
-            max_query_terms,
-            min_doc_frequency,
-            max_doc_frequency,
-            min_word_length,
-            max_word_length,
-            boost_factor,
-            stopwords,
-        )
-    )
+    named_options: list[tuple[str, Any]] = []
+    if min_term_frequency is not None:
+        named_options.append(("min_term_frequency", min_term_frequency))
+    if max_query_terms is not None:
+        named_options.append(("max_query_terms", max_query_terms))
+    if min_doc_frequency is not None:
+        named_options.append(("min_doc_frequency", min_doc_frequency))
+    if max_doc_frequency is not None:
+        named_options.append(("max_doc_frequency", max_doc_frequency))
+    if min_word_length is not None:
+        named_options.append(("min_word_length", min_word_length))
+    if max_word_length is not None:
+        named_options.append(("max_word_length", max_word_length))
+    if boost_factor is not None:
+        named_options.append(("boost_factor", boost_factor))
+    if stopwords is not None:
+        named_options.append(("stopwords", array(stopwords, type_=Text())))
 
-    args: list[Any] = []
+    def _build_mlt_call(source_arg: ClauseElement, *, include_fields: bool) -> ClauseElement:
+        positional_args: list[ClauseElement] = [source_arg]
+        if include_fields and fields is not None:
+            positional_args.append(array(fields, type_=Text()))
+        return PDBFunctionWithNamedArgs("more_like_this", positional_args, named_options)
+
+    if document_ids is not None:
+        clauses = [field.operate(_QUERY, _build_mlt_call(literal(doc_id), include_fields=True)) for doc_id in document_ids]
+        return or_(*clauses)
+
     if document_id is not None:
-        args.append(document_id)
-        if fields is not None or options_provided:
-            args.append(array(fields or [], type_=Text()))
-    else:
-        payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
-        args.append(payload)
+        return field.operate(_QUERY, _build_mlt_call(literal(document_id), include_fields=True))
 
-    if options_provided:
-        args.extend(
-            [
-                1 if min_term_frequency is None else min_term_frequency,
-                25 if max_query_terms is None else max_query_terms,
-                0 if min_doc_frequency is None else min_doc_frequency,
-                1_000_000 if max_doc_frequency is None else max_doc_frequency,
-                0 if min_word_length is None else min_word_length,
-                1000 if max_word_length is None else max_word_length,
-                0.0 if boost_factor is None else boost_factor,
-                array(stopwords or [], type_=Text()),
-            ]
-        )
-
-    return field.operate(_QUERY, func.pdb.more_like_this(*args))
+    payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
+    return field.operate(_QUERY, _build_mlt_call(literal(payload), include_fields=False))

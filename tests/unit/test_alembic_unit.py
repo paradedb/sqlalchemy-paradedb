@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from alembic.autogenerate.api import AutogenContext
 from alembic.autogenerate.render import render_op
 from alembic.migration import MigrationContext
@@ -24,13 +25,13 @@ def test_create_drop_reindex_sql_generation():
     create_op = pdb_alembic.CreateBM25IndexOp(
         index_name='idx "quoted"',
         table_name='tbl "quoted"',
-        fields=["id", "description"],
+        expressions=["id", "description"],
         key_field="id",
     )
     pdb_alembic._create_bm25_index_impl(ops, create_op)
     assert (
         ops.sql[-1]
-        == 'CREATE INDEX "idx ""quoted""" ON "tbl ""quoted""" USING bm25 ("id", "description") WITH (key_field=\'id\')'
+        == 'CREATE INDEX "idx ""quoted""" ON "tbl ""quoted""" USING bm25 (id, description) WITH (key_field=\'id\')'
     )
 
     drop_op = pdb_alembic.DropBM25IndexOp(index_name='idx "quoted"', if_exists=True)
@@ -42,6 +43,58 @@ def test_create_drop_reindex_sql_generation():
     assert ops.sql[-1] == 'REINDEX INDEX CONCURRENTLY "idx ""quoted"""'
 
 
+def test_create_sql_generation_preserves_tokenizer_expression():
+    ops = DummyOps()
+    create_op = pdb_alembic.CreateBM25IndexOp(
+        index_name="products_bm25_idx",
+        table_name="products",
+        expressions=["id", "((description)::pdb.simple('alias=description_simple,lowercase=true'))"],
+        key_field="id",
+    )
+    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    assert ops.sql[-1] == (
+        "CREATE INDEX \"products_bm25_idx\" ON \"products\" "
+        "USING bm25 (id, ((description)::pdb.simple('alias=description_simple,lowercase=true'))) "
+        "WITH (key_field='id')"
+    )
+
+
+def test_create_drop_reindex_sql_generation_with_schema():
+    ops = DummyOps()
+    create_op = pdb_alembic.CreateBM25IndexOp(
+        index_name="products_bm25_idx",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+        table_schema="analytics",
+    )
+    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    assert ops.sql[-1] == (
+        "CREATE INDEX \"products_bm25_idx\" ON \"analytics\".\"products\" "
+        "USING bm25 (id, description) WITH (key_field='id')"
+    )
+
+    drop_op = pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=True, schema="analytics")
+    pdb_alembic._drop_bm25_index_impl(ops, drop_op)
+    assert ops.sql[-1] == 'DROP INDEX IF EXISTS "analytics"."products_bm25_idx"'
+
+    reindex_op = pdb_alembic.ReindexBM25Op(index_name="products_bm25_idx", concurrently=True, schema="analytics")
+    pdb_alembic._reindex_bm25_impl(ops, reindex_op)
+    assert ops.sql[-1] == 'REINDEX INDEX CONCURRENTLY "analytics"."products_bm25_idx"'
+
+
+def test_create_bm25_index_rejects_removed_index_schema_kwarg():
+    with pytest.raises(TypeError, match="index_schema"):
+        pdb_alembic.CreateBM25IndexOp.create_bm25_index(
+            object(),
+            "products_bm25_idx",
+            "products",
+            ["id", "description"],
+            key_field="id",
+            index_schema="analytics",
+        )
+
+
 def test_alembic_renderers_registered_and_emit_python():
     ctx = MigrationContext.configure(dialect_name="postgresql")
     autogen_ctx = AutogenContext(ctx)
@@ -51,7 +104,7 @@ def test_alembic_renderers_registered_and_emit_python():
         pdb_alembic.CreateBM25IndexOp(
             index_name="products_bm25_idx",
             table_name="products",
-            fields=["id", "description"],
+            expressions=["id", "description"],
             key_field="id",
         ),
     )
@@ -70,6 +123,20 @@ def test_alembic_renderers_registered_and_emit_python():
         pdb_alembic.ReindexBM25Op(index_name="products_bm25_idx", concurrently=True),
     )
     assert reindex_lines == ["op.reindex_bm25('products_bm25_idx', concurrently=True)"]
+
+    create_lines_with_schema = render_op(
+        autogen_ctx,
+        pdb_alembic.CreateBM25IndexOp(
+            index_name="products_bm25_idx",
+            table_name="products",
+            expressions=["id", "description"],
+            key_field="id",
+            table_schema="analytics",
+        ),
+    )
+    assert create_lines_with_schema == [
+        "op.create_bm25_index('products_bm25_idx', 'products', ['id', 'description'], key_field='id', table_schema='analytics')"
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +164,7 @@ def _make_metadata_with_bm25() -> tuple[MetaData, object]:
 
 def test_autogen_meta_indexes_finds_bm25_only():
     m, bm25_idx = _make_metadata_with_bm25()
-    result = pdb_alembic._autogen_bm25_meta_indexes(m, {"public"})
+    result = pdb_alembic._autogen_bm25_meta_indexes(m, {"public"}, default_schema="public")
 
     assert ("public", "products_bm25_idx") in result
     # Regular index must not appear
@@ -119,12 +186,36 @@ def test_autogen_meta_indexes_schema_filter():
     )
 
     # Only looking at schema "public" — the "other" table's index must not appear
-    result = pdb_alembic._autogen_bm25_meta_indexes(m, {"public"})
+    result = pdb_alembic._autogen_bm25_meta_indexes(m, {"public"}, default_schema="public")
     assert ("other", "things_bm25_idx") not in result
 
     # When we look at "other", it should appear
-    result2 = pdb_alembic._autogen_bm25_meta_indexes(m, {"other"})
+    result2 = pdb_alembic._autogen_bm25_meta_indexes(m, {"other"}, default_schema="public")
     assert ("other", "things_bm25_idx") in result2
+
+
+def test_autogen_meta_indexes_uses_explicit_default_schema_for_unschematized_tables():
+    from sqlalchemy.schema import Index
+
+    m = MetaData()
+    t = Table("products", m, Column("id", Integer), Column("description", Text))
+    Index(
+        "products_bm25_idx",
+        BM25Field(t.c.id),
+        BM25Field(t.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+
+    result_public = pdb_alembic._autogen_bm25_meta_indexes(
+        m, {"public", "other"}, default_schema="public"
+    )
+    assert ("public", "products_bm25_idx") in result_public
+
+    result_other = pdb_alembic._autogen_bm25_meta_indexes(
+        m, {"public", "other"}, default_schema="other"
+    )
+    assert ("other", "products_bm25_idx") in result_other
 
 
 def test_suppress_standard_bm25_ops_removes_from_modify_table_ops():

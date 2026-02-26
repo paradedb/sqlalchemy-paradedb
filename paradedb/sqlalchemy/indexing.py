@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import Index, event, text
 from sqlalchemy.engine import Engine
@@ -20,11 +20,14 @@ from .errors import (
     MissingKeyFieldError,
 )
 
+_VALID_TOKENIZER_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 @dataclass(frozen=True)
 class TokenizerSpec:
     name: str | None = None
-    options: tuple[tuple[str, Any], ...] = ()
+    positional_args: tuple[Any, ...] = ()
+    named_args: tuple[tuple[str, Any], ...] = ()
     raw_sql: str | None = None
     alias: str | None = None
 
@@ -35,30 +38,166 @@ class TokenizerSpec:
         if self.name is None:
             raise InvalidArgumentError("tokenizer name is required unless raw_sql is provided")
 
-        if not self.options:
+        if not self.positional_args and not self.named_args:
             return f"pdb.{self.name}"
 
-        rendered_options = ",".join(f"{key}={_format_option_value(value)}" for key, value in self.options)
-        escaped = rendered_options.replace("'", "''")
-        return f"pdb.{self.name}('{escaped}')"
+        args_sql = [_render_sql_arg(value) for value in self.positional_args]
+        if self.named_args:
+            rendered_options = ",".join(
+                f"{key}={_render_config_value(value)}" for key, value in self.named_args
+            )
+            args_sql.append(_quote_term(rendered_options))
+        return f"pdb.{self.name}({','.join(args_sql)})"
 
 
-def _format_option_value(value: Any) -> str:
+def _quote_term(value: str) -> str:
+    escaped = value.replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _render_sql_arg(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
-    return str(value)
+    if isinstance(value, int | float):
+        return str(value)
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return _quote_term(value)
+    raise InvalidArgumentError(f"Unsupported tokenizer arg type: {type(value).__name__}")
 
 
-def _build_spec(name: str, *, alias: str | None = None, **kwargs: Any) -> TokenizerSpec:
-    options: dict[str, Any] = {key: value for key, value in kwargs.items() if value is not None}
+def _render_config_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return value
+    raise InvalidArgumentError(f"Unsupported tokenizer named arg type: {type(value).__name__}")
+
+
+def _build_spec(
+    name: str,
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+    **kwargs: Any,
+) -> TokenizerSpec:
+    if not _VALID_TOKENIZER_NAME_RE.match(name):
+        raise InvalidArgumentError(
+            "tokenizer name must be a bare identifier (letters, digits, underscore); "
+            "pass arguments via args/named_args"
+        )
+    if args is not None and isinstance(args, str | bytes):
+        raise InvalidArgumentError("tokenizer args must be a sequence, not a string")
+    if named_args is not None and not isinstance(named_args, Mapping):
+        raise InvalidArgumentError("tokenizer named_args must be a mapping")
+    if filters is not None:
+        if isinstance(filters, str | bytes):
+            raise InvalidArgumentError("tokenizer filters must be a sequence, not a string")
+        if not isinstance(filters, Sequence):
+            raise InvalidArgumentError("tokenizer filters must be a sequence")
+
+    positional = tuple(args or ())
+    normalized: dict[str, Any] = {}
+
     if alias is not None:
-        options["alias"] = alias
-    return TokenizerSpec(name=name, options=tuple(sorted(options.items())), alias=alias)
+        normalized["alias"] = alias
+
+    if named_args is not None:
+        for key, value in named_args.items():
+            if value is not None:
+                normalized[str(key)] = value
+
+    for key, value in kwargs.items():
+        if value is not None:
+            normalized[str(key)] = value
+
+    if filters is not None:
+        for filter_name in filters:
+            key = str(filter_name)
+            if key == "stemmer" and stemmer is not None:
+                normalized.setdefault("stemmer", stemmer)
+            else:
+                normalized.setdefault(key, True)
+    elif stemmer is not None:
+        normalized.setdefault("stemmer", stemmer)
+
+    return TokenizerSpec(
+        name=name,
+        positional_args=positional,
+        named_args=tuple(normalized.items()),
+        alias=alias,
+    )
 
 
 def unicode(*, alias: str | None = None, lowercase: bool | None = None, stemmer: str | None = None) -> TokenizerSpec:
     # ParadeDB currently exposes this tokenizer as `unicode_words`.
-    return _build_spec("unicode_words", alias=alias, lowercase=lowercase, stemmer=stemmer)
+    return _build_spec(
+        "unicode_words",
+        alias=alias,
+        named_args={"lowercase": lowercase, "stemmer": stemmer},
+    )
+
+
+def simple(
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        "simple",
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
+def whitespace(
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        "whitespace",
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
+def icu(
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        "icu",
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
 
 
 def literal(*, alias: str | None = None) -> TokenizerSpec:
@@ -75,13 +214,77 @@ def ngram(
     min_gram: int | None = None,
     max_gram: int | None = None,
     prefix_only: bool | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
 ) -> TokenizerSpec:
+    positional_args: list[Any] = list(args or ())
+    use_positional_bounds = min_gram is not None and max_gram is not None and not positional_args
+    if use_positional_bounds:
+        positional_args.extend([min_gram, max_gram])
+
+    all_named_args: dict[str, Any] = {}
+    if named_args is not None:
+        all_named_args.update({str(key): value for key, value in named_args.items()})
+    if min_gram is not None and not use_positional_bounds:
+        all_named_args["min_gram"] = min_gram
+    if max_gram is not None and not use_positional_bounds:
+        all_named_args["max_gram"] = max_gram
+    if prefix_only is not None:
+        all_named_args["prefix_only"] = prefix_only
+
     return _build_spec(
         "ngram",
         alias=alias,
-        min_gram=min_gram,
-        max_gram=max_gram,
-        prefix_only=prefix_only,
+        args=positional_args,
+        named_args=all_named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
+def lindera(
+    dictionary: str | None = None,
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    positional_args: list[Any] = list(args or ())
+    if dictionary is not None and not positional_args:
+        positional_args.append(dictionary)
+    return _build_spec(
+        "lindera",
+        alias=alias,
+        args=positional_args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
+def regex_pattern(
+    pattern: str | None = None,
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    positional_args: list[Any] = list(args or ())
+    if pattern is not None and not positional_args:
+        positional_args.append(pattern)
+    return _build_spec(
+        "regex_pattern",
+        alias=alias,
+        args=positional_args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
     )
 
 
@@ -89,12 +292,64 @@ def raw(sql: str, *, alias: str | None = None) -> TokenizerSpec:
     return TokenizerSpec(raw_sql=sql, alias=alias)
 
 
+def custom(
+    tokenizer: str,
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        tokenizer,
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
+def from_config(config: Mapping[str, Any]) -> TokenizerSpec:
+    if not isinstance(config, Mapping):
+        raise InvalidArgumentError("tokenizer config must be a mapping")
+
+    allowed_keys = {"tokenizer", "args", "named_args", "filters", "stemmer", "alias"}
+    unknown = set(config.keys()) - allowed_keys
+    if unknown:
+        unknown_csv = ", ".join(sorted(str(key) for key in unknown))
+        raise InvalidArgumentError(f"Unknown tokenizer config keys: {unknown_csv}")
+
+    tokenizer = config.get("tokenizer")
+    if tokenizer is None:
+        raise InvalidArgumentError("tokenizer config requires 'tokenizer'")
+    if not isinstance(tokenizer, str):
+        raise InvalidArgumentError("tokenizer config 'tokenizer' must be a string")
+
+    return custom(
+        tokenizer,
+        args=config.get("args"),
+        named_args=config.get("named_args"),
+        filters=config.get("filters"),
+        stemmer=config.get("stemmer"),
+        alias=config.get("alias"),
+    )
+
+
 class _TokenizeNamespace:
     unicode = staticmethod(unicode)
+    simple = staticmethod(simple)
+    whitespace = staticmethod(whitespace)
+    icu = staticmethod(icu)
     literal = staticmethod(literal)
     literal_normalized = staticmethod(literal_normalized)
     ngram = staticmethod(ngram)
+    lindera = staticmethod(lindera)
+    regex_pattern = staticmethod(regex_pattern)
     raw = staticmethod(raw)
+    custom = staticmethod(custom)
+    from_config = staticmethod(from_config)
 
 
 tokenize = _TokenizeNamespace()
@@ -123,7 +378,7 @@ def _compile_bm25_field(element: BM25Field, compiler, **kw: Any) -> str:
     expr_sql = compiler.process(element.expr, **kw)
     if element.tokenizer is None:
         return expr_sql
-    return f"({expr_sql}::{element.tokenizer.render()})"
+    return f"(({expr_sql})::{element.tokenizer.render()})"
 
 
 @compiles(BM25Field)
@@ -152,6 +407,8 @@ def validate_bm25_index(index: Index) -> None:
 
     aliases: set[str] = set()
     for expr in index.expressions:
+        if not isinstance(expr, BM25Field):
+            continue
         tokenizer = expr.tokenizer
         if tokenizer is None or tokenizer.alias is None:
             continue
@@ -164,9 +421,18 @@ def validate_bm25_index(index: Index) -> None:
     if not key_field:
         raise MissingKeyFieldError("BM25 indexes require postgresql_with={'key_field': '<column>'}")
 
-    field_names = {_bm25_field_name(expr) for expr in index.expressions}
+    field_names = {_bm25_field_name(expr) for expr in index.expressions if isinstance(expr, BM25Field)}
     if key_field not in field_names:
         raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must match one of the indexed BM25Field columns")
+
+    first_field = index.expressions[0]
+    if not isinstance(first_field, BM25Field):
+        raise InvalidBM25FieldError("BM25 indexes must use BM25Field for every indexed field")
+    first_field_name = _bm25_field_name(first_field)
+    if first_field_name != key_field:
+        raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must be the first indexed BM25Field")
+    if first_field.tokenizer is not None:
+        raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must be untokenized")
 
 
 @event.listens_for(Index, "before_create")
@@ -285,19 +551,31 @@ def _extract_tokenizer_name(field_expr: str) -> str | None:
     return match.group(1) if match else None
 
 
-def describe(engine: Engine, table) -> list[IndexMeta]:
+def _current_schema_name(conn) -> str:
+    row = conn.execute(text("SELECT current_schema()")).one()
+    return str(row[0])
+
+
+def describe(engine: Engine, table, *, schema: str | None = None) -> list[IndexMeta]:
+    table_schema = schema if schema is not None else getattr(table, "schema", None)
     query = text(
         """
         SELECT indexname, indexdef
         FROM pg_indexes
-        WHERE schemaname = current_schema()
+        WHERE schemaname = :schema_name
           AND tablename = :table_name
           AND indexdef ILIKE '%USING bm25%'
         ORDER BY indexname
         """
     )
 
-    rows = engine.connect().execute(query, {"table_name": table.name}).fetchall()
+    with engine.connect() as conn:
+        effective_schema = table_schema if table_schema is not None else _current_schema_name(conn)
+        rows = conn.execute(
+            query,
+            {"schema_name": effective_schema, "table_name": table.name},
+        ).fetchall()
+
     output: list[IndexMeta] = []
     for row in rows:
         indexdef: str = row.indexdef
@@ -336,6 +614,7 @@ def assert_indexed(
     column: Any,
     *,
     tokenizer: str | None = None,
+    schema: str | None = None,
 ) -> None:
     """Raise :exc:`FieldNotIndexedError` if *column* is not covered by any BM25 index.
 
@@ -345,6 +624,8 @@ def assert_indexed(
         tokenizer: Optional tokenizer name to verify, e.g. ``"literal"`` or
                    ``"unicode_words"``.  When given, raises if the column is not
                    indexed with that specific tokenizer.
+        schema: Optional schema override. Defaults to ``column.table.schema`` when set,
+                otherwise the connection's ``current_schema()``.
 
     Example::
 
@@ -357,7 +638,7 @@ def assert_indexed(
     if col_name is None:
         raise InvalidArgumentError("column must have a name attribute")
 
-    for idx_meta in describe(engine, table):
+    for idx_meta in describe(engine, table, schema=schema):
         if col_name not in idx_meta.fields:
             continue
         if tokenizer is None:
