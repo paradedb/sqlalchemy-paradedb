@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from paradedb.sqlalchemy.diagnostics import (
