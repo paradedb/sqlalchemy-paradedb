@@ -443,3 +443,147 @@ def test_describe_and_assert_indexed_with_explicit_schema(engine):
 
     with engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+
+
+def test_bm25_partial_index_generates_where_clause(engine):
+    """A BM25 index with postgresql_where= includes a WHERE clause in the DDL."""
+    table_name = "partial_bm25_products"
+    index_name = "partial_bm25_products_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("rating", Integer, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+        postgresql_where=products.c.rating > 3,
+    )
+    idx.create(engine)
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "SELECT indexdef FROM pg_indexes "
+                "WHERE tablename = :t AND indexname = :i"
+            ),
+            {"t": table_name, "i": index_name},
+        ).one()
+
+    assert "WHERE" in row.indexdef, f"Expected WHERE in indexdef: {row.indexdef}"
+    assert "rating" in row.indexdef
+
+    _drop_table_and_index(engine, table_name, index_name)
+    with engine.begin() as conn:
+        conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+
+
+def test_bm25_partial_index_filters_search_results(engine):
+    """Rows excluded by the partial index condition are not found via BM25 search."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from paradedb.sqlalchemy.search import match_all
+
+    table_name = "partial_search_products"
+    index_name = "partial_search_products_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("rating", Integer, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    # Only index rows where rating > 3
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+        postgresql_where=products.c.rating > 3,
+    )
+    idx.create(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            products.insert(),
+            [
+                {"id": 1, "description": "premium running shoes", "rating": 5},
+                {"id": 2, "description": "budget running shoes", "rating": 2},
+            ],
+        )
+
+    with Session(engine) as session:
+        stmt = select(products.c.id).where(
+            match_all(products.c.description, "running")
+        )
+        ids = [row.id for row in session.execute(stmt)]
+
+    # id=1 (rating 5) is indexed; id=2 (rating 2) is excluded by the partial condition
+    assert 1 in ids, f"Expected id=1 in results: {ids}"
+    assert 2 not in ids, f"Expected id=2 excluded from partial index results: {ids}"
+
+    _drop_table_and_index(engine, table_name, index_name)
+    with engine.begin() as conn:
+        conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+
+
+def test_bm25_index_create_concurrently(engine):
+    """BM25 index can be created with postgresql_concurrently=True."""
+    table_name = "concurrent_bm25_products"
+    index_name = "concurrent_bm25_products_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    with engine.begin() as conn:
+        conn.execute(products.insert(), [{"id": 1, "description": "test item"}])
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+        postgresql_concurrently=True,
+    )
+    # CONCURRENTLY cannot run inside a transaction block; use autocommit mode.
+    idx.create(engine.execution_options(isolation_level="AUTOCOMMIT"))
+
+    with engine.begin() as conn:
+        count = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM pg_indexes "
+                "WHERE tablename = :t AND indexname = :i"
+            ),
+            {"t": table_name, "i": index_name},
+        ).scalar_one()
+
+    assert count == 1, "Expected concurrent BM25 index to be created"
+
+    _drop_table_and_index(engine, table_name, index_name)
+    with engine.begin() as conn:
+        conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))

@@ -8,7 +8,7 @@ else
   RUNNING=0
 fi
 
-PARADEDB_IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:0.21.8-pg18}"
+PARADEDB_IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:0.21.9-pg18}"
 PARADEDB_CONTAINER_NAME="${PARADEDB_CONTAINER_NAME:-paradedb-sqlalchemy-integration}"
 PARADEDB_PORT="${PARADEDB_PORT:-5443}"
 PARADEDB_USER="${PARADEDB_USER:-postgres}"

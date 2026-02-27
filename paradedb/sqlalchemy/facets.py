@@ -72,12 +72,15 @@ def range(*, field: str, ranges: list[dict[str, object]]) -> dict[str, dict[str,
 def top_hits(
     *,
     size: int | None = None,
-    sort: list[dict[str, str]] | None = None,
+    from_: int | None = None,
+    sort: list[dict[str, Any]] | None = None,
     docvalue_fields: list[str] | None = None,
 ) -> dict[str, dict[str, object]]:
     payload: dict[str, object] = {}
     if size is not None:
         payload["size"] = size
+    if from_ is not None:
+        payload["from"] = from_
     if sort is not None:
         payload["sort"] = sort
     if docvalue_fields is not None:
