@@ -7,7 +7,6 @@ from alembic.operations import Operations
 from alembic.operations.ops import MigrateOperation
 from alembic.util import DispatchPriority, PriorityDispatchResult
 from sqlalchemy.dialects import postgresql
-from sqlalchemy import text
 from sqlalchemy.sql.elements import ClauseElement
 
 
@@ -174,30 +173,30 @@ def _autogen_bm25_meta_indexes(
 
 def _autogen_bm25_db_indexes(conn, effective_schemas: set[str]) -> dict[tuple[str, str], dict]:
     """Return {(schema, index_name): {table_name, expressions, key_field, where}} from pg_indexes."""
-    from .indexing import _extract_bm25_field_list, _extract_key_field, _extract_where_clause
+    from .indexing import (
+        _extract_key_field,
+        _extract_where_clause,
+        _introspect_bm25_index_rows,
+        _normalize_reloption_value,
+    )
 
     result: dict[tuple[str, str], dict] = {}
     for schema in effective_schemas:
-        rows = conn.execute(
-            text(
-                """
-                SELECT schemaname, tablename, indexname, indexdef
-                FROM pg_indexes
-                WHERE schemaname = :schema
-                  AND indexdef ILIKE '%USING bm25%'
-                ORDER BY indexname
-                """
-            ),
-            {"schema": schema},
-        ).fetchall()
+        rows = _introspect_bm25_index_rows(conn, schema_name=schema)
         for row in rows:
-            raw_fields = _extract_bm25_field_list(row.indexdef)
-            result[(row.schemaname, row.indexname)] = {
-                "table_name": row.tablename,
-                "expressions": raw_fields,
-                "key_field": _extract_key_field(row.indexdef) or "",
-                "where": _extract_where_clause(row.indexdef),
-            }
+            key = (row["schemaname"], row["indexname"])
+            index_entry = result.setdefault(
+                key,
+                {
+                    "table_name": row["tablename"],
+                    "expressions": [],
+                    "key_field": _normalize_reloption_value(row["key_field"]) or "",
+                    "where": _extract_where_clause(str(row["indexdef"])),
+                },
+            )
+            index_entry["expressions"].append(str(row["keydef"]))
+            if not index_entry["key_field"]:
+                index_entry["key_field"] = _extract_key_field(str(row["indexdef"])) or ""
     return result
 
 

@@ -14,6 +14,9 @@ on:
       - ".github/workflows/lint-markdown.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: lint-markdown-${{ github.head_ref || github.ref }}
   cancel-in-progress: true

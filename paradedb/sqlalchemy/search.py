@@ -12,6 +12,8 @@ from ._functions import PDBFunctionWithNamedArgs
 from ._pdb_cast import PDBCast
 from .errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
 from .validation import (
+    require_non_empty_sequence,
+    require_non_empty_string,
     require_non_empty_strings,
     require_non_negative,
     require_ordered_bounds,
@@ -33,6 +35,7 @@ _NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
 def _to_term_payload(*terms: str) -> ClauseElement:
     if not terms:
         raise InvalidArgumentError("at least one search term is required")
+    require_non_empty_strings(terms, field_name="terms")
     if len(terms) == 1:
         return literal(terms[0])
     return array(list(terms), type_=Text())
@@ -55,11 +58,13 @@ def match_any(field: ColumnElement, *terms: str, boost: float | None = None) -> 
 
 
 def term(field: ColumnElement, value: str, boost: float | None = None) -> ColumnElement[bool]:
+    require_non_empty_string(value, field_name="value")
     payload = _apply_boost(literal(value), boost)
     return field.operate(_TERM, payload)
 
 
 def phrase(field: ColumnElement, value: str, *, slop: int | None = None, boost: float | None = None) -> ColumnElement[bool]:
+    require_non_empty_string(value, field_name="value")
     if slop is not None:
         require_non_negative(slop, field_name="slop")
     payload: ClauseElement = literal(value)
@@ -78,6 +83,7 @@ def fuzzy(
     transpose_cost_one: bool | None = None,
     boost: float | None = None,
 ) -> ColumnElement[bool]:
+    require_non_empty_string(value, field_name="value")
     if distance < 0 or distance > 2:
         raise InvalidArgumentError("distance must be between 0 and 2")
     args: list[object] = [distance]
@@ -92,6 +98,7 @@ def fuzzy(
 
 
 def regex(field: ColumnElement, pattern: str) -> ColumnElement[bool]:
+    require_non_empty_string(pattern, field_name="pattern")
     return field.operate(_QUERY, func.pdb.regex(pattern))
 
 
@@ -120,6 +127,7 @@ def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseE
     if isinstance(value, ProximityExpr):
         return value.expr
     if isinstance(value, str):
+        require_non_empty_string(value, field_name="clause")
         return literal(value)
     return value
 
@@ -148,6 +156,7 @@ def _resolve_near_operand(
     if right_pattern is not None:
         if right is not None:
             raise InvalidArgumentError("right and right_pattern cannot be used together")
+        require_non_empty_string(right_pattern, field_name="right_pattern")
         require_non_negative(max_expansions, field_name="max_expansions")
         return prox_regex(right_pattern, max_expansions)
     if right is None:
@@ -156,12 +165,14 @@ def _resolve_near_operand(
 
 
 def parse(field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False) -> ColumnElement[bool]:
+    require_non_empty_string(query, field_name="query")
     return field.operate(_QUERY, func.pdb.parse(query, lenient, conjunction_mode))
 
 
 def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int = 50) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("phrase_prefix requires at least one term")
+    require_non_empty_strings(terms, field_name="terms")
     require_positive(max_expansions, field_name="max_expansions")
     return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text()), max_expansions))
 
@@ -175,6 +186,7 @@ def regex_phrase(
 ) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("regex_phrase requires at least one term")
+    require_non_empty_strings(terms, field_name="terms")
     require_non_negative(slop, field_name="slop")
     require_positive(max_expansions, field_name="max_expansions")
     return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
@@ -195,6 +207,7 @@ def near(
 
 
 def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
+    require_non_empty_string(pattern, field_name="pattern")
     require_non_negative(max_expansions, field_name="max_expansions")
     return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
 
@@ -235,6 +248,7 @@ def range_term(
         field @@@ pdb.range_term('[3,9]', 'Contains')
         field @@@ pdb.range_term('[3,9]'::int4range, 'Contains')
     """
+    require_non_empty_string(bounds, field_name="bounds")
     if relation not in _VALID_RANGE_RELATIONS:
         raise InvalidArgumentError(
             f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
@@ -278,6 +292,15 @@ def more_like_this(
         raise error_cls("document_ids must not be empty")
     if document is not None and fields is not None:
         raise error_cls("fields can only be used with document_id or document_ids")
+    if fields is not None:
+        require_non_empty_sequence(fields, field_name="fields", error_cls=error_cls)
+        require_non_empty_strings(fields, field_name="fields", error_cls=error_cls)
+    if document_ids is not None and any(doc_id is None for doc_id in document_ids):
+        raise error_cls("document_ids entries cannot be null")
+    if isinstance(document, str):
+        require_non_empty_string(document, field_name="document", error_cls=error_cls)
+    if isinstance(document, dict) and not document:
+        raise error_cls("document must not be empty")
 
     if min_term_frequency is not None:
         require_non_negative(min_term_frequency, field_name="min_term_frequency", error_cls=error_cls)

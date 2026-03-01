@@ -13,6 +13,9 @@ on:
       - ".github/workflows/lint-bash.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: lint-bash-${{ github.head_ref || github.ref }}
   cancel-in-progress: true

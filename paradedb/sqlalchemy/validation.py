@@ -3,6 +3,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from .errors import InvalidArgumentError
 
+
+def require_non_empty_string(
+    value: str,
+    *,
+    field_name: str,
+    error_cls: type[InvalidArgumentError] = InvalidArgumentError,
+) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise error_cls(f"{field_name} must be a non-empty string")
+
+
 def require_non_empty_strings(
     values: Sequence[str],
     *,

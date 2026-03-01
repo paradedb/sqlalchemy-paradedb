@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import Integer, String, Text, column, select, table
 from sqlalchemy.dialects import postgresql
 
-from paradedb.sqlalchemy import facets, search
+from paradedb.sqlalchemy import facets, pdb, search
 from paradedb.sqlalchemy._functions import PDBFunctionWithNamedArgs
 from paradedb.sqlalchemy._pdb_cast import PDBCast
 from paradedb.sqlalchemy.errors import (
@@ -59,6 +59,18 @@ def test_search_argument_validation_errors():
     with pytest.raises(InvalidArgumentError, match="right is required"):
         search.near(products.c.description, "running", distance=1)
 
+    with pytest.raises(InvalidArgumentError, match="terms entries must be non-empty strings"):
+        search.match_any(products.c.description, "running", "")
+
+    with pytest.raises(InvalidArgumentError, match="value must be a non-empty string"):
+        search.term(products.c.description, "")
+
+    with pytest.raises(InvalidArgumentError, match="query must be a non-empty string"):
+        search.parse(products.c.description, "")
+
+    with pytest.raises(InvalidArgumentError, match="pattern must be a non-empty string"):
+        search.regex(products.c.description, "")
+
 
 def test_more_like_this_uses_specific_error_type():
     with pytest.raises(InvalidMoreLikeThisOptionsError, match="exactly one"):
@@ -66,6 +78,29 @@ def test_more_like_this_uses_specific_error_type():
 
     with pytest.raises(InvalidMoreLikeThisOptionsError, match="stopwords entries"):
         search.more_like_this(products.c.id, document_id=1, stopwords=[""])
+
+    with pytest.raises(InvalidMoreLikeThisOptionsError, match="fields entries"):
+        search.more_like_this(products.c.id, document_id=1, fields=[""])
+
+    with pytest.raises(InvalidMoreLikeThisOptionsError, match="document must not be empty"):
+        search.more_like_this(products.c.id, document={})
+
+
+def test_snippet_builder_validation_errors():
+    with pytest.raises(InvalidArgumentError, match="max_num_chars must be > 0"):
+        pdb.snippet(products.c.description, max_num_chars=0)
+
+    with pytest.raises(InvalidArgumentError, match="limit must be > 0"):
+        pdb.snippets(products.c.description, limit=0)
+
+    with pytest.raises(InvalidArgumentError, match="offset must be >= 0"):
+        pdb.snippets(products.c.description, offset=-1)
+
+    with pytest.raises(InvalidArgumentError, match="sort_by must be a non-empty string"):
+        pdb.snippets(products.c.description, sort_by="  ")
+
+    with pytest.raises(InvalidArgumentError, match="spec must be a non-empty dict"):
+        pdb.agg({})
 
 
 def test_with_rows_guard_error_types():

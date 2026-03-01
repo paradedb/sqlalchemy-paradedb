@@ -305,7 +305,7 @@ def test_extract_field_name_from_qualified_tokenizer_cast():
 
 
 def test_extract_field_name_from_quoted_identifier():
-    expr = "((\"Display Name\")::pdb.literal('alias=display_name'))"
+    expr = '(("Display Name")::pdb.literal(\'alias=display_name\'))'
     assert _extract_field_name(expr) == "Display Name"
 
 

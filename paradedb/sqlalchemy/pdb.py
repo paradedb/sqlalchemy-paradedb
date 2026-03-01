@@ -9,6 +9,7 @@ from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from .errors import InvalidArgumentError
 from ._functions import PDBFunctionWithNamedArgs
+from .validation import require_non_empty_string, require_non_negative, require_positive
 
 
 def score(field: ColumnElement) -> ClauseElement:
@@ -24,6 +25,12 @@ def snippet(
 ) -> ClauseElement:
     if (start_tag is None) != (end_tag is None):
         raise InvalidArgumentError("start_tag and end_tag must be provided together")
+    if start_tag is not None:
+        require_non_empty_string(start_tag, field_name="start_tag")
+    if end_tag is not None:
+        require_non_empty_string(end_tag, field_name="end_tag")
+    if max_num_chars is not None:
+        require_positive(max_num_chars, field_name="max_num_chars")
 
     if max_num_chars is not None and start_tag is None and end_tag is None:
         # ParadeDB versions in CI don't support pdb.snippet(field, max_num_chars)
@@ -51,6 +58,18 @@ def snippets(
 ) -> ClauseElement:
     if (start_tag is None) != (end_tag is None):
         raise InvalidArgumentError("start_tag and end_tag must be provided together")
+    if start_tag is not None:
+        require_non_empty_string(start_tag, field_name="start_tag")
+    if end_tag is not None:
+        require_non_empty_string(end_tag, field_name="end_tag")
+    if max_num_chars is not None:
+        require_positive(max_num_chars, field_name="max_num_chars")
+    if limit is not None:
+        require_positive(limit, field_name="limit")
+    if offset is not None:
+        require_non_negative(offset, field_name="offset")
+    if sort_by is not None:
+        require_non_empty_string(sort_by, field_name="sort_by")
 
     named_args: list[tuple[str, Any]] = []
     if start_tag is not None:
@@ -73,6 +92,8 @@ def snippet_positions(field: ColumnElement) -> ClauseElement:
 
 
 def agg(spec: dict[str, Any], *, approximate: bool | None = None) -> ClauseElement:
+    if not isinstance(spec, dict) or not spec:
+        raise InvalidArgumentError("spec must be a non-empty dict")
     payload = json.dumps(spec, separators=(",", ":"), sort_keys=True)
     payload_expr = cast(literal(payload), JSONB)
     if approximate is None:

@@ -11,6 +11,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 
+from ._select_introspection import has_limit, has_order_by
 from .errors import (
     DuplicateTokenizerAliasError,
     FieldNotIndexedError,
@@ -538,23 +539,35 @@ def _extract_field_name(field_expr: str) -> str | None:
 def _strip_outer_parens(value: str) -> str:
     """Strip matching outer parentheses from a string."""
     expr = value
-    while expr.startswith("(") and expr.endswith(")"):
-        # Verify the outer parens are actually a matched pair by checking
-        # that the depth never hits zero before the final character.
-        depth = 0
-        matched = True
-        for i, ch in enumerate(expr):
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0 and i != len(expr) - 1:
-                    matched = False
-                    break
-        if not matched:
-            break
+    while expr.startswith("(") and expr.endswith(")") and _has_balanced_outer_parens(expr):
         expr = expr[1:-1].strip()
     return expr
+
+
+def _has_balanced_outer_parens(value: str) -> bool:
+    depth = 0
+    in_single = False
+    in_double = False
+
+    for i, ch in enumerate(value):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            continue
+        if in_single or in_double:
+            continue
+
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0 and i != len(value) - 1:
+                return False
+            if depth < 0:
+                return False
+    return depth == 0
 
 
 def _extract_key_field(indexdef: str) -> str | None:
@@ -598,56 +611,113 @@ def _current_schema_name(conn) -> str:
     return str(row[0])
 
 
+def _normalize_reloption_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    v = value.strip()
+    if len(v) >= 2 and v[0] == "'" and v[-1] == "'":
+        return v[1:-1].replace("''", "'")
+    return v
+
+
+def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | None = None):
+    return conn.execute(
+        text(
+            """
+            SELECT
+              ns.nspname AS schemaname,
+              tbl.relname AS tablename,
+              idx.relname AS indexname,
+              pg_get_indexdef(idx.oid) AS indexdef,
+              split_part(opt.opt, '=', 2) AS key_field,
+              key_ord.ord::int AS ordinality,
+              pg_get_indexdef(idx.oid, key_ord.ord, true) AS keydef,
+              CASE WHEN i.indkey[key_ord.ord] > 0 THEN attr.attname ELSE NULL END AS attname
+            FROM pg_class AS idx
+            JOIN pg_namespace AS ns ON ns.oid = idx.relnamespace
+            JOIN pg_index AS i ON i.indexrelid = idx.oid
+            JOIN pg_class AS tbl ON tbl.oid = i.indrelid
+            LEFT JOIN LATERAL (
+              SELECT opt
+              FROM unnest(COALESCE(i.reloptions, ARRAY[]::text[])) AS opt
+              WHERE split_part(opt, '=', 1) = 'key_field'
+              LIMIT 1
+            ) AS opt ON true
+            JOIN LATERAL generate_subscripts(i.indkey, 1) AS key_ord(ord) ON true
+            LEFT JOIN pg_attribute AS attr
+              ON attr.attrelid = tbl.oid
+             AND attr.attnum = i.indkey[key_ord.ord]
+            WHERE ns.nspname = :schema_name
+              AND (:table_name IS NULL OR tbl.relname = :table_name)
+              AND pg_get_indexdef(idx.oid) ILIKE '%USING bm25%'
+            ORDER BY idx.relname, key_ord.ord
+            """
+        ),
+        {"schema_name": schema_name, "table_name": table_name},
+    ).mappings().all()
+
+
 def describe(engine: Engine, table, *, schema: str | None = None) -> list[IndexMeta]:
     table_schema = schema if schema is not None else getattr(table, "schema", None)
-    query = text(
-        """
-        SELECT indexname, indexdef
-        FROM pg_indexes
-        WHERE schemaname = :schema_name
-          AND tablename = :table_name
-          AND indexdef ILIKE '%USING bm25%'
-        ORDER BY indexname
-        """
-    )
-
     with engine.connect() as conn:
         effective_schema = table_schema if table_schema is not None else _current_schema_name(conn)
-        rows = conn.execute(
-            query,
-            {"schema_name": effective_schema, "table_name": table.name},
-        ).fetchall()
+        rows = _introspect_bm25_index_rows(
+            conn,
+            schema_name=effective_schema,
+            table_name=table.name,
+        )
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        index_name = str(row["indexname"])
+        group = grouped.setdefault(
+            index_name,
+            {
+                "indexdef": row["indexdef"],
+                "key_field": _normalize_reloption_value(row["key_field"]),
+                "fields": [],
+                "aliases": {},
+                "tokenizers": {},
+            },
+        )
+
+        key_field = _normalize_reloption_value(row["key_field"])
+        if key_field and not group["key_field"]:
+            group["key_field"] = key_field
+
+        raw_expr = str(row["keydef"] or "")
+        field_name = row["attname"] or _extract_field_name(raw_expr)
+        if field_name is None:
+            continue
+
+        fields = group["fields"]
+        if field_name not in fields:
+            fields.append(field_name)
+
+        alias = _extract_alias(raw_expr)
+        if alias is not None:
+            aliases = group["aliases"]
+            aliases[alias] = field_name
+
+        tokenizer = _extract_tokenizer_name(raw_expr)
+        if tokenizer is not None:
+            tokenizers = group["tokenizers"]
+            tokenizers.setdefault(field_name, []).append(tokenizer)
 
     output: list[IndexMeta] = []
-    for row in rows:
-        indexdef: str = row.indexdef
-        key_field = _extract_key_field(indexdef)
-        raw_fields = _extract_bm25_field_list(indexdef)
-        aliases: dict[str, str] = {}
-        tokenizer_map: dict[str, list[str]] = {}
-        fields_ordered: list[str] = []
-        for raw in raw_fields:
-            field_name = _extract_field_name(raw)
-            if field_name is None:
-                continue
-            if field_name not in fields_ordered:
-                fields_ordered.append(field_name)
-            alias = _extract_alias(raw)
-            if alias is not None:
-                aliases[alias] = field_name
-            tok = _extract_tokenizer_name(raw)
-            if tok is not None:
-                tokenizer_map.setdefault(field_name, []).append(tok)
-
+    for index_name, data in grouped.items():
+        key_field = data["key_field"] or _extract_key_field(str(data["indexdef"]))
         output.append(
             IndexMeta(
-                index_name=row.indexname,
+                index_name=index_name,
                 key_field=key_field,
-                fields=tuple(fields_ordered),
-                aliases=aliases,
-                tokenizers={k: tuple(v) for k, v in tokenizer_map.items()},
+                fields=tuple(data["fields"]),
+                aliases=dict(data["aliases"]),
+                tokenizers={k: tuple(v) for k, v in data["tokenizers"].items()},
             )
         )
+
+    output.sort(key=lambda meta: meta.index_name)
     return output
 
 
@@ -716,9 +786,9 @@ def validate_pushdown(stmt: Any) -> list[str]:
     elif not _inspect.has_paradedb_predicate(whereclause):
         warnings.append("No ParadeDB predicate found in WHERE clause; query will not use a BM25 index")
 
-    order_by = getattr(stmt, "_order_by_clauses", None) or ()
-    limit = getattr(stmt, "_limit_clause", None)
-    if order_by and limit is None:
-        warnings.append("ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both")
+    if has_order_by(stmt) and not has_limit(stmt):
+        warnings.append(
+            "ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both"
+        )
 
     return warnings

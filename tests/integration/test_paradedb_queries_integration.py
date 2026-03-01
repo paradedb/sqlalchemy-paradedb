@@ -54,22 +54,24 @@ def test_match_all_and_semantics(mock_session):
 
 def test_term_exact_token(mock_session):
     """term() does exact token match (=== operator)."""
-    stmt = select(MockItem.id).where(
-        search.term(MockItem.description, "shoes")
-    )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    term_stmt = select(MockItem.id).where(search.term(MockItem.description, "shoes"))
+    any_stmt = select(MockItem.id).where(search.match_any(MockItem.description, "shoes"))
+    assert_uses_paradedb_scan(mock_session, term_stmt, index_name="mock_items_bm25_idx")
+    term_ids = _ids(mock_session, term_stmt)
+    any_ids = _ids(mock_session, any_stmt)
+    assert term_ids
+    assert term_ids.issubset(any_ids)
 
 
 def test_phrase_match(mock_session):
     """phrase() matches exact phrase sequence."""
-    stmt = select(MockItem.id).where(
-        search.phrase(MockItem.description, "running shoes")
-    )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    phrase_stmt = select(MockItem.id).where(search.phrase(MockItem.description, "running shoes"))
+    and_stmt = select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes"))
+    assert_uses_paradedb_scan(mock_session, phrase_stmt, index_name="mock_items_bm25_idx")
+    phrase_ids = _ids(mock_session, phrase_stmt)
+    and_ids = _ids(mock_session, and_stmt)
+    assert phrase_ids
+    assert phrase_ids.issubset(and_ids)
 
 
 def test_phrase_with_slop(mock_session):
@@ -89,12 +91,13 @@ def test_phrase_with_slop(mock_session):
 
 def test_regex_match(mock_session):
     """regex() matches patterns against indexed tokens."""
-    stmt = select(MockItem.id).where(
-        search.regex(MockItem.description, "run.*")
-    )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    regex_stmt = select(MockItem.id).where(search.regex(MockItem.description, "run.*"))
+    any_stmt = select(MockItem.id).where(search.match_any(MockItem.description, "running"))
+    assert_uses_paradedb_scan(mock_session, regex_stmt, index_name="mock_items_bm25_idx")
+    regex_ids = _ids(mock_session, regex_stmt)
+    any_ids = _ids(mock_session, any_stmt)
+    assert regex_ids
+    assert regex_ids.issubset(any_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -169,12 +172,15 @@ def test_fuzzy_with_boost(mock_session):
 
 def test_parse_basic(mock_session):
     """parse() executes a query-string search."""
-    stmt = select(MockItem.id).where(
+    parse_stmt = select(MockItem.id).where(
         search.parse(MockItem.id, "description:running AND description:shoes", lenient=True)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    and_stmt = select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes"))
+    assert_uses_paradedb_scan(mock_session, parse_stmt, index_name="mock_items_bm25_idx")
+    parse_ids = _ids(mock_session, parse_stmt)
+    and_ids = _ids(mock_session, and_stmt)
+    assert parse_ids
+    assert parse_ids.issubset(and_ids)
 
 
 def test_parse_conjunction_mode_narrows_results(mock_session):
@@ -198,12 +204,13 @@ def test_parse_conjunction_mode_narrows_results(mock_session):
 
 def test_phrase_prefix_basic(mock_session):
     """phrase_prefix() matches partial last-word for autocomplete."""
-    stmt = select(MockItem.id).where(
-        search.phrase_prefix(MockItem.description, ["running", "sh"])
-    )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    prefix_stmt = select(MockItem.id).where(search.phrase_prefix(MockItem.description, ["running", "sh"]))
+    and_stmt = select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes"))
+    assert_uses_paradedb_scan(mock_session, prefix_stmt, index_name="mock_items_bm25_idx")
+    prefix_ids = _ids(mock_session, prefix_stmt)
+    and_ids = _ids(mock_session, and_stmt)
+    assert prefix_ids
+    assert and_ids.issubset(prefix_ids)
 
 
 def test_phrase_prefix_max_expansions(mock_session):

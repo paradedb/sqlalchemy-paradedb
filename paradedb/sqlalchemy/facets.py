@@ -9,6 +9,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from . import inspect as pdb_inspect
 from . import pdb, search
+from ._select_introspection import has_limit, has_order_by
 from .errors import (
     FacetRequiresLimitError,
     FacetRequiresOrderByError,
@@ -125,9 +126,9 @@ def with_rows(
     label: str = "facets",
     ensure_predicate: bool = True,
 ) -> tuple[Select, FacetPlan]:
-    if not base_stmt._order_by_clauses:
+    if not has_order_by(base_stmt):
         raise FacetRequiresOrderByError("with_rows requires ORDER BY")
-    if base_stmt._limit_clause is None:
+    if not has_limit(base_stmt):
         raise FacetRequiresLimitError("with_rows requires LIMIT")
 
     stmt = ensure_operator(base_stmt, key_field=key_field) if ensure_predicate else base_stmt

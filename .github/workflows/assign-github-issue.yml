@@ -11,6 +11,7 @@ on:
 
 # Required to assign the issue to the commenter
 permissions:
+  contents: read
   issues: write
 
 concurrency:
