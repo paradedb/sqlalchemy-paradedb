@@ -639,7 +639,7 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
             JOIN pg_class AS tbl ON tbl.oid = i.indrelid
             LEFT JOIN LATERAL (
               SELECT opt
-              FROM unnest(COALESCE(i.reloptions, ARRAY[]::text[])) AS opt
+              FROM unnest(COALESCE(idx.reloptions, ARRAY[]::text[])) AS opt
               WHERE split_part(opt, '=', 1) = 'key_field'
               LIMIT 1
             ) AS opt ON true

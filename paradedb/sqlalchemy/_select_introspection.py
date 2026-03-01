@@ -16,9 +16,9 @@ def has_order_by(stmt: Any) -> bool:
 
     order_by_clause = getattr(stmt, "order_by_clause", None)
     if order_by_clause is not None:
-        clauses = getattr(order_by_clause, "clauses", None)
-        if clauses is not None:
-            return bool(tuple(clauses))
+        order_by_clauses = getattr(order_by_clause, "clauses", None)
+        if order_by_clauses is not None:
+            return bool(tuple(order_by_clauses))
         return bool(str(order_by_clause).strip())
 
     return bool(_ORDER_BY_RE.search(str(stmt)))
