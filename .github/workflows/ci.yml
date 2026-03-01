@@ -1,73 +1,114 @@
+# workflows/ci.yml
+#
+# CI
+# Run linting and test matrix across supported Python versions.
+
 name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: postgres
 
 jobs:
-  lint-type-unit:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install .[test,dev]
-      - name: Ruff
-        run: ruff check .
-      - name: Mypy
-        run: mypy paradedb
-      - name: Unit tests
-        run: python -m pytest tests/unit
+          pip install .[test,dev]
 
-  integration:
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Type check
+        run: mypy paradedb
+
+  matrix-tests:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
+
     services:
       paradedb:
-        image: paradedb/paradedb:latest
+        image: paradedb/paradedb:0.21.10-pg18
         ports:
           - 5432:5432
         env:
-          POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         options: >-
-          --health-cmd "pg_isready -U postgres"
+          --health-cmd "pg_isready -U postgres -d postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
+
+    env:
+      PARADEDB_TEST_DSN: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+      PGPASSWORD: postgres
+
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install .[test,dev]
+          pip install .[test,dev]
+
       - name: Install pg client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Wait for ParadeDB
-        env:
-          PGPASSWORD: postgres
         run: |
           for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            pg_isready -h localhost -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" && exit 0
             sleep 2
           done
           echo "ParadeDB did not become ready" >&2
           exit 1
-      - name: Integration tests
-        env:
-          PARADEDB_TEST_DSN: postgres://postgres:postgres@localhost:5432/postgres
+
+      - name: Run unit tests
+        run: python -m pytest tests/unit
+
+      - name: Run integration tests
         run: python -m pytest -m integration
+
       - name: Run examples
-        env:
-          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
         run: |
           python examples/quickstart.py
           python examples/autocomplete.py
