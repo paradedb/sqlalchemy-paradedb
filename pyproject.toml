@@ -11,7 +11,19 @@ requires-python = ">=3.10"
 authors = [
   { name = "ParadeDB" },
 ]
-keywords = ["paradedb", "postgresql", "sqlalchemy", "search", "bm25"]
+keywords = [
+  "paradedb",
+  "sqlalchemy",
+  "postgres",
+  "postgresql",
+  "search",
+  "bm25",
+  "text search",
+  "full text search",
+  "hybrid search",
+  "faceted search",
+  "facets",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -20,6 +32,8 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Database",
 ]
 dependencies = [
