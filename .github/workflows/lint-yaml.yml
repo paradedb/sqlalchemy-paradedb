@@ -14,9 +14,6 @@ on:
       - ".github/workflows/lint-yaml.yml"
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: lint-yaml-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
