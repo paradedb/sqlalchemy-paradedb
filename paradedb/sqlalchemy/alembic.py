@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-
 from alembic.autogenerate import comparators, renderers
 from alembic.operations import Operations
 from alembic.operations.ops import MigrateOperation
@@ -210,12 +208,47 @@ def _normalize_bm25_expression(expr: str) -> str:
     normalized = "".join(expr.split())
     normalized = normalized.replace('"', "")
     normalized = normalized.replace("::text", "")
-    # Ignore schema/table qualification differences, but keep tokenizer namespaces like `pdb.simple`.
-    previous = None
-    while previous != normalized:
-        previous = normalized
-        normalized = re.sub(r"(?<![A-Za-z0-9_])(?!pdb\b)[A-Za-z_][A-Za-z0-9_]*\.", "", normalized)
-    return normalized
+    return _strip_non_pdb_qualifiers(normalized)
+
+
+def _strip_non_pdb_qualifiers(expr: str) -> str:
+    """Strip relation qualifiers outside SQL string literals.
+
+    Preserves tokenizer namespaces like ``pdb.simple`` and leaves quoted literal
+    content untouched (for example regex patterns like ``'run.*'``).
+    """
+    out: list[str] = []
+    i = 0
+    in_single = False
+    while i < len(expr):
+        ch = expr[i]
+
+        if ch == "'":
+            out.append(ch)
+            # Escaped quote inside a string literal: ''.
+            if in_single and i + 1 < len(expr) and expr[i + 1] == "'":
+                out.append("'")
+                i += 2
+                continue
+            in_single = not in_single
+            i += 1
+            continue
+
+        if not in_single and (ch.isalpha() or ch == "_"):
+            j = i + 1
+            while j < len(expr) and (expr[j].isalnum() or expr[j] == "_"):
+                j += 1
+
+            if j < len(expr) and expr[j] == ".":
+                token = expr[i:j]
+                if token.lower() != "pdb":
+                    i = j + 1
+                    continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out)
 
 
 def _normalized_expression_list(expressions: list[str]) -> list[str]:
