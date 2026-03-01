@@ -631,8 +631,8 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
               pg_get_indexdef(idx.oid) AS indexdef,
               split_part(opt.opt, '=', 2) AS key_field,
               key_ord.ord::int AS ordinality,
-              pg_get_indexdef(idx.oid, key_ord.ord, true) AS keydef,
-              CASE WHEN i.indkey[key_ord.ord] > 0 THEN attr.attname ELSE NULL END AS attname
+              pg_get_indexdef(idx.oid, key_ord.ord::int, true) AS keydef,
+              CASE WHEN key_ord.attnum > 0 THEN attr.attname ELSE NULL END AS attname
             FROM pg_class AS idx
             JOIN pg_namespace AS ns ON ns.oid = idx.relnamespace
             JOIN pg_index AS i ON i.indexrelid = idx.oid
@@ -643,10 +643,10 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
               WHERE split_part(opt, '=', 1) = 'key_field'
               LIMIT 1
             ) AS opt ON true
-            JOIN LATERAL generate_subscripts(i.indkey, 1) AS key_ord(ord) ON true
+            JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS key_ord(attnum, ord) ON true
             LEFT JOIN pg_attribute AS attr
               ON attr.attrelid = tbl.oid
-             AND attr.attnum = i.indkey[key_ord.ord]
+             AND attr.attnum = key_ord.attnum
             WHERE ns.nspname = :schema_name
               AND (CAST(:table_name AS text) IS NULL OR tbl.relname = CAST(:table_name AS text))
               AND pg_get_indexdef(idx.oid) ILIKE '%USING bm25%'
