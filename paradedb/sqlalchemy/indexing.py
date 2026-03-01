@@ -452,9 +452,8 @@ class IndexMeta:
 
 _KEY_FIELD_RE = re.compile(r"key_field\s*=\s*'?\"?([^'\",)\s]+)\"?'?", re.IGNORECASE)
 _ALIAS_RE = re.compile(r"alias\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
-_CAST_FIELD_RE = re.compile(r"^\(*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\)*\s*::\s*pdb\.", re.IGNORECASE)
-_PLAIN_FIELD_RE = re.compile(r'^\(*"?([A-Za-z_][A-Za-z0-9_]*)"?\)*$')
 _TOKENIZER_NAME_RE = re.compile(r"::pdb\.([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _split_top_level_csv(expr: str) -> list[str]:
@@ -520,14 +519,56 @@ def _extract_bm25_field_list(indexdef: str) -> list[str]:
 
 
 def _extract_field_name(field_expr: str) -> str | None:
-    expr = field_expr.strip()
-    cast_match = _CAST_FIELD_RE.match(expr)
-    if cast_match:
-        return cast_match.group(1)
-    plain_match = _PLAIN_FIELD_RE.match(expr)
-    if plain_match:
-        return plain_match.group(1)
+    expr = _strip_outer_parens(field_expr.strip())
+    cast_marker = re.search(r"::\s*pdb\.", expr, re.IGNORECASE)
+    if cast_marker is not None:
+        expr = _strip_outer_parens(expr[: cast_marker.start()].strip())
+
+    if "->" in expr:
+        expr = _strip_outer_parens(expr.split("->", 1)[0].strip())
+
+    # Strip schema/table qualifiers and keep the terminal identifier.
+    if "." in expr:
+        expr = _strip_outer_parens(expr.rsplit(".", 1)[1].strip())
+
+    if expr.startswith('"') and expr.endswith('"') and len(expr) >= 2:
+        return expr[1:-1].replace('""', '"')
+    if _IDENT_RE.match(expr):
+        return expr
     return None
+
+
+def _strip_outer_parens(value: str) -> str:
+    expr = value
+    while expr.startswith("(") and expr.endswith(")") and _has_balanced_outer_parens(expr):
+        expr = expr[1:-1].strip()
+    return expr
+
+
+def _has_balanced_outer_parens(value: str) -> bool:
+    depth = 0
+    in_single = False
+    in_double = False
+
+    for i, ch in enumerate(value):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            continue
+        if in_single or in_double:
+            continue
+
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0 and i != len(value) - 1:
+                return False
+            if depth < 0:
+                return False
+    return depth == 0
 
 
 def _extract_key_field(indexdef: str) -> str | None:

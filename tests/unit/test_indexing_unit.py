@@ -294,6 +294,21 @@ def test_extract_bm25_field_list_parses_tokenizer_casts():
     assert _extract_alias(parts[2]) == "category_exact"
 
 
+def test_extract_field_name_from_json_key_tokenizer_cast():
+    expr = "((metadata ->> 'color')::pdb.literal('alias=metadata_color'))"
+    assert _extract_field_name(expr) == "metadata"
+
+
+def test_extract_field_name_from_qualified_tokenizer_cast():
+    expr = "((public.products.description)::pdb.unicode_words('lowercase=true'))"
+    assert _extract_field_name(expr) == "description"
+
+
+def test_extract_field_name_from_quoted_identifier():
+    expr = '(("Display Name")::pdb.literal(\'alias=display_name\'))'
+    assert _extract_field_name(expr) == "Display Name"
+
+
 # ---------------------------------------------------------------------------
 # _extract_tokenizer_name
 # ---------------------------------------------------------------------------

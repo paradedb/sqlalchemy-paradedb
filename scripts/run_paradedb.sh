@@ -51,9 +51,11 @@ run_container() {
     "${IMAGE}" >/dev/null
 }
 
+created_or_recreated=0
 if [[ "$container_exists" == "0" ]]; then
   echo "Starting ParadeDB container ${CONTAINER_NAME} from ${IMAGE}..."
   run_container
+  created_or_recreated=1
 else
   current_image="$(docker inspect -f '{{.Config.Image}}' "${CONTAINER_NAME}" 2>/dev/null || true)"
   if [[ -n "${current_image}" && "${current_image}" != "${IMAGE}" ]]; then
@@ -61,10 +63,10 @@ else
     docker rm -f "${CONTAINER_NAME}" >/dev/null
     echo "Starting ParadeDB container ${CONTAINER_NAME} from ${IMAGE}..."
     run_container
-    container_exists=0
+    created_or_recreated=1
   fi
 
-  if [[ "$container_exists" == "1" ]]; then
+  if [[ "${created_or_recreated}" == "0" ]]; then
     mapped_port="$(docker port "${CONTAINER_NAME}" 5432/tcp 2>/dev/null | head -n1 | awk -F: '{print $NF}')"
     if [[ -n "${mapped_port}" && "${mapped_port}" != "${PORT}" ]]; then
       echo "Container ${CONTAINER_NAME} is already mapped to host port ${mapped_port}; using that port."
@@ -73,9 +75,18 @@ else
       echo "Container ${CONTAINER_NAME} has no published 5432 port; recreating with ${PORT}:5432..."
       docker rm -f "${CONTAINER_NAME}" >/dev/null
       run_container
+      created_or_recreated=1
     fi
-    echo "Container ${CONTAINER_NAME} already exists; starting it..."
-    docker start "${CONTAINER_NAME}" >/dev/null
+  fi
+
+  if [[ "${created_or_recreated}" == "0" ]]; then
+    is_running="$(docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null || echo false)"
+    if [[ "${is_running}" == "true" ]]; then
+      echo "Container ${CONTAINER_NAME} is already running."
+    else
+      echo "Container ${CONTAINER_NAME} already exists; starting it..."
+      docker start "${CONTAINER_NAME}" >/dev/null
+    fi
   fi
 fi
 
