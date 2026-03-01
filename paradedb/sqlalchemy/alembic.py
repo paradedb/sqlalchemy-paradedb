@@ -239,11 +239,20 @@ def _strip_non_pdb_qualifiers(expr: str) -> str:
             while j < len(expr) and (expr[j].isalnum() or expr[j] == "_"):
                 j += 1
 
+            token = expr[i:j]
             if j < len(expr) and expr[j] == ".":
-                token = expr[i:j]
                 if token.lower() != "pdb":
+                    # Drop relation-like qualifier prefixes, e.g. public.products.
                     i = j + 1
                     continue
+                out.append(token)
+                out.append(".")
+                i = j + 1
+                continue
+
+            out.append(token)
+            i = j
+            continue
 
         out.append(ch)
         i += 1
