@@ -648,7 +648,7 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
               ON attr.attrelid = tbl.oid
              AND attr.attnum = i.indkey[key_ord.ord]
             WHERE ns.nspname = :schema_name
-              AND (:table_name IS NULL OR tbl.relname = :table_name)
+              AND (CAST(:table_name AS text) IS NULL OR tbl.relname = CAST(:table_name AS text))
               AND pg_get_indexdef(idx.oid) ILIKE '%USING bm25%'
             ORDER BY idx.relname, key_ord.ord
             """
