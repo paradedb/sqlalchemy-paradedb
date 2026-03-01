@@ -14,9 +14,6 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 env:
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
@@ -59,6 +56,8 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
+          - "3.13"
+          - "3.14"
 
     services:
       paradedb:
@@ -113,7 +112,6 @@ jobs:
         run: python -m pytest -m integration
 
       - name: Run examples
-        if: matrix.python-version == '3.11'
         run: |
           python examples/quickstart.py
           python examples/autocomplete.py
