@@ -189,7 +189,7 @@ python -m pytest tests/unit
 Integration tests (requires running ParadeDB):
 
 ```bash
-PARADEDB_TEST_DSN=postgres://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
+PARADEDB_TEST_DSN=postgresql+psycopg://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
 ```
 
 ## CI

@@ -14,7 +14,7 @@ pip install -e .[test,dev]
 ruff check .
 mypy paradedb
 python -m pytest tests/unit
-PARADEDB_TEST_DSN=postgres://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
+PARADEDB_TEST_DSN=postgresql+psycopg://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
 ```
 
 To catch issues before commit or push, install the local git hooks once:

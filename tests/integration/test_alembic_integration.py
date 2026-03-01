@@ -5,6 +5,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.operations.ops import UpgradeOps
 from sqlalchemy import Column, Integer, MetaData, Table, Text, text
+from sqlalchemy.exc import SQLAlchemyError
 from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
@@ -277,7 +278,7 @@ def _tokenizer_cast_supported(engine) -> bool:
                 )
             )
         return True
-    except Exception:
+    except SQLAlchemyError:
         return False
     finally:
         with engine.begin() as conn:

@@ -53,6 +53,7 @@ def db_url() -> str:
 def engine(db_url: str) -> Iterator[Engine]:
     engine = create_engine(db_url, future=True)
     with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
         conn.execute(text("DROP INDEX IF EXISTS products_bm25_idx"))
     Base.metadata.drop_all(engine, checkfirst=True)
     Base.metadata.create_all(engine)

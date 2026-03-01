@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import SQLAlchemyError
 
 from paradedb.sqlalchemy.expr import json_text
 from paradedb.sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
@@ -36,7 +37,7 @@ def _tokenizer_cast_supported(engine) -> bool:
                 )
             )
         return True
-    except Exception:
+    except SQLAlchemyError:
         return False
     finally:
         _drop_table_and_index(engine, table_name, index_name)

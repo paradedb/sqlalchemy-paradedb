@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-./.venv/bin/python}"
+
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "Expected executable Python at ${PYTHON_BIN}. Create the virtualenv first (for example: python3 -m venv .venv)." >&2
+  exit 1
+fi
 
 source "${SCRIPT_DIR}/run_paradedb.sh"
 
@@ -16,7 +22,7 @@ export PARADEDB_TEST_DSN="postgresql+psycopg://${USER}:${PASSWORD}@localhost:${P
 export PGPASSWORD="${PASSWORD}"
 
 if [[ $# -gt 0 ]]; then
-  ./.venv/bin/python -m pytest "$@"
+  "${PYTHON_BIN}" -m pytest "$@"
 else
-  ./.venv/bin/python -m pytest -m integration
+  "${PYTHON_BIN}" -m pytest -m integration
 fi
