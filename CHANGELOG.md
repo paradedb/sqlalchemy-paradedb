@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-### Changed
-
-- Hardened BM25 index introspection, validation, and CI/workflow configuration.
-
-## 0.1.0 - 2026-03-01
-
 ### Added
 
 - Full BM25 search/query helper set with advanced operators.
