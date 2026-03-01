@@ -26,7 +26,7 @@ uv sync --extra test --extra dev
 - `paradedb.sqlalchemy.search`: ParadeDB predicates (`match_all`, `fuzzy`, `parse`, `more_like_this`, etc.).
 - `paradedb.sqlalchemy.pdb`: function wrappers (`score`, `snippet`, `snippets`, `agg`).
 - `paradedb.sqlalchemy.facets`: aggregate/facet JSON builders and rows+facets helper.
-- `paradedb.sqlalchemy.select_with`: select decorators for score/snippet/snippet_positions columns.
+- `paradedb.sqlalchemy.select_with`: select decorators for score/snippet/snippets/snippet_positions columns.
 - `paradedb.sqlalchemy.alembic`: Alembic operations for BM25 index lifecycle.
 
 ## Quickstart
@@ -58,17 +58,19 @@ products_bm25_idx = Index(
     "products_bm25_idx",
     indexing.BM25Field(Product.id),
     indexing.BM25Field(
-        expr.json_text(Product.metadata, "color"),
+        expr.json_text(Product.metadata_, "color"),
         tokenizer=indexing.tokenize.literal(alias="metadata_color"),
     ),
     indexing.BM25Field(
-        expr.json_text(Product.metadata, "location"),
+        expr.json_text(Product.metadata_, "location"),
         tokenizer=indexing.tokenize.literal(alias="metadata_location"),
     ),
     postgresql_using="bm25",
     postgresql_with={"key_field": "id"},
 )
 ```
+
+Use `metadata_` as the ORM attribute name if your underlying column is named `metadata`.
 
 Tokenizer configs can use a Django/Rails-style structured shape:
 
@@ -107,7 +109,7 @@ products_bm25_idx = Index(
 
 - Basic predicates: `match_all`, `match_any`, `term`, `phrase`, `fuzzy`, `regex`, `all`
 - Advanced predicates: `parse`, `phrase_prefix`, `regex_phrase`, `near`, `proximity`, `more_like_this`
-- Scoring/snippets: `pdb.score`, `pdb.snippet`, `pdb.snippets`, `pdb.snippet_positions`, `select_with.score`, `select_with.snippet`, `select_with.snippet_positions`
+- Scoring/snippets: `pdb.score`, `pdb.snippet`, `pdb.snippets`, `pdb.snippet_positions`, `select_with.score`, `select_with.snippet`, `select_with.snippets`, `select_with.snippet_positions`
 - Aggregations/facets: `facets.*` builders + `pdb.agg(...)`
 - Rows + facets: `facets.with_rows(...)`
 

@@ -7,7 +7,7 @@ using the mock_items dataset from paradedb.create_bm25_test_table.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from conftest import MockItem, assert_uses_paradedb_scan
 from paradedb.sqlalchemy import pdb, search
@@ -583,7 +583,7 @@ def test_all_predicate_matches_everything(mock_session):
     """search.all() matches every indexed row."""
     total = mock_session.scalar(
         select(MockItem.id).where(search.all(MockItem.id)).with_only_columns(
-            __import__("sqlalchemy").func.count()
+            func.count()
         )
     )
     # mock_items typically has many rows (paradedb creates ~41)
