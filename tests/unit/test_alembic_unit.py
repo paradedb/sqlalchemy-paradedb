@@ -265,3 +265,15 @@ def test_suppress_standard_bm25_ops_noop_when_no_bm25():
 
     pdb_alembic._suppress_standard_bm25_ops(upgrade_ops, set())
     assert len(upgrade_ops.ops) == 1
+
+
+def test_normalize_bm25_expression_keeps_dotted_literal_content():
+    expr = "(description)::pdb.regex_pattern('run.*')"
+    normalized = pdb_alembic._normalize_bm25_expression(expr)
+    assert normalized == "(description)::pdb.regex_pattern('run.*')"
+
+
+def test_normalize_bm25_expression_strips_relation_qualifiers_only():
+    expr = '"public"."products"."description"::pdb.simple(\'alias=description_simple\')'
+    normalized = pdb_alembic._normalize_bm25_expression(expr)
+    assert normalized == "description::pdb.simple('alias=description_simple')"
