@@ -65,17 +65,17 @@ else
   fi
 
   if [[ "$container_exists" == "1" ]]; then
-  mapped_port="$(docker port "${CONTAINER_NAME}" 5432/tcp 2>/dev/null | head -n1 | awk -F: '{print $NF}')"
-  if [[ -n "${mapped_port}" && "${mapped_port}" != "${PORT}" ]]; then
-    echo "Container ${CONTAINER_NAME} is already mapped to host port ${mapped_port}; using that port."
-    PORT="${mapped_port}"
-  elif [[ -z "${mapped_port}" ]]; then
-    echo "Container ${CONTAINER_NAME} has no published 5432 port; recreating with ${PORT}:5432..."
-    docker rm -f "${CONTAINER_NAME}" >/dev/null
-    run_container
-  fi
-  echo "Container ${CONTAINER_NAME} already exists; starting it..."
-  docker start "${CONTAINER_NAME}" >/dev/null
+    mapped_port="$(docker port "${CONTAINER_NAME}" 5432/tcp 2>/dev/null | head -n1 | awk -F: '{print $NF}')"
+    if [[ -n "${mapped_port}" && "${mapped_port}" != "${PORT}" ]]; then
+      echo "Container ${CONTAINER_NAME} is already mapped to host port ${mapped_port}; using that port."
+      PORT="${mapped_port}"
+    elif [[ -z "${mapped_port}" ]]; then
+      echo "Container ${CONTAINER_NAME} has no published 5432 port; recreating with ${PORT}:5432..."
+      docker rm -f "${CONTAINER_NAME}" >/dev/null
+      run_container
+    fi
+    echo "Container ${CONTAINER_NAME} already exists; starting it..."
+    docker start "${CONTAINER_NAME}" >/dev/null
   fi
 fi
 
