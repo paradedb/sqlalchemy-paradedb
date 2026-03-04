@@ -534,7 +534,85 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2d. Autogenerate round-trip converges (no diff after applying ops)
+# 2d. Matching partial indexes should not emit drift
+# ---------------------------------------------------------------------------
+
+def test_autogenerate_no_op_when_partial_indexes_match(engine):
+    _setup_autogen_table(engine, with_index=False)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
+                f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
+            ))
+
+        m = MetaData()
+        t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
+        from sqlalchemy.schema import Index
+
+        Index(
+            _AG_IDX,
+            BM25Field(t.c.id),
+            BM25Field(t.c.description),
+            postgresql_using="bm25",
+            postgresql_with={"key_field": "id"},
+            postgresql_where=t.c.id > 2,
+        )
+
+        upgrade_ops = _run_comparator(engine, m)
+        our_ops = [
+            op for op in upgrade_ops.ops
+            if getattr(op, "index_name", None) == _AG_IDX
+        ]
+        assert not our_ops, f"Expected no ops for matching partial index, got: {our_ops}"
+    finally:
+        _teardown_autogen_table(engine)
+
+
+# ---------------------------------------------------------------------------
+# 2e. String-literal case drift in partial predicates should be detected
+# ---------------------------------------------------------------------------
+
+def test_autogenerate_detects_changed_partial_string_literal_case(engine):
+    _setup_autogen_table(engine, with_index=False)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
+                f"USING bm25 (id, description) WITH (key_field='id') "
+                f"WHERE (description = 'ACTIVE')"
+            ))
+
+        m = MetaData()
+        t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
+        from sqlalchemy.schema import Index
+
+        Index(
+            _AG_IDX,
+            BM25Field(t.c.id),
+            BM25Field(t.c.description),
+            postgresql_using="bm25",
+            postgresql_with={"key_field": "id"},
+            postgresql_where="description = 'active'::text",
+        )
+
+        upgrade_ops = _run_comparator(engine, m)
+        drop_ops = [
+            op for op in upgrade_ops.ops
+            if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+        ]
+        create_ops = [
+            op for op in upgrade_ops.ops
+            if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+        ]
+        assert len(drop_ops) == 1, "Expected DropBM25IndexOp for string-literal case change"
+        assert len(create_ops) == 1, "Expected CreateBM25IndexOp for string-literal case change"
+    finally:
+        _teardown_autogen_table(engine)
+
+
+# ---------------------------------------------------------------------------
+# 2f. Autogenerate round-trip converges (no diff after applying ops)
 # ---------------------------------------------------------------------------
 
 def test_autogenerate_round_trip_converges(engine):
@@ -553,7 +631,7 @@ def test_autogenerate_round_trip_converges(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2e. Full lifecycle: create → query → reindex → query → drop
+# 2g. Full lifecycle: create → query → reindex → query → drop
 # ---------------------------------------------------------------------------
 
 _LIFECYCLE_TABLE = "alembic_lifecycle_test"
@@ -597,7 +675,7 @@ def test_alembic_create_reindex_drop_is_queryable(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2f. Reindex concurrently with AUTOCOMMIT
+# 2h. Reindex concurrently with AUTOCOMMIT
 # ---------------------------------------------------------------------------
 
 _CONC_TABLE = "alembic_conc_test"
@@ -638,7 +716,7 @@ def test_alembic_reindex_concurrently_autocommit(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2g. Autogenerate detects changed key_field
+# 2i. Autogenerate detects changed key_field
 # ---------------------------------------------------------------------------
 
 def test_autogenerate_detects_changed_key_field(engine):
@@ -651,14 +729,15 @@ def test_autogenerate_detects_changed_key_field(engine):
                 f"USING bm25 (id, description) WITH (key_field='id')"
             ))
 
-        # MetaData declares key_field='description' (different)
+        # MetaData declares key_field='description' (different) but keeps the
+        # expression list identical so only key_field drift is under test.
         m = MetaData()
         t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
         from sqlalchemy.schema import Index
         Index(
             _AG_IDX,
-            BM25Field(t.c.description),
             BM25Field(t.c.id),
+            BM25Field(t.c.description),
             postgresql_using="bm25",
             postgresql_with={"key_field": "description"},
         )
@@ -674,7 +753,7 @@ def test_autogenerate_detects_changed_key_field(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2h. Expression index lifecycle (with tokenizer)
+# 2j. Expression index lifecycle (with tokenizer)
 # ---------------------------------------------------------------------------
 
 _EXPR_TABLE = "alembic_expr_test"
@@ -719,7 +798,7 @@ def test_alembic_expression_index_lifecycle(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2i. Multi-tokenizer expression lifecycle
+# 2k. Multi-tokenizer expression lifecycle
 # ---------------------------------------------------------------------------
 
 _MULTI_TABLE = "alembic_multi_tok_test"

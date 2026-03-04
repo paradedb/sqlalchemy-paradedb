@@ -273,18 +273,76 @@ def _normalized_expression_list(expressions: list[str]) -> list[str]:
     return [_normalize_bm25_expression(expr) for expr in expressions]
 
 
+def _normalize_sql_for_compare(expr: str) -> str:
+    """Normalize SQL text outside string literals for stable comparisons.
+
+    This collapses whitespace, removes identifier quotes, and lowercases
+    non-literal SQL text while preserving the exact contents of single-quoted
+    string literals.
+    """
+    out: list[str] = []
+    in_single = False
+    in_double = False
+    pending_space = False
+    i = 0
+
+    while i < len(expr):
+        ch = expr[i]
+
+        if ch == "'" and not in_double:
+            if pending_space and out and out[-1] != " ":
+                out.append(" ")
+            pending_space = False
+            out.append(ch)
+            if in_single and i + 1 < len(expr) and expr[i + 1] == "'":
+                out.append("'")
+                i += 2
+                continue
+            in_single = not in_single
+            i += 1
+            continue
+
+        if ch == '"' and not in_single:
+            pending_space = False
+            in_double = not in_double
+            i += 1
+            continue
+
+        if in_single:
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch.isspace():
+            pending_space = True
+            i += 1
+            continue
+
+        if pending_space and out and out[-1] != " ":
+            out.append(" ")
+        pending_space = False
+
+        if in_double:
+            out.append(ch)
+        else:
+            out.append(ch.lower())
+        i += 1
+
+    return "".join(out).strip()
+
+
 def _normalize_where(clause: str | None) -> str | None:
     """Normalize a WHERE clause string for comparison.
 
-    Strips whitespace, removes double quotes, and lowercases to reduce
-    false-positive drift detection between PostgreSQL's normalized form
-    and the SQLAlchemy-compiled form.
+    Reduces false-positive drift between PostgreSQL's normalized form and the
+    SQLAlchemy-compiled form while preserving the exact contents of
+    single-quoted string literals.
     """
     if clause is None:
         return None
-    normalized = " ".join(clause.split())
-    normalized = normalized.replace('"', "")
-    return normalized.lower()
+    normalized = _normalize_sql_for_compare(clause)
+    normalized = normalized.replace("::text", "")
+    return _strip_non_pdb_qualifiers(normalized)
 
 
 def _render_where_from_index(index) -> str | None:
@@ -293,13 +351,16 @@ def _render_where_from_index(index) -> str | None:
     if where_clause is None:
         return None
     if isinstance(where_clause, ClauseElement):
-        return str(
-            where_clause.compile(
-                dialect=postgresql.dialect(),
-                compile_kwargs={"literal_binds": True},
-            )
+        return _strip_relation_qualifiers(
+            str(
+                where_clause.compile(
+                    dialect=postgresql.dialect(),
+                    compile_kwargs={"literal_binds": True},
+                )
+            ),
+            index.table.name,
         )
-    return str(where_clause)
+    return _strip_relation_qualifiers(str(where_clause), index.table.name)
 
 
 def _suppress_standard_bm25_ops(upgrade_ops, bm25_names: set[str]) -> None:
