@@ -380,27 +380,24 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
             for expr in index.expressions
         ]
         meta_where = _render_where_from_index(index)
-
-        def _make_create_op():
-            return CreateBM25IndexOp(
-                index_name=index.name,
-                table_name=index.table.name,
-                expressions=expressions,
-                key_field=key_field,
-                table_schema=key[0],
-                where=meta_where,
-            )
+        create_op = CreateBM25IndexOp(
+            index_name=index.name,
+            table_name=index.table.name,
+            expressions=expressions,
+            key_field=key_field,
+            table_schema=key[0],
+            where=meta_where,
+        )
 
         if key not in db_bm25:
-            upgrade_ops.ops.append(_make_create_op())
+            upgrade_ops.ops.append(create_op)
         else:
             db = db_bm25[key]
             expressions_changed = _normalized_expression_list(db["expressions"]) != _normalized_expression_list(expressions)
             key_field_changed = db["key_field"] != key_field
             where_changed = _normalize_where(db.get("where")) != _normalize_where(meta_where)
             if expressions_changed or key_field_changed or where_changed:
-                # Index configuration changed: drop the old one, create the new one.
                 upgrade_ops.ops.append(DropBM25IndexOp(index_name=key[1], if_exists=True, schema=key[0]))
-                upgrade_ops.ops.append(_make_create_op())
+                upgrade_ops.ops.append(create_op)
 
     return PriorityDispatchResult.CONTINUE

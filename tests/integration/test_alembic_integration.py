@@ -4,7 +4,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.operations.ops import UpgradeOps
-from sqlalchemy import Column, Float, Integer, MetaData, Table, Text, text
+from sqlalchemy import Column, Integer, MetaData, Table, Text, text
 from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
