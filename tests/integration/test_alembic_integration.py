@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
+from conftest import PARADEDB_SCAN_PROVIDERS
 from paradedb.sqlalchemy.indexing import BM25Field, tokenize
 
 
@@ -398,7 +399,9 @@ def _assert_bm25_queryable(conn, table_name, index_name, search_column, search_t
     sql = f'EXPLAIN (FORMAT TEXT) SELECT * FROM "{table_name}" WHERE "{search_column}" @@@ \'{search_term}\''
     rows = conn.execute(text(sql)).fetchall()
     plan_text = "\n".join(str(row[0]) for row in rows)
-    assert "Custom Scan" in plan_text, f"Expected Custom Scan in plan:\n{plan_text}"
+    assert any(scan in plan_text for scan in PARADEDB_SCAN_PROVIDERS), (
+        f"Expected ParadeDB scan node in plan:\n{plan_text}"
+    )
     assert index_name in plan_text, f"Expected index {index_name} in plan:\n{plan_text}"
 
 
@@ -624,17 +627,34 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
 
 
 def test_autogenerate_round_trip_converges(engine):
-    _setup_autogen_table(engine, with_index=True)
+    _setup_autogen_table(engine, with_index=False)
     try:
-        # First pass: metadata matches DB → no ops for our index
+        with engine.begin() as conn:
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id) WITH (key_field=\'id\')'))
+
         upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
-        our_ops = [
+        our_ops = tuple(
             op
             for op in upgrade_ops.ops
             if (isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX)
             or (isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX)
+        )
+        assert len(our_ops) == 2, f"Expected drop + create ops for drift recovery, got: {our_ops}"
+
+        with engine.begin() as conn:
+            ctx = MigrationContext.configure(conn)
+            operations = Operations(ctx)
+            for op in our_ops:
+                operations.invoke(op)
+
+        next_upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
+        remaining_ops = [
+            op
+            for op in next_upgrade_ops.ops
+            if (isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX)
+            or (isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX)
         ]
-        assert not our_ops, f"Expected zero ops on convergence, got: {our_ops}"
+        assert not remaining_ops, f"Expected zero ops after applying drift-recovery ops, got: {remaining_ops}"
     finally:
         _teardown_autogen_table(engine)
 

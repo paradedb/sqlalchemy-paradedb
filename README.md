@@ -20,15 +20,6 @@ For local development:
 uv sync --extra test --extra dev
 ```
 
-## Core Modules
-
-- `paradedb.sqlalchemy.indexing`: BM25 field definitions and tokenizer specs.
-- `paradedb.sqlalchemy.search`: ParadeDB predicates (`match_all`, `term`, `parse`, `more_like_this`, etc.).
-- `paradedb.sqlalchemy.pdb`: function wrappers (`score`, `snippet`, `snippets`, `agg`).
-- `paradedb.sqlalchemy.facets`: aggregate/facet JSON builders and rows+facets helper.
-- `paradedb.sqlalchemy.select_with`: select decorators for score/snippet/snippets/snippet_positions columns.
-- `paradedb.sqlalchemy.alembic`: Alembic operations for BM25 index lifecycle.
-
 ## Quickstart
 
 ```python
@@ -49,30 +40,9 @@ products_bm25_idx.create(engine)
 stmt = select(Product.id, Product.description).where(search.match_any(Product.description, "running", "shoes"))
 ```
 
-Index JSON keys using BM25Field expressions:
+For JSON columns named `metadata`, use `metadata_` as the ORM attribute name.
 
-```python
-from paradedb.sqlalchemy import expr
-
-products_bm25_idx = Index(
-    "products_bm25_idx",
-    indexing.BM25Field(Product.id),
-    indexing.BM25Field(
-        expr.json_text(Product.metadata_, "color"),
-        tokenizer=indexing.tokenize.literal(alias="metadata_color"),
-    ),
-    indexing.BM25Field(
-        expr.json_text(Product.metadata_, "location"),
-        tokenizer=indexing.tokenize.literal(alias="metadata_location"),
-    ),
-    postgresql_using="bm25",
-    postgresql_with={"key_field": "id"},
-)
-```
-
-Use `metadata_` as the ORM attribute name if your underlying column is named `metadata`.
-
-Tokenizer configs can use a Django/Rails-style structured shape:
+Tokenizer config can be expressed as structured dicts:
 
 ```python
 products_bm25_idx = Index(
@@ -105,13 +75,7 @@ products_bm25_idx = Index(
 )
 ```
 
-## Query APIs
-
-- Basic predicates: `match_all`, `match_any`, `term`, `phrase`, `regex`, `all`
-- Advanced predicates: `parse`, `phrase_prefix`, `regex_phrase`, `near`, `proximity`, `more_like_this`
-- Scoring/snippets: `pdb.score`, `pdb.snippet`, `pdb.snippets`, `pdb.snippet_positions`, `select_with.score`, `select_with.snippet`, `select_with.snippets`, `select_with.snippet_positions`
-- Aggregations/facets: `facets.*` builders + `pdb.agg(...)`
-- Rows + facets: `facets.with_rows(...)`
+## Query Examples
 
 Fuzzy search uses the normal term-style builders:
 
@@ -124,61 +88,45 @@ search.term(Product.description, "rnnuing", distance=1, transpose_cost_one=True)
 There is no separate `search.fuzzy(...)` helper. Use the standard term-style
 builders with fuzzy arguments instead.
 
-## Facets
+Proximity helpers can be composed before you apply them:
+
+```python
+prox = search.prox_array("running").near(search.prox_regex("sho.*"), distance=1, ordered=True)
+stmt = select(Product.id).where(search.proximity(Product.description, prox))
+```
+
+Rows + facets:
 
 ```python
 from sqlalchemy import select
 from paradedb.sqlalchemy import facets, pdb, search
 
-stmt = (
+base = (
     select(
-        pdb.agg(facets.value_count(field="id")).label("count"),
-        pdb.agg(facets.avg(field="rating")).label("avg_rating"),
-        pdb.agg(facets.percentiles(field="rating", percents=[50, 95])).label("rating_percentiles"),
-        pdb.agg(facets.top_hits(size=2, sort=[{"rating": "desc"}], docvalue_fields=["id", "rating"])).label("top_hits"),
+        Product.id,
+        Product.description,
     )
-    .select_from(Product)
     .where(search.match_all(Product.description, "running"))
+    .order_by(Product.id)
+    .limit(10)
 )
+stmt, facet_plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
 ```
 
 ## Alembic Operations
 
-Import once in migration env startup so operations are registered:
+Import once in migration env startup for its registration side effects, so
+Alembic knows about the custom BM25 operations:
 
 ```python
 import paradedb.sqlalchemy.alembic  # noqa: F401
 ```
 
-Usage:
-
 ```python
 op.create_bm25_index("products_bm25_idx", "products", ["id", "description"], key_field="id")
-# Tokenizer-aware expressions are supported too:
-op.create_bm25_index(
-    "products_bm25_idx",
-    "products",
-    ["id", "((description)::pdb.simple('alias=description_simple,lowercase=true'))"],
-    key_field="id",
-)
-# Schema-aware operations:
-op.create_bm25_index(
-    "products_bm25_idx",
-    "products",
-    ["id", "description"],
-    key_field="id",
-    table_schema="search",
-)
 op.reindex_bm25("products_bm25_idx", concurrently=True)
-op.reindex_bm25("products_bm25_idx", concurrently=True, schema="search")
-op.drop_bm25_index("products_bm25_idx", if_exists=True, schema="search")
+op.drop_bm25_index("products_bm25_idx", if_exists=True)
 ```
-
-## Validation and Guardrails
-
-- Search and facet builders validate option bounds and shapes at build time.
-- `select_with.snippet*` raises `SnippetWithFuzzyPredicateError` with fuzzy predicates.
-- `facets.with_rows` enforces `ORDER BY` + `LIMIT`, and can auto-inject a ParadeDB sentinel (`pdb.all()`).
 
 ## Examples
 
@@ -204,12 +152,3 @@ Integration tests (requires running ParadeDB):
 ```bash
 PARADEDB_TEST_DSN=postgresql+psycopg://postgres:postgres@localhost:5443/postgres uv run --extra test pytest -m integration
 ```
-
-## CI
-
-GitHub Actions workflow at `.github/workflows/ci.yml` runs:
-
-- Ruff lint
-- Mypy type check
-- Unit tests
-- Integration tests against a ParadeDB service container
