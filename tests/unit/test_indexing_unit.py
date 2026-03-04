@@ -305,7 +305,7 @@ def test_extract_field_name_from_qualified_tokenizer_cast():
 
 
 def test_extract_field_name_from_quoted_identifier():
-    expr = '(("Display Name")::pdb.literal(\'alias=display_name\'))'
+    expr = "((\"Display Name\")::pdb.literal('alias=display_name'))"
     assert _extract_field_name(expr) == "Display Name"
 
 
@@ -322,6 +322,7 @@ def test_extract_field_name_from_qualified_json_key_tokenizer_cast():
 # ---------------------------------------------------------------------------
 # _extract_tokenizer_name
 # ---------------------------------------------------------------------------
+
 
 def test_extract_tokenizer_name_unicode():
     expr = "(description::pdb.unicode_words('lowercase=true'))"
@@ -345,6 +346,7 @@ def test_extract_tokenizer_name_plain_field_returns_none():
 # ---------------------------------------------------------------------------
 # IndexMeta.tokenizers population (unit-level, via describe helper stubs)
 # ---------------------------------------------------------------------------
+
 
 def test_index_meta_tokenizers_field_defaults_empty():
     meta = IndexMeta(
@@ -371,8 +373,10 @@ def test_index_meta_tokenizers_stored():
 # assert_indexed — error paths (no DB needed)
 # ---------------------------------------------------------------------------
 
+
 def test_assert_indexed_raises_when_column_has_no_table():
     from sqlalchemy import column, Integer
+
     bare_col = column("id", Integer)
     with pytest.raises(InvalidArgumentError, match="table-bound"):
         assert_indexed(None, bare_col)

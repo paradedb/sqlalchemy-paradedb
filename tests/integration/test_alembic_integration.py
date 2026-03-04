@@ -19,6 +19,7 @@ pytestmark = pytest.mark.integration
 # Helper: run the BM25 autogenerate comparator against a real DB connection
 # ---------------------------------------------------------------------------
 
+
 def _run_comparator(engine, metadata, schemas=None):
     """Return the UpgradeOps produced by the BM25 autogenerate comparator."""
     if schemas is None:
@@ -33,8 +34,8 @@ def _run_comparator(engine, metadata, schemas=None):
 
 
 def test_alembic_create_reindex_drop_with_quoted_identifiers(engine):
-    table_name = 'alembic quoted products'
-    index_name = 'alembic quoted idx'
+    table_name = "alembic quoted products"
+    index_name = "alembic quoted idx"
 
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{index_name}"'))
@@ -88,7 +89,9 @@ def test_alembic_create_reindex_drop_with_schema(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-        conn.execute(text(f'CREATE TABLE "{schema}"."{table_name}" ("id" int primary key, "description" text not null)'))
+        conn.execute(
+            text(f'CREATE TABLE "{schema}"."{table_name}" ("id" int primary key, "description" text not null)')
+        )
 
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
@@ -154,10 +157,7 @@ def _setup_autogen_table(engine, *, with_index: bool = False):
         conn.execute(text(f'CREATE TABLE "{_AG_TABLE}" (id int primary key, description text not null)'))
         if with_index:
             conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING bm25 (id, description) WITH (key_field='id')"
-                )
+                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id, description) WITH (key_field=\'id\')')
             )
 
 
@@ -172,6 +172,7 @@ def _metadata_with_bm25() -> MetaData:
     m = MetaData()
     t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
     from sqlalchemy.schema import Index
+
     Index(
         _AG_IDX,
         BM25Field(t.c.id),
@@ -228,12 +229,10 @@ def test_autogenerate_no_op_when_indexes_match(engine):
         # Filter to only ops for our specific test index; the shared engine fixture's
         # products_bm25_idx may appear as "extra" since our MetaData only knows autogen_test.
         create_ops = [
-            op for op in upgrade_ops.ops
-            if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
         ]
         drop_ops = [
-            op for op in upgrade_ops.ops
-            if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
         ]
         assert not create_ops
         assert not drop_ops
@@ -247,9 +246,7 @@ def test_autogenerate_detects_changed_fields(engine):
     try:
         # DB index only covers 'id'
         with engine.begin() as conn:
-            conn.execute(
-                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id) WITH (key_field=\'id\')')
-            )
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id) WITH (key_field=\'id\')'))
 
         # MetaData index covers 'id' and 'description'
         upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
@@ -309,10 +306,7 @@ def test_autogenerate_detects_changed_tokenizer_expression(engine):
     try:
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    "USING bm25 (id, description) WITH (key_field='id')"
-                )
+                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id, description) WITH (key_field=\'id\')')
             )
 
         upgrade_ops = _run_comparator(engine, _metadata_with_tokenized_bm25())
@@ -337,10 +331,7 @@ def _setup_autogen_schema_table(engine, *, with_index: bool = False):
         conn.execute(text(f'DROP SCHEMA IF EXISTS "{_AG_SCHEMA}" CASCADE'))
         conn.execute(text(f'CREATE SCHEMA "{_AG_SCHEMA}"'))
         conn.execute(
-            text(
-                f'CREATE TABLE "{_AG_SCHEMA}"."{_AG_SCHEMA_TABLE}" '
-                '(id int primary key, description text not null)'
-            )
+            text(f'CREATE TABLE "{_AG_SCHEMA}"."{_AG_SCHEMA_TABLE}" (id int primary key, description text not null)')
         )
         if with_index:
             conn.execute(
@@ -401,12 +392,10 @@ def test_autogenerate_emits_schema_on_drop_for_non_default_schema(engine):
 # Helper: assert BM25 queryable via raw SQL EXPLAIN
 # ---------------------------------------------------------------------------
 
+
 def _assert_bm25_queryable(conn, table_name, index_name, search_column, search_term):
     """Run EXPLAIN (FORMAT TEXT) on a BM25 query and assert ParadeDB Scan is used."""
-    sql = (
-        f"EXPLAIN (FORMAT TEXT) SELECT * FROM \"{table_name}\" "
-        f"WHERE \"{search_column}\" @@@ '{search_term}'"
-    )
+    sql = f'EXPLAIN (FORMAT TEXT) SELECT * FROM "{table_name}" WHERE "{search_column}" @@@ \'{search_term}\''
     rows = conn.execute(text(sql)).fetchall()
     plan_text = "\n".join(str(row[0]) for row in rows)
     assert "Custom Scan" in plan_text, f"Expected Custom Scan in plan:\n{plan_text}"
@@ -425,38 +414,44 @@ def test_alembic_create_partial_index_with_where_clause(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_PARTIAL_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_PARTIAL_TABLE}" CASCADE'))
-        conn.execute(text(
-            f'CREATE TABLE "{_PARTIAL_TABLE}" ('
-            f'"id" int primary key, "description" text not null, "rating" int not null)'
-        ))
+        conn.execute(
+            text(
+                f'CREATE TABLE "{_PARTIAL_TABLE}" ('
+                f'"id" int primary key, "description" text not null, "rating" int not null)'
+            )
+        )
 
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
         op.create_bm25_index(
-            _PARTIAL_IDX, _PARTIAL_TABLE, ["id", "description", "rating"],
-            key_field="id", where="rating > 3",
+            _PARTIAL_IDX,
+            _PARTIAL_TABLE,
+            ["id", "description", "rating"],
+            key_field="id",
+            where="rating > 3",
         )
 
         # Verify pg_indexes.indexdef contains WHERE
-        indexdef = conn.execute(text(
-            "SELECT indexdef FROM pg_indexes WHERE indexname = :idx"
-        ), {"idx": _PARTIAL_IDX}).scalar_one()
+        indexdef = conn.execute(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :idx"), {"idx": _PARTIAL_IDX}
+        ).scalar_one()
         assert "WHERE" in indexdef
 
         # Insert rows — some matching, some not
-        conn.execute(text(
-            f'INSERT INTO "{_PARTIAL_TABLE}" VALUES '
-            f"(1, 'Excellent running shoes', 5), "
-            f"(2, 'Decent running shoes', 3), "
-            f"(3, 'Premium running gear', 4)"
-        ))
+        conn.execute(
+            text(
+                f'INSERT INTO "{_PARTIAL_TABLE}" VALUES '
+                f"(1, 'Excellent running shoes', 5), "
+                f"(2, 'Decent running shoes', 3), "
+                f"(3, 'Premium running gear', 4)"
+            )
+        )
 
         # BM25 query should only return rows matching the predicate
-        result = conn.execute(text(
-            f"SELECT id FROM \"{_PARTIAL_TABLE}\" "
-            f"WHERE description @@@ 'running' AND rating > 3 ORDER BY id"
-        )).fetchall()
+        result = conn.execute(
+            text(f"SELECT id FROM \"{_PARTIAL_TABLE}\" WHERE description @@@ 'running' AND rating > 3 ORDER BY id")
+        ).fetchall()
         ids = [r[0] for r in result]
         assert 1 in ids
         assert 3 in ids
@@ -471,12 +466,14 @@ def test_alembic_create_partial_index_with_where_clause(engine):
 # 2b. Autogenerate detects missing partial index
 # ---------------------------------------------------------------------------
 
+
 def test_autogenerate_detects_missing_partial_index(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         m = MetaData()
         t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
         from sqlalchemy.schema import Index
+
         Index(
             _AG_IDX,
             BM25Field(t.c.id),
@@ -501,20 +498,24 @@ def test_autogenerate_detects_missing_partial_index(engine):
 # 2c. Autogenerate detects changed partial predicate
 # ---------------------------------------------------------------------------
 
+
 def test_autogenerate_detects_changed_partial_predicate(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         # Create index with WHERE (id > 2) in DB
         with engine.begin() as conn:
-            conn.execute(text(
-                f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
-            ))
+            conn.execute(
+                text(
+                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
+                    f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
+                )
+            )
 
         # MetaData declares WHERE (id > 5)
         m = MetaData()
         t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
         from sqlalchemy.schema import Index
+
         Index(
             _AG_IDX,
             BM25Field(t.c.id),
@@ -525,8 +526,12 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
         )
 
         upgrade_ops = _run_comparator(engine, m)
-        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX]
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX]
+        drop_ops = [
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+        ]
+        create_ops = [
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+        ]
         assert len(drop_ops) == 1, "Expected DropBM25IndexOp for predicate change"
         assert len(create_ops) == 1, "Expected CreateBM25IndexOp for predicate change"
         assert "5" in create_ops[0].where
@@ -538,14 +543,17 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
 # 2d. Matching partial indexes should not emit drift
 # ---------------------------------------------------------------------------
 
+
 def test_autogenerate_no_op_when_partial_indexes_match(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         with engine.begin() as conn:
-            conn.execute(text(
-                f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
-            ))
+            conn.execute(
+                text(
+                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
+                    f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
+                )
+            )
 
         m = MetaData()
         t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
@@ -561,10 +569,7 @@ def test_autogenerate_no_op_when_partial_indexes_match(engine):
         )
 
         upgrade_ops = _run_comparator(engine, m)
-        our_ops = [
-            op for op in upgrade_ops.ops
-            if getattr(op, "index_name", None) == _AG_IDX
-        ]
+        our_ops = [op for op in upgrade_ops.ops if getattr(op, "index_name", None) == _AG_IDX]
         assert not our_ops, f"Expected no ops for matching partial index, got: {our_ops}"
     finally:
         _teardown_autogen_table(engine)
@@ -574,15 +579,18 @@ def test_autogenerate_no_op_when_partial_indexes_match(engine):
 # 2e. String-literal case drift in partial predicates should be detected
 # ---------------------------------------------------------------------------
 
+
 def test_autogenerate_detects_changed_partial_string_literal_case(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         with engine.begin() as conn:
-            conn.execute(text(
-                f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                f"USING bm25 (id, description) WITH (key_field='id') "
-                f"WHERE (description = 'ACTIVE')"
-            ))
+            conn.execute(
+                text(
+                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
+                    f"USING bm25 (id, description) WITH (key_field='id') "
+                    f"WHERE (description = 'ACTIVE')"
+                )
+            )
 
         m = MetaData()
         t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
@@ -599,12 +607,10 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
 
         upgrade_ops = _run_comparator(engine, m)
         drop_ops = [
-            op for op in upgrade_ops.ops
-            if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
         ]
         create_ops = [
-            op for op in upgrade_ops.ops
-            if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
         ]
         assert len(drop_ops) == 1, "Expected DropBM25IndexOp for string-literal case change"
         assert len(create_ops) == 1, "Expected CreateBM25IndexOp for string-literal case change"
@@ -616,13 +622,15 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
 # 2f. Autogenerate round-trip converges (no diff after applying ops)
 # ---------------------------------------------------------------------------
 
+
 def test_autogenerate_round_trip_converges(engine):
     _setup_autogen_table(engine, with_index=True)
     try:
         # First pass: metadata matches DB → no ops for our index
         upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
         our_ops = [
-            op for op in upgrade_ops.ops
+            op
+            for op in upgrade_ops.ops
             if (isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX)
             or (isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX)
         ]
@@ -643,14 +651,13 @@ def test_alembic_create_reindex_drop_is_queryable(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_LIFECYCLE_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_LIFECYCLE_TABLE}" CASCADE'))
-        conn.execute(text(
-            f'CREATE TABLE "{_LIFECYCLE_TABLE}" ('
-            f'"id" int primary key, "description" text not null)'
-        ))
-        conn.execute(text(
-            f"INSERT INTO \"{_LIFECYCLE_TABLE}\" VALUES "
-            f"(1, 'Sleek running shoes'), (2, 'Wireless headphones'), (3, 'Trail running gear')"
-        ))
+        conn.execute(text(f'CREATE TABLE "{_LIFECYCLE_TABLE}" ("id" int primary key, "description" text not null)'))
+        conn.execute(
+            text(
+                f'INSERT INTO "{_LIFECYCLE_TABLE}" VALUES '
+                f"(1, 'Sleek running shoes'), (2, 'Wireless headphones'), (3, 'Trail running gear')"
+            )
+        )
 
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
@@ -666,9 +673,9 @@ def test_alembic_create_reindex_drop_is_queryable(engine):
 
         # Drop
         op.drop_bm25_index(_LIFECYCLE_IDX, if_exists=True)
-        exists = conn.execute(text(
-            "SELECT COUNT(*) FROM pg_indexes WHERE indexname = :idx"
-        ), {"idx": _LIFECYCLE_IDX}).scalar_one()
+        exists = conn.execute(
+            text("SELECT COUNT(*) FROM pg_indexes WHERE indexname = :idx"), {"idx": _LIFECYCLE_IDX}
+        ).scalar_one()
         assert exists == 0
 
     with engine.begin() as conn:
@@ -687,12 +694,8 @@ def test_alembic_reindex_concurrently_autocommit(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_CONC_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_CONC_TABLE}" CASCADE'))
-        conn.execute(text(
-            f'CREATE TABLE "{_CONC_TABLE}" ("id" int primary key, "description" text not null)'
-        ))
-        conn.execute(text(
-            f"INSERT INTO \"{_CONC_TABLE}\" VALUES (1, 'Test running shoes')"
-        ))
+        conn.execute(text(f'CREATE TABLE "{_CONC_TABLE}" ("id" int primary key, "description" text not null)'))
+        conn.execute(text(f"INSERT INTO \"{_CONC_TABLE}\" VALUES (1, 'Test running shoes')"))
 
     # Create index normally
     with engine.begin() as conn:
@@ -720,21 +723,22 @@ def test_alembic_reindex_concurrently_autocommit(engine):
 # 2i. Autogenerate detects changed key_field
 # ---------------------------------------------------------------------------
 
+
 def test_autogenerate_detects_changed_key_field(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         # DB has key_field='id'
         with engine.begin() as conn:
-            conn.execute(text(
-                f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                f"USING bm25 (id, description) WITH (key_field='id')"
-            ))
+            conn.execute(
+                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id, description) WITH (key_field=\'id\')')
+            )
 
         # MetaData declares key_field='description' (different) but keeps the
         # expression list identical so only key_field drift is under test.
         m = MetaData()
         t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
         from sqlalchemy.schema import Index
+
         Index(
             _AG_IDX,
             BM25Field(t.c.id),
@@ -744,8 +748,12 @@ def test_autogenerate_detects_changed_key_field(engine):
         )
 
         upgrade_ops = _run_comparator(engine, m)
-        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX]
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX]
+        drop_ops = [
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+        ]
+        create_ops = [
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+        ]
         assert len(drop_ops) == 1, "Expected DropBM25IndexOp for key_field change"
         assert len(create_ops) == 1, "Expected CreateBM25IndexOp for key_field change"
         assert create_ops[0].key_field == "description"
@@ -768,30 +776,29 @@ def test_alembic_expression_index_lifecycle(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_EXPR_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_EXPR_TABLE}" CASCADE'))
-        conn.execute(text(
-            f'CREATE TABLE "{_EXPR_TABLE}" ("id" int primary key, "description" text not null)'
-        ))
+        conn.execute(text(f'CREATE TABLE "{_EXPR_TABLE}" ("id" int primary key, "description" text not null)'))
 
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
         op.create_bm25_index(
-            _EXPR_IDX, _EXPR_TABLE,
+            _EXPR_IDX,
+            _EXPR_TABLE,
             ["id", "((description)::pdb.simple('alias=desc_simple,lowercase=true'))"],
             key_field="id",
         )
 
         # Verify index exists and indexdef contains the tokenizer expression
-        indexdef = conn.execute(text(
-            "SELECT indexdef FROM pg_indexes WHERE indexname = :idx"
-        ), {"idx": _EXPR_IDX}).scalar_one()
+        indexdef = conn.execute(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :idx"), {"idx": _EXPR_IDX}
+        ).scalar_one()
         assert "pdb.simple" in indexdef
         assert "desc_simple" in indexdef
 
         op.drop_bm25_index(_EXPR_IDX, if_exists=True)
-        exists = conn.execute(text(
-            "SELECT COUNT(*) FROM pg_indexes WHERE indexname = :idx"
-        ), {"idx": _EXPR_IDX}).scalar_one()
+        exists = conn.execute(
+            text("SELECT COUNT(*) FROM pg_indexes WHERE indexname = :idx"), {"idx": _EXPR_IDX}
+        ).scalar_one()
         assert exists == 0
 
     with engine.begin() as conn:
@@ -813,16 +820,16 @@ def test_alembic_multi_tokenizer_expression_lifecycle(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_MULTI_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_MULTI_TABLE}" CASCADE'))
-        conn.execute(text(
-            f'CREATE TABLE "{_MULTI_TABLE}" ('
-            f'"id" int primary key, "title" text not null, "body" text not null)'
-        ))
+        conn.execute(
+            text(f'CREATE TABLE "{_MULTI_TABLE}" ("id" int primary key, "title" text not null, "body" text not null)')
+        )
 
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
         op.create_bm25_index(
-            _MULTI_IDX, _MULTI_TABLE,
+            _MULTI_IDX,
+            _MULTI_TABLE,
             [
                 "id",
                 "((title)::pdb.simple('alias=title_simple,lowercase=true'))",
@@ -832,9 +839,9 @@ def test_alembic_multi_tokenizer_expression_lifecycle(engine):
         )
 
         # Verify index exists and indexdef contains both tokenizer expressions
-        indexdef = conn.execute(text(
-            "SELECT indexdef FROM pg_indexes WHERE indexname = :idx"
-        ), {"idx": _MULTI_IDX}).scalar_one()
+        indexdef = conn.execute(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :idx"), {"idx": _MULTI_IDX}
+        ).scalar_one()
         assert "pdb.simple" in indexdef
         assert "title_simple" in indexdef
         assert "pdb.unicode_words" in indexdef

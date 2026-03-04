@@ -53,7 +53,7 @@ def test_create_sql_generation_preserves_tokenizer_expression():
     )
     pdb_alembic._create_bm25_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        "CREATE INDEX \"products_bm25_idx\" ON \"products\" "
+        'CREATE INDEX "products_bm25_idx" ON "products" '
         "USING bm25 (id, ((description)::pdb.simple('alias=description_simple,lowercase=true'))) "
         "WITH (key_field='id')"
     )
@@ -70,7 +70,7 @@ def test_create_drop_reindex_sql_generation_with_schema():
     )
     pdb_alembic._create_bm25_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        "CREATE INDEX \"products_bm25_idx\" ON \"analytics\".\"products\" "
+        'CREATE INDEX "products_bm25_idx" ON "analytics"."products" '
         "USING bm25 (id, description) WITH (key_field='id')"
     )
 
@@ -207,14 +207,10 @@ def test_autogen_meta_indexes_uses_explicit_default_schema_for_unschematized_tab
         postgresql_with={"key_field": "id"},
     )
 
-    result_public = pdb_alembic._autogen_bm25_meta_indexes(
-        m, {"public", "other"}, default_schema="public"
-    )
+    result_public = pdb_alembic._autogen_bm25_meta_indexes(m, {"public", "other"}, default_schema="public")
     assert ("public", "products_bm25_idx") in result_public
 
-    result_other = pdb_alembic._autogen_bm25_meta_indexes(
-        m, {"public", "other"}, default_schema="other"
-    )
+    result_other = pdb_alembic._autogen_bm25_meta_indexes(m, {"public", "other"}, default_schema="other")
     assert ("other", "products_bm25_idx") in result_other
 
 
@@ -295,7 +291,7 @@ def test_create_sql_generation_with_where_clause():
     )
     pdb_alembic._create_bm25_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        "CREATE INDEX \"products_bm25_idx\" ON \"products\" "
+        'CREATE INDEX "products_bm25_idx" ON "products" '
         "USING bm25 (id, description) WITH (key_field='id') WHERE rating > 3"
     )
 
@@ -358,13 +354,12 @@ def test_extract_where_clause():
     from paradedb.sqlalchemy.indexing import _extract_where_clause
 
     indexdef = (
-        'CREATE INDEX products_bm25_idx ON public.products '
-        'USING bm25 (id, description) WITH (key_field=\'id\') WHERE (rating > 3)'
+        "CREATE INDEX products_bm25_idx ON public.products "
+        "USING bm25 (id, description) WITH (key_field='id') WHERE (rating > 3)"
     )
     assert _extract_where_clause(indexdef) == "rating > 3"
 
     indexdef_no_where = (
-        'CREATE INDEX products_bm25_idx ON public.products '
-        'USING bm25 (id, description) WITH (key_field=\'id\')'
+        "CREATE INDEX products_bm25_idx ON public.products USING bm25 (id, description) WITH (key_field='id')"
     )
     assert _extract_where_clause(indexdef_no_where) is None

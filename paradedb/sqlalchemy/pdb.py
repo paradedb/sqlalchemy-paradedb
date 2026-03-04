@@ -60,9 +60,9 @@ def snippets(
     if max_num_chars is not None:
         named_args.append(("max_num_chars", max_num_chars))
     if limit is not None:
-        named_args.append(("\"limit\"", limit))
+        named_args.append(('"limit"', limit))
     if offset is not None:
-        named_args.append(("\"offset\"", offset))
+        named_args.append(('"offset"', offset))
     if sort_by is not None:
         named_args.append(("sort_by", sort_by))
     return PDBFunctionWithNamedArgs("snippets", [field], named_args)
