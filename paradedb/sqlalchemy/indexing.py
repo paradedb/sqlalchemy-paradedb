@@ -578,6 +578,21 @@ def _extract_key_field(indexdef: str) -> str | None:
     return None
 
 
+_WHERE_CLAUSE_RE = re.compile(r"\bWHERE\s*\((.+)\)\s*$", re.IGNORECASE)
+
+
+def _extract_where_clause(indexdef: str) -> str | None:
+    """Extract the WHERE predicate from a ``pg_indexes.indexdef`` string.
+
+    PostgreSQL normalizes partial index predicates as ``WHERE (<condition>)``.
+    Returns the inner condition text or ``None`` if not present.
+    """
+    match = _WHERE_CLAUSE_RE.search(indexdef)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
 def _extract_alias(index_expr: str) -> str | None:
     match = _ALIAS_RE.search(index_expr)
     if match:

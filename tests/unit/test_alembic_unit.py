@@ -277,3 +277,94 @@ def test_normalize_bm25_expression_strips_relation_qualifiers_only():
     expr = '"public"."products"."description"::pdb.simple(\'alias=description_simple\')'
     normalized = pdb_alembic._normalize_bm25_expression(expr)
     assert normalized == "description::pdb.simple('alias=description_simple')"
+
+
+# ---------------------------------------------------------------------------
+# WHERE clause (partial index) support
+# ---------------------------------------------------------------------------
+
+
+def test_create_sql_generation_with_where_clause():
+    ops = DummyOps()
+    create_op = pdb_alembic.CreateBM25IndexOp(
+        index_name="products_bm25_idx",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+        where="rating > 3",
+    )
+    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    assert ops.sql[-1] == (
+        "CREATE INDEX \"products_bm25_idx\" ON \"products\" "
+        "USING bm25 (id, description) WITH (key_field='id') WHERE rating > 3"
+    )
+
+
+def test_create_sql_generation_without_where_clause():
+    """When where is None, no WHERE suffix is appended."""
+    ops = DummyOps()
+    create_op = pdb_alembic.CreateBM25IndexOp(
+        index_name="products_bm25_idx",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+    )
+    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    assert "WHERE" not in ops.sql[-1]
+
+
+def test_renderer_emits_where_kwarg():
+    ctx = MigrationContext.configure(dialect_name="postgresql")
+    autogen_ctx = AutogenContext(ctx)
+
+    lines = render_op(
+        autogen_ctx,
+        pdb_alembic.CreateBM25IndexOp(
+            index_name="products_bm25_idx",
+            table_name="products",
+            expressions=["id", "description"],
+            key_field="id",
+            where="rating > 3",
+        ),
+    )
+    assert len(lines) == 1
+    assert "where='rating > 3'" in lines[0]
+
+
+def test_renderer_omits_where_when_none():
+    ctx = MigrationContext.configure(dialect_name="postgresql")
+    autogen_ctx = AutogenContext(ctx)
+
+    lines = render_op(
+        autogen_ctx,
+        pdb_alembic.CreateBM25IndexOp(
+            index_name="products_bm25_idx",
+            table_name="products",
+            expressions=["id", "description"],
+            key_field="id",
+        ),
+    )
+    assert "where=" not in lines[0]
+
+
+def test_normalize_where_clause():
+    assert pdb_alembic._normalize_where(None) is None
+    assert pdb_alembic._normalize_where("rating > 3") == "rating > 3"
+    assert pdb_alembic._normalize_where('  "rating"  >  3  ') == "rating > 3"
+    assert pdb_alembic._normalize_where("RATING > 3") == "rating > 3"
+
+
+def test_extract_where_clause():
+    from paradedb.sqlalchemy.indexing import _extract_where_clause
+
+    indexdef = (
+        'CREATE INDEX products_bm25_idx ON public.products '
+        'USING bm25 (id, description) WITH (key_field=\'id\') WHERE (rating > 3)'
+    )
+    assert _extract_where_clause(indexdef) == "rating > 3"
+
+    indexdef_no_where = (
+        'CREATE INDEX products_bm25_idx ON public.products '
+        'USING bm25 (id, description) WITH (key_field=\'id\')'
+    )
+    assert _extract_where_clause(indexdef_no_where) is None
