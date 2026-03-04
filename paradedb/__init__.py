@@ -1,3 +1,64 @@
 from . import sqlalchemy
+from .sqlalchemy.diagnostics import (
+    paradedb_index_segments,
+    paradedb_indexes,
+    paradedb_verify_all_indexes,
+    paradedb_verify_index,
+)
+from .sqlalchemy.facets import with_rows
+from .sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
+from .sqlalchemy.pdb import agg, score, snippet, snippet_positions, snippets
+from .sqlalchemy.search import (
+    ProximityExpr,
+    all,
+    fuzzy,
+    match_all,
+    match_any,
+    more_like_this,
+    near,
+    parse,
+    phrase,
+    phrase_prefix,
+    prox_array,
+    prox_regex,
+    proximity,
+    range_term,
+    regex,
+    regex_phrase,
+    term,
+)
 
-__all__ = ["sqlalchemy"]
+__all__ = [
+    "BM25Field",
+    "ProximityExpr",
+    "agg",
+    "all",
+    "assert_indexed",
+    "describe",
+    "fuzzy",
+    "match_all",
+    "match_any",
+    "more_like_this",
+    "near",
+    "parse",
+    "paradedb_index_segments",
+    "paradedb_indexes",
+    "paradedb_verify_all_indexes",
+    "paradedb_verify_index",
+    "phrase",
+    "phrase_prefix",
+    "prox_array",
+    "prox_regex",
+    "proximity",
+    "range_term",
+    "regex",
+    "regex_phrase",
+    "score",
+    "snippet",
+    "snippet_positions",
+    "snippets",
+    "sqlalchemy",
+    "term",
+    "tokenize",
+    "with_rows",
+]

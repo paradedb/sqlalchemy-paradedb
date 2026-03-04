@@ -77,4 +77,7 @@ def agg(spec: dict[str, Any], *, approximate: bool | None = None) -> ClauseEleme
     payload_expr = cast(literal(payload), JSONB)
     if approximate is None:
         return func.pdb.agg(payload_expr)
-    return PDBFunctionWithNamedArgs("agg", [payload_expr], [("approximate", approximate)])
+    # pdb.agg() takes an optional second positional boolean: true = exact (default),
+    # false = approximate (skip heap visibility checks, ~2-4x faster but may include
+    # stale rows). approximate=True → pass false; approximate=False → pass true.
+    return func.pdb.agg(payload_expr, literal(not approximate))
