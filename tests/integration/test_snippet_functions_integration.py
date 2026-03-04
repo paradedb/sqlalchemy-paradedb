@@ -13,14 +13,7 @@ from paradedb.sqlalchemy import pdb, search, select_with
 from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
 
 pytestmark = pytest.mark.integration
-
-
-def _running_ids(mock_session) -> set[int]:
-    return set(
-        mock_session.scalars(
-            select(MockItem.id).where(search.match_any(MockItem.description, "running")).order_by(MockItem.id)
-        )
-    )
+RUNNING_IDS = {3}
 
 
 # ---------------------------------------------------------------------------
@@ -36,10 +29,8 @@ def test_snippet_contains_highlight_tags(mock_session):
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     snippets = [row[1] for row in rows if row[1]]
     assert any("<b>" in s for s in snippets)
 
@@ -59,10 +50,8 @@ def test_snippet_custom_tags(mock_session):
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     snippets = [row[1] for row in rows if row[1]]
     assert any("<mark>" in s for s in snippets)
     assert not any("<b>" in s for s in snippets)
@@ -103,10 +92,8 @@ def test_snippets_returns_value(mock_session):
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     # snippets() returns a JSON value (list or string)
     assert all(row[1] is not None for row in rows)
 
@@ -122,7 +109,7 @@ def test_snippets_with_limit(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
     assert rows
-    assert {row[0] for row in rows}.issubset(_running_ids(mock_session))
+    assert {row[0] for row in rows} == RUNNING_IDS
 
 
 def test_snippets_with_custom_tags(mock_session):
@@ -143,7 +130,7 @@ def test_snippets_with_custom_tags(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
     assert rows
-    assert {row[0] for row in rows}.issubset(_running_ids(mock_session))
+    assert {row[0] for row in rows} == RUNNING_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +146,8 @@ def test_snippet_positions_returns_ranges(mock_session):
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     assert all(row[1] is not None for row in rows)
 
 
@@ -176,10 +161,8 @@ def test_select_with_score_adds_column(mock_session):
     base = select(MockItem.id).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.score(base, MockItem.id, label="search_score")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     assert all(row[1] is not None for row in rows)
 
 
@@ -188,10 +171,8 @@ def test_select_with_snippet_adds_column(mock_session):
     base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippet(base, MockItem.description, label="snip")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     assert any(row[2] is not None for row in rows)
 
 
@@ -200,10 +181,8 @@ def test_select_with_snippets_adds_column(mock_session):
     base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippets(base, MockItem.description, label="snips")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
 
 
 def test_select_with_snippet_positions_adds_column(mock_session):
@@ -211,10 +190,8 @@ def test_select_with_snippet_positions_adds_column(mock_session):
     base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippet_positions(base, MockItem.description, label="positions")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    expected_ids = _running_ids(mock_session)
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert expected_ids
-    assert {row[0] for row in rows} == expected_ids
+    assert {row[0] for row in rows} == RUNNING_IDS
     assert any(row[2] is not None for row in rows)
 
 
