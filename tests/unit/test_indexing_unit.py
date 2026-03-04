@@ -309,6 +309,16 @@ def test_extract_field_name_from_quoted_identifier():
     assert _extract_field_name(expr) == "Display Name"
 
 
+def test_extract_field_name_from_escaped_quoted_identifier():
+    expr = '(("Display ""Name""")::pdb.literal(\'alias=display_name\'))'
+    assert _extract_field_name(expr) == 'Display "Name"'
+
+
+def test_extract_field_name_from_qualified_json_key_tokenizer_cast():
+    expr = "(((public.products.metadata ->> 'color'::text))::pdb.literal(2))"
+    assert _extract_field_name(expr) == "metadata"
+
+
 # ---------------------------------------------------------------------------
 # _extract_tokenizer_name
 # ---------------------------------------------------------------------------
