@@ -32,16 +32,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install uv
         run: |
-          python -m pip install --upgrade pip
-          pip install .[test,dev]
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Sync dependencies
+        run: uv sync --extra test --extra dev
 
       - name: Ruff check
-        run: ruff check .
+        run: uv run --extra dev ruff check .
 
       - name: Type check
-        run: mypy paradedb
+        run: uv run --extra dev mypy paradedb
 
   matrix-tests:
     name: Python ${{ matrix.python-version }}
@@ -85,10 +88,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Install uv
         run: |
-          python -m pip install --upgrade pip
-          pip install .[test,dev]
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Sync dependencies
+        run: uv sync --extra test --extra dev
 
       - name: Install pg client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -103,16 +109,16 @@ jobs:
           exit 1
 
       - name: Run unit tests
-        run: python -m pytest tests/unit
+        run: uv run --extra test pytest tests/unit
 
       - name: Run integration tests
-        run: python -m pytest -m integration
+        run: uv run --extra test pytest -m integration
 
       - name: Run examples
         run: |
-          python examples/quickstart.py
-          python examples/autocomplete.py
-          python examples/more_like_this.py
-          python examples/faceted_search.py
-          python examples/hybrid_rrf.py
-          python examples/rag.py
+          uv run --extra test python examples/quickstart.py
+          uv run --extra test python examples/autocomplete.py
+          uv run --extra test python examples/more_like_this.py
+          uv run --extra test python examples/faceted_search.py
+          uv run --extra test python examples/hybrid_rrf.py
+          uv run --extra test python examples/rag.py

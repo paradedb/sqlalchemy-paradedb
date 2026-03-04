@@ -3,10 +3,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-./.venv/bin/python}"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-  echo "Expected executable Python at ${PYTHON_BIN}. Create the virtualenv first (for example: python3 -m venv .venv)." >&2
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required to run integration tests." >&2
+  echo "Install uv, then rerun this script." >&2
   exit 1
 fi
 
@@ -21,8 +22,12 @@ export PARADEDB_INTEGRATION=1
 export PARADEDB_TEST_DSN="postgresql+psycopg://${USER}:${PASSWORD}@localhost:${PORT}/${DB}"
 export PGPASSWORD="${PASSWORD}"
 
+PYTEST_CMD=(uv run --extra test pytest)
+
+cd "${REPO_ROOT}"
+
 if [[ $# -gt 0 ]]; then
-  "${PYTHON_BIN}" -m pytest "$@"
+  "${PYTEST_CMD[@]}" "$@"
 else
-  "${PYTHON_BIN}" -m pytest -m integration
+  "${PYTEST_CMD[@]}" -m integration
 fi
