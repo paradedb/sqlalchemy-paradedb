@@ -42,6 +42,19 @@ def test_match_any_or_semantics(mock_session):
     assert ids == RUNNING_OR_WIRELESS_IDS
 
 
+def test_match_any_custom_tokenizer(mock_session):
+    """match_any(..., tokenizer=) uses explicit query tokenization."""
+    stmt_default = select(MockItem.id).where(search.match_any(MockItem.description, "running shoes"))
+    stmt_custom = select(MockItem.id).where(
+        search.match_any(MockItem.description, "running shoes", tokenizer="whitespace")
+    )
+    assert_uses_paradedb_scan(mock_session, stmt_custom, index_name="mock_items_bm25_idx")
+    ids_default = _ids(mock_session, stmt_default)
+    ids_custom = _ids(mock_session, stmt_custom)
+    assert ids_default == SHOES_IDS
+    assert ids_custom == SHOES_IDS
+
+
 def test_match_all_and_semantics(mock_session):
     """match_all requires all terms to be present (AND search)."""
     stmt_all = select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes"))
@@ -80,12 +93,65 @@ def test_phrase_with_slop(mock_session):
     assert ids_slop == RUNNING_IDS
 
 
+def test_phrase_with_slop_and_const(mock_session):
+    """phrase(..., slop=, const=) bridges through query and executes."""
+    stmt = (
+        select(MockItem.id, pdb.score(MockItem.id).label("score"))
+        .where(search.phrase(MockItem.description, "running shoes", slop=2, const=1.0))
+        .order_by(MockItem.id)
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    rows = mock_session.execute(stmt).all()
+    assert [row.id for row in rows] == sorted(RUNNING_IDS)
+    assert [row.score for row in rows] == [pytest.approx(1.0)]
+
+
+def test_phrase_custom_tokenizer(mock_session):
+    """phrase(..., tokenizer=) uses explicit query tokenization."""
+    stmt_default = select(MockItem.id).where(search.phrase(MockItem.description, "running shoes"))
+    stmt_custom = select(MockItem.id).where(
+        search.phrase(MockItem.description, "running shoes", tokenizer="whitespace")
+    )
+    assert_uses_paradedb_scan(mock_session, stmt_custom, index_name="mock_items_bm25_idx")
+    ids_default = _ids(mock_session, stmt_default)
+    ids_custom = _ids(mock_session, stmt_custom)
+    assert ids_default == RUNNING_IDS
+    assert ids_custom == RUNNING_IDS
+
+
+def test_phrase_pretokenized(mock_session):
+    """phrase() accepts explicit token arrays."""
+    stmt = select(MockItem.id).where(search.phrase(MockItem.description, ["running", "shoes"]))
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    ids = _ids(mock_session, stmt)
+    assert ids == RUNNING_IDS
+
+
+def test_phrase_pretokenized_with_slop(mock_session):
+    """phrase() supports slop for token arrays."""
+    stmt = select(MockItem.id).where(search.phrase(MockItem.description, ["shoes", "running"], slop=2))
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    ids = _ids(mock_session, stmt)
+    assert ids == RUNNING_IDS
+
+
 def test_regex_match(mock_session):
     """regex() matches patterns against indexed tokens."""
     regex_stmt = select(MockItem.id).where(search.regex(MockItem.description, "run.*"))
     assert_uses_paradedb_scan(mock_session, regex_stmt, index_name="mock_items_bm25_idx")
     regex_ids = _ids(mock_session, regex_stmt)
     assert regex_ids == RUNNING_IDS
+
+
+def test_regex_boost_preserves_matches(mock_session):
+    """regex(..., boost=) only changes scoring, not match set."""
+    stmt_base = select(MockItem.id).where(search.regex(MockItem.description, "run.*"))
+    stmt_boost = select(MockItem.id).where(search.regex(MockItem.description, "run.*", boost=2.0))
+    assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_bm25_idx")
+    ids_base = _ids(mock_session, stmt_base)
+    ids_boost = _ids(mock_session, stmt_boost)
+    assert ids_base == RUNNING_IDS
+    assert ids_boost == RUNNING_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +204,32 @@ def test_fuzzy_with_boost(mock_session):
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)
     assert ids_base == ids_boost
+
+
+def test_fuzzy_with_const(mock_session):
+    """match_any(..., distance=, const=) bridges through query and executes."""
+    stmt = (
+        select(MockItem.id, pdb.score(MockItem.id).label("score"))
+        .where(search.match_any(MockItem.description, "runnning", distance=1, const=1.0))
+        .order_by(MockItem.id)
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    rows = mock_session.execute(stmt).all()
+    assert [row.id for row in rows] == sorted(RUNNING_IDS)
+    assert [row.score for row in rows] == [pytest.approx(1.0)]
+
+
+def test_match_any_const_sets_constant_score(mock_session):
+    """match_any(..., const=) assigns a constant score to every match."""
+    stmt = (
+        select(MockItem.id, pdb.score(MockItem.id).label("score"))
+        .where(search.match_any(MockItem.description, "shoes", const=1.0))
+        .order_by(MockItem.id)
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    rows = mock_session.execute(stmt).all()
+    assert [row.id for row in rows] == sorted(SHOES_IDS)
+    assert [row.score for row in rows] == [pytest.approx(1.0), pytest.approx(1.0), pytest.approx(1.0)]
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +552,54 @@ def test_range_term_with_range_type(mock_session):
             conn.execute(text("DROP TABLE IF EXISTS rt_items_pq"))
 
 
+def test_range_term_scalar_contains_point(mock_session):
+    """range_term() supports scalar point queries like pdb.range_term(1)."""
+    from sqlalchemy import Column, Integer, MetaData, Table, text
+    from sqlalchemy.dialects.postgresql import INT4RANGE
+
+    engine = mock_session.get_bind()
+    metadata = MetaData()
+    tbl = Table(
+        "rt_scalar_items_pq",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("weight_range", INT4RANGE, nullable=False),
+    )
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP INDEX IF EXISTS rt_scalar_items_pq_bm25_idx"))
+        conn.execute(text("DROP TABLE IF EXISTS rt_scalar_items_pq"))
+    metadata.create_all(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX rt_scalar_items_pq_bm25_idx ON rt_scalar_items_pq USING bm25 (id, weight_range) "
+                "WITH (key_field='id')"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO rt_scalar_items_pq (id, weight_range) VALUES "
+                "(1, '[1,4]'::int4range), (2, '[3,9]'::int4range), (3, '[10,12]'::int4range)"
+            )
+        )
+
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy.orm import Session as S
+
+            with S(bind=conn) as s:
+                stmt = select(tbl.c.id).where(search.range_term(tbl.c.weight_range, 1)).order_by(tbl.c.id)
+                assert_uses_paradedb_scan(s, stmt, index_name="rt_scalar_items_pq_bm25_idx")
+                ids = list(s.scalars(stmt))
+                assert ids == [1]
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DROP INDEX IF EXISTS rt_scalar_items_pq_bm25_idx"))
+            conn.execute(text("DROP TABLE IF EXISTS rt_scalar_items_pq"))
+
+
 def test_range_term_invalid_range_type_raises():
     """range_term() with unknown range_type raises InvalidArgumentError."""
     from sqlalchemy import Column, Integer, MetaData, Table
@@ -508,3 +648,44 @@ def test_all_predicate_matches_everything(mock_session):
         select(MockItem.id).where(search.all(MockItem.id)).with_only_columns(__import__("sqlalchemy").func.count())
     )
     assert total == ALL_MOCK_ITEM_COUNT
+
+
+def test_exists_query_matches_non_null(mock_session):
+    """search.exists() returns only documents where the indexed field is non-null."""
+    from sqlalchemy import Column, Integer, MetaData, Table, text
+
+    engine = mock_session.get_bind()
+    metadata = MetaData()
+    tbl = Table(
+        "exists_items_pq",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("rating", Integer, nullable=True),
+    )
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP INDEX IF EXISTS exists_items_pq_bm25_idx"))
+        conn.execute(text("DROP TABLE IF EXISTS exists_items_pq"))
+    metadata.create_all(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX exists_items_pq_bm25_idx ON exists_items_pq USING bm25 (id, rating) WITH (key_field='id')"
+            )
+        )
+        conn.execute(text("INSERT INTO exists_items_pq (id, rating) VALUES (1, 5), (2, NULL), (3, 0)"))
+
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy.orm import Session as S
+
+            with S(bind=conn) as s:
+                stmt = select(tbl.c.id).where(search.exists(tbl.c.rating)).order_by(tbl.c.id)
+                assert_uses_paradedb_scan(s, stmt, index_name="exists_items_pq_bm25_idx")
+                ids = list(s.scalars(stmt))
+                assert ids == [1, 3]
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DROP INDEX IF EXISTS exists_items_pq_bm25_idx"))
+            conn.execute(text("DROP TABLE IF EXISTS exists_items_pq"))
