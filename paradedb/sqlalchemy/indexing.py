@@ -539,36 +539,25 @@ def _extract_field_name(field_expr: str) -> str | None:
 
 
 def _strip_outer_parens(value: str) -> str:
+    """Strip matching outer parentheses from a string."""
     expr = value
-    while expr.startswith("(") and expr.endswith(")") and _has_balanced_outer_parens(expr):
+    while expr.startswith("(") and expr.endswith(")"):
+        # Verify the outer parens are actually a matched pair by checking
+        # that the depth never hits zero before the final character.
+        depth = 0
+        matched = True
+        for i, ch in enumerate(expr):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0 and i != len(expr) - 1:
+                    matched = False
+                    break
+        if not matched:
+            break
         expr = expr[1:-1].strip()
     return expr
-
-
-def _has_balanced_outer_parens(value: str) -> bool:
-    depth = 0
-    in_single = False
-    in_double = False
-
-    for i, ch in enumerate(value):
-        if ch == "'" and not in_double:
-            in_single = not in_single
-            continue
-        if ch == '"' and not in_single:
-            in_double = not in_double
-            continue
-        if in_single or in_double:
-            continue
-
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-            if depth == 0 and i != len(value) - 1:
-                return False
-            if depth < 0:
-                return False
-    return depth == 0
 
 
 def _extract_key_field(indexdef: str) -> str | None:

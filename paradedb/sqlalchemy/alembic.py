@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from alembic.autogenerate import comparators, renderers
 from alembic.operations import Operations
 from alembic.operations.ops import MigrateOperation
@@ -273,76 +275,29 @@ def _normalized_expression_list(expressions: list[str]) -> list[str]:
     return [_normalize_bm25_expression(expr) for expr in expressions]
 
 
-def _normalize_sql_for_compare(expr: str) -> str:
-    """Normalize SQL text outside string literals for stable comparisons.
-
-    This collapses whitespace, removes identifier quotes, and lowercases
-    non-literal SQL text while preserving the exact contents of single-quoted
-    string literals.
-    """
-    out: list[str] = []
-    in_single = False
-    in_double = False
-    pending_space = False
-    i = 0
-
-    while i < len(expr):
-        ch = expr[i]
-
-        if ch == "'" and not in_double:
-            if pending_space and out and out[-1] != " ":
-                out.append(" ")
-            pending_space = False
-            out.append(ch)
-            if in_single and i + 1 < len(expr) and expr[i + 1] == "'":
-                out.append("'")
-                i += 2
-                continue
-            in_single = not in_single
-            i += 1
-            continue
-
-        if ch == '"' and not in_single:
-            pending_space = False
-            in_double = not in_double
-            i += 1
-            continue
-
-        if in_single:
-            out.append(ch)
-            i += 1
-            continue
-
-        if ch.isspace():
-            pending_space = True
-            i += 1
-            continue
-
-        if pending_space and out and out[-1] != " ":
-            out.append(" ")
-        pending_space = False
-
-        if in_double:
-            out.append(ch)
-        else:
-            out.append(ch.lower())
-        i += 1
-
-    return "".join(out).strip()
-
-
 def _normalize_where(clause: str | None) -> str | None:
-    """Normalize a WHERE clause string for comparison.
+    """Normalize a WHERE clause for comparison.
 
-    Reduces false-positive drift between PostgreSQL's normalized form and the
-    SQLAlchemy-compiled form while preserving the exact contents of
-    single-quoted string literals.
+    Strips double-quoted identifiers, collapses whitespace, lowercases
+    non-literal text, removes ``::text`` casts, and strips relation qualifiers.
+    Single-quoted string literals are preserved as-is.
     """
     if clause is None:
         return None
-    normalized = _normalize_sql_for_compare(clause)
-    normalized = normalized.replace("::text", "")
-    return _strip_non_pdb_qualifiers(normalized)
+    # Split on single-quoted literals, normalize only the non-literal parts.
+    parts = re.split(r"('(?:''|[^'])*')", clause)
+    normalized_parts: list[str] = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            # Inside single quotes — preserve exactly.
+            normalized_parts.append(part)
+        else:
+            p = part.replace('"', "")
+            p = re.sub(r"\s+", " ", p)
+            p = p.lower()
+            p = p.replace("::text", "")
+            normalized_parts.append(p)
+    return _strip_non_pdb_qualifiers("".join(normalized_parts).strip())
 
 
 def _render_where_from_index(index) -> str | None:
