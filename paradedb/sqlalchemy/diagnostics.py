@@ -22,9 +22,7 @@ def paradedb_indexes(engine: Engine) -> list[dict[str, Any]]:
 def paradedb_index_segments(engine: Engine, index: str) -> list[dict[str, Any]]:
     """Return segment metadata for a BM25 index from ``pdb.index_segments()``."""
     with engine.connect() as conn:
-        return _exec_and_collect(
-            conn, "SELECT * FROM pdb.index_segments(%s::regclass)", [index]
-        )
+        return _exec_and_collect(conn, "SELECT * FROM pdb.index_segments(%s::regclass)", [index])
 
 
 def paradedb_verify_index(
@@ -92,12 +90,7 @@ def paradedb_verify_all_indexes(
     sql_parts = ["SELECT * FROM pdb.verify_all_indexes("]
     params: list[Any] = []
     if named_params:
-        sql_parts.append(
-            ", ".join(
-                f"{name} => %s::{pg_type}"
-                for name, pg_type, _ in named_params
-            )
-        )
+        sql_parts.append(", ".join(f"{name} => %s::{pg_type}" for name, pg_type, _ in named_params))
         params.extend(value for _, _, value in named_params)
     sql_parts.append(")")
 

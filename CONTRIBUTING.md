@@ -3,25 +3,23 @@
 ## Setup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[test,dev]
+# Install uv: https://docs.astral.sh/uv/getting-started/installation/
+uv sync --extra test --extra dev
 ```
 
 ## Run Checks
 
 ```bash
-ruff check .
-mypy paradedb
-python -m pytest tests/unit
-PARADEDB_TEST_DSN=postgres://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
+uv run --extra dev ruff check .
+uv run --extra dev mypy paradedb
+uv run --extra test pytest tests/unit
+PARADEDB_TEST_DSN=postgresql+psycopg://postgres:postgres@localhost:5443/postgres uv run --extra test pytest -m integration
 ```
 
 To catch issues before commit or push, install the local git hooks once:
 
 ```bash
-python -m pip install .[test,dev]
-pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
+uv run --extra dev pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
 ```
 
 ## Guidelines

@@ -38,10 +38,7 @@ def require_diagnostics(engine: Engine) -> None:
 
     missing = sorted(_REQUIRED_FUNCTIONS - available)
     if missing:
-        pytest.skip(
-            "ParadeDB diagnostics not available in this pg_search version: "
-            + ", ".join(missing)
-        )
+        pytest.skip("ParadeDB diagnostics not available in this pg_search version: " + ", ".join(missing))
 
 
 # ---------------------------------------------------------------------------

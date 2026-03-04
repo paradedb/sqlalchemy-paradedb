@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import SQLAlchemyError
 
 from paradedb.sqlalchemy.expr import json_text
 from paradedb.sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
@@ -14,8 +15,8 @@ pytestmark = pytest.mark.integration
 
 def _drop_table_and_index(engine, table_name: str, index_name: str) -> None:
     with engine.begin() as conn:
-        conn.execute(text(f'DROP INDEX IF EXISTS {index_name}'))
-        conn.execute(text(f'DROP TABLE IF EXISTS {table_name}'))
+        conn.execute(text(f"DROP INDEX IF EXISTS {index_name}"))
+        conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
 
 
 def _tokenizer_cast_supported(engine) -> bool:
@@ -36,7 +37,7 @@ def _tokenizer_cast_supported(engine) -> bool:
                 )
             )
         return True
-    except Exception:
+    except SQLAlchemyError:
         return False
     finally:
         _drop_table_and_index(engine, table_name, index_name)
@@ -518,10 +519,7 @@ def test_bm25_partial_index_generates_where_clause(engine):
 
     with engine.begin() as conn:
         row = conn.execute(
-            text(
-                "SELECT indexdef FROM pg_indexes "
-                "WHERE tablename = :t AND indexname = :i"
-            ),
+            text("SELECT indexdef FROM pg_indexes WHERE tablename = :t AND indexname = :i"),
             {"t": table_name, "i": index_name},
         ).one()
 
@@ -575,9 +573,7 @@ def test_bm25_partial_index_filters_search_results(engine):
         )
 
     with Session(engine) as session:
-        stmt = select(products.c.id).where(
-            match_all(products.c.description, "running")
-        )
+        stmt = select(products.c.id).where(match_all(products.c.description, "running"))
         ids = [row.id for row in session.execute(stmt)]
 
     # id=1 (rating 5) is indexed; id=2 (rating 2) is excluded by the partial condition
@@ -620,10 +616,7 @@ def test_bm25_index_create_concurrently(engine):
 
     with engine.begin() as conn:
         count = conn.execute(
-            text(
-                "SELECT COUNT(*) FROM pg_indexes "
-                "WHERE tablename = :t AND indexname = :i"
-            ),
+            text("SELECT COUNT(*) FROM pg_indexes WHERE tablename = :t AND indexname = :i"),
             {"t": table_name, "i": index_name},
         ).scalar_one()
 

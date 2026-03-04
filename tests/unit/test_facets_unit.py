@@ -45,7 +45,9 @@ def test_metric_and_bucket_builders():
 
 
 def test_multi_merges_specs():
-    spec = facets.multi(facets.avg(field="rating"), facets.value_count(field="id"), facets.terms(field="category", size=10))
+    spec = facets.multi(
+        facets.avg(field="rating"), facets.value_count(field="id"), facets.terms(field="category", size=10)
+    )
     assert spec == {
         "avg": {"field": "rating"},
         "value_count": {"field": "id"},
@@ -68,7 +70,7 @@ def test_with_rows_adds_window_agg_column():
     stmt, facet_plan = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
     sql = _sql(stmt)
 
-    assert "pdb.agg(CAST('{\"terms\":{\"field\":\"category\",\"size\":10}}' AS JSONB))" in sql
+    assert 'pdb.agg(CAST(\'{"terms":{"field":"category","size":10}}\' AS JSONB))' in sql
     assert "OVER () AS facets" in sql
     assert "products.id @@@ pdb.all()" in sql
     assert facet_plan.label == "facets"

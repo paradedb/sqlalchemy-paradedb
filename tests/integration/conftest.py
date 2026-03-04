@@ -41,7 +41,11 @@ class MockItem(Base):
 
 @pytest.fixture(scope="session")
 def db_url() -> str:
-    url = os.environ.get("PARADEDB_TEST_DSN") or os.environ.get("DATABASE_URL") or "postgresql://postgres:postgres@localhost:5443/postgres"
+    url = (
+        os.environ.get("PARADEDB_TEST_DSN")
+        or os.environ.get("DATABASE_URL")
+        or "postgresql://postgres:postgres@localhost:5443/postgres"
+    )
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://") :]
     if url.startswith("postgresql://"):
@@ -53,6 +57,7 @@ def db_url() -> str:
 def engine(db_url: str) -> Iterator[Engine]:
     engine = create_engine(db_url, future=True)
     with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
         conn.execute(text("DROP INDEX IF EXISTS products_bm25_idx"))
     Base.metadata.drop_all(engine, checkfirst=True)
     Base.metadata.create_all(engine)
@@ -134,14 +139,9 @@ def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "prod
 def paradedb_ready(engine: Engine) -> None:
     """Ensure ParadeDB mock_items table exists and is indexed."""
     with engine.begin() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
         conn.execute(text("DROP INDEX IF EXISTS mock_items_bm25_idx"))
         conn.execute(text("DROP TABLE IF EXISTS mock_items"))
-        conn.execute(
-            text(
-                "CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items')"
-            )
-        )
+        conn.execute(text("CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items')"))
         conn.execute(
             text(
                 "CREATE INDEX mock_items_bm25_idx ON mock_items USING bm25 ("

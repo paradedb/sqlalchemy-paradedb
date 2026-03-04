@@ -43,9 +43,7 @@ class TokenizerSpec:
 
         args_sql = [_render_sql_arg(value) for value in self.positional_args]
         if self.named_args:
-            rendered_options = ",".join(
-                f"{key}={_render_config_value(value)}" for key, value in self.named_args
-            )
+            rendered_options = ",".join(f"{key}={_render_config_value(value)}" for key, value in self.named_args)
             args_sql.append(_quote_term(rendered_options))
         return f"pdb.{self.name}({','.join(args_sql)})"
 
@@ -91,8 +89,7 @@ def _build_spec(
 ) -> TokenizerSpec:
     if not _VALID_TOKENIZER_NAME_RE.match(name):
         raise InvalidArgumentError(
-            "tokenizer name must be a bare identifier (letters, digits, underscore); "
-            "pass arguments via args/named_args"
+            "tokenizer name must be a bare identifier (letters, digits, underscore); pass arguments via args/named_args"
         )
     if args is not None and isinstance(args, str | bytes):
         raise InvalidArgumentError("tokenizer args must be a sequence, not a string")
@@ -715,19 +712,13 @@ def validate_pushdown(stmt: Any) -> list[str]:
 
     whereclause = getattr(stmt, "whereclause", None)
     if whereclause is None:
-        warnings.append(
-            "No WHERE clause found; query will perform a full table scan without ParadeDB"
-        )
+        warnings.append("No WHERE clause found; query will perform a full table scan without ParadeDB")
     elif not _inspect.has_paradedb_predicate(whereclause):
-        warnings.append(
-            "No ParadeDB predicate found in WHERE clause; query will not use a BM25 index"
-        )
+        warnings.append("No ParadeDB predicate found in WHERE clause; query will not use a BM25 index")
 
     order_by = getattr(stmt, "_order_by_clauses", None) or ()
     limit = getattr(stmt, "_limit_clause", None)
     if order_by and limit is None:
-        warnings.append(
-            "ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both"
-        )
+        warnings.append("ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both")
 
     return warnings

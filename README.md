@@ -11,13 +11,13 @@ Typed SQLAlchemy helpers for ParadeDB BM25 indexing and query composition.
 ## Install
 
 ```bash
-pip install sqlalchemy-paradedb
+uv add sqlalchemy-paradedb
 ```
 
 For local development:
 
 ```bash
-pip install -e .[test,dev]
+uv sync --extra test --extra dev
 ```
 
 ## Core Modules
@@ -183,13 +183,13 @@ See `examples/`:
 Unit tests:
 
 ```bash
-python -m pytest tests/unit
+uv run --extra test pytest tests/unit
 ```
 
 Integration tests (requires running ParadeDB):
 
 ```bash
-PARADEDB_TEST_DSN=postgres://postgres:postgres@localhost:5443/postgres python -m pytest -m integration
+PARADEDB_TEST_DSN=postgresql+psycopg://postgres:postgres@localhost:5443/postgres uv run --extra test pytest -m integration
 ```
 
 ## CI
