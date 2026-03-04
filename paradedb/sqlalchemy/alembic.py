@@ -155,7 +155,6 @@ def _render_reindex_bm25_op(autogen_context, op: ReindexBM25Op) -> str:
 # ---------------------------------------------------------------------------
 # Autogenerate comparator
 # ---------------------------------------------------------------------------
-
 def _autogen_bm25_meta_indexes(
     metadata, effective_schemas: set[str], *, default_schema: str
 ) -> dict[tuple[str, str], object]:
@@ -309,7 +308,7 @@ def _render_where_from_index(index) -> str | None:
         return _strip_relation_qualifiers(
             str(
                 where_clause.compile(
-                    dialect=postgresql.dialect(),
+                    dialect=postgresql.dialect(),  # type: ignore[no-untyped-call]
                     compile_kwargs={"literal_binds": True},
                 )
             ),
@@ -334,10 +333,7 @@ def _suppress_standard_bm25_ops(upgrade_ops, bm25_names: set[str]) -> None:
             op.ops[:] = [
                 sub_op
                 for sub_op in op.ops
-                if not (
-                    isinstance(sub_op, (CreateIndexOp, DropIndexOp))
-                    and sub_op.index_name in bm25_names
-                )
+                if not (isinstance(sub_op, (CreateIndexOp, DropIndexOp)) and sub_op.index_name in bm25_names)
             ]
 
 
@@ -376,8 +372,7 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
         with_opts = index.dialect_options["postgresql"].get("with") or {}
         key_field = with_opts.get("key_field", "")
         expressions = [
-            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name)
-            for expr in index.expressions
+            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name) for expr in index.expressions
         ]
         meta_where = _render_where_from_index(index)
         create_op = CreateBM25IndexOp(
@@ -393,7 +388,9 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
             upgrade_ops.ops.append(create_op)
         else:
             db = db_bm25[key]
-            expressions_changed = _normalized_expression_list(db["expressions"]) != _normalized_expression_list(expressions)
+            expressions_changed = _normalized_expression_list(db["expressions"]) != _normalized_expression_list(
+                expressions
+            )
             key_field_changed = db["key_field"] != key_field
             where_changed = _normalize_where(db.get("where")) != _normalize_where(meta_where)
             if expressions_changed or key_field_changed or where_changed:
