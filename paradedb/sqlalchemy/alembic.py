@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from alembic.autogenerate import comparators, renderers
 from alembic.operations import Operations
 from alembic.operations.ops import MigrateOperation
@@ -33,12 +35,14 @@ class CreateBM25IndexOp(MigrateOperation):
         key_field: str,
         *,
         table_schema: str | None = None,
+        where: str | None = None,
     ) -> None:
         self.index_name = index_name
         self.table_name = table_name
         self.expressions = expressions
         self.key_field = key_field
         self.table_schema = table_schema
+        self.where = where
 
     @classmethod
     def create_bm25_index(
@@ -50,6 +54,7 @@ class CreateBM25IndexOp(MigrateOperation):
         *,
         key_field: str,
         table_schema: str | None = None,
+        where: str | None = None,
     ) -> MigrateOperation:
         return operations.invoke(
             cls(
@@ -58,6 +63,7 @@ class CreateBM25IndexOp(MigrateOperation):
                 expressions,
                 key_field,
                 table_schema=table_schema,
+                where=where,
             )
         )
 
@@ -70,6 +76,8 @@ def _create_bm25_index_impl(operations: Operations, operation: CreateBM25IndexOp
         f"ON {_quote_qualified(operation.table_schema, operation.table_name)} "
         f"USING bm25 ({expressions_sql}) WITH (key_field={_quote_literal(operation.key_field)})"
     )
+    if operation.where is not None:
+        sql += f" WHERE {operation.where}"
     operations.execute(sql)
 
 
@@ -83,6 +91,8 @@ def _render_create_bm25_index_op(autogen_context, op: CreateBM25IndexOp) -> str:
     ]
     if op.table_schema is not None:
         parts.append(f"table_schema={op.table_schema!r}")
+    if op.where is not None:
+        parts.append(f"where={op.where!r}")
     return f"op.create_bm25_index({', '.join(parts)})"
 
 
@@ -145,7 +155,6 @@ def _render_reindex_bm25_op(autogen_context, op: ReindexBM25Op) -> str:
 # ---------------------------------------------------------------------------
 # Autogenerate comparator
 # ---------------------------------------------------------------------------
-
 def _autogen_bm25_meta_indexes(
     metadata, effective_schemas: set[str], *, default_schema: str
 ) -> dict[tuple[str, str], object]:
@@ -164,8 +173,8 @@ def _autogen_bm25_meta_indexes(
 
 
 def _autogen_bm25_db_indexes(conn, effective_schemas: set[str]) -> dict[tuple[str, str], dict]:
-    """Return {(schema, index_name): {table_name, expressions, key_field}} from pg_indexes."""
-    from .indexing import _extract_bm25_field_list, _extract_key_field
+    """Return {(schema, index_name): {table_name, expressions, key_field, where}} from pg_indexes."""
+    from .indexing import _extract_bm25_field_list, _extract_key_field, _extract_where_clause
 
     result: dict[tuple[str, str], dict] = {}
     for schema in effective_schemas:
@@ -187,6 +196,7 @@ def _autogen_bm25_db_indexes(conn, effective_schemas: set[str]) -> dict[tuple[st
                 "table_name": row.tablename,
                 "expressions": raw_fields,
                 "key_field": _extract_key_field(row.indexdef) or "",
+                "where": _extract_where_clause(row.indexdef),
             }
     return result
 
@@ -264,6 +274,49 @@ def _normalized_expression_list(expressions: list[str]) -> list[str]:
     return [_normalize_bm25_expression(expr) for expr in expressions]
 
 
+def _normalize_where(clause: str | None) -> str | None:
+    """Normalize a WHERE clause for comparison.
+
+    Strips double-quoted identifiers, collapses whitespace, lowercases
+    non-literal text, removes ``::text`` casts, and strips relation qualifiers.
+    Single-quoted string literals are preserved as-is.
+    """
+    if clause is None:
+        return None
+    # Split on single-quoted literals, normalize only the non-literal parts.
+    parts = re.split(r"('(?:''|[^'])*')", clause)
+    normalized_parts: list[str] = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            # Inside single quotes — preserve exactly.
+            normalized_parts.append(part)
+        else:
+            p = part.replace('"', "")
+            p = re.sub(r"\s+", " ", p)
+            p = p.lower()
+            p = p.replace("::text", "")
+            normalized_parts.append(p)
+    return _strip_non_pdb_qualifiers("".join(normalized_parts).strip())
+
+
+def _render_where_from_index(index) -> str | None:
+    """Compile the ``postgresql_where`` clause from a SQLAlchemy Index to SQL text."""
+    where_clause = index.dialect_options["postgresql"].get("where")
+    if where_clause is None:
+        return None
+    if isinstance(where_clause, ClauseElement):
+        return _strip_relation_qualifiers(
+            str(
+                where_clause.compile(
+                    dialect=postgresql.dialect(),  # type: ignore[no-untyped-call]
+                    compile_kwargs={"literal_binds": True},
+                )
+            ),
+            index.table.name,
+        )
+    return _strip_relation_qualifiers(str(where_clause), index.table.name)
+
+
 def _suppress_standard_bm25_ops(upgrade_ops, bm25_names: set[str]) -> None:
     """Remove any standard Alembic CreateIndexOp/DropIndexOp for BM25 indexes."""
     from alembic.operations.ops import CreateIndexOp, DropIndexOp, ModifyTableOps
@@ -280,10 +333,7 @@ def _suppress_standard_bm25_ops(upgrade_ops, bm25_names: set[str]) -> None:
             op.ops[:] = [
                 sub_op
                 for sub_op in op.ops
-                if not (
-                    isinstance(sub_op, (CreateIndexOp, DropIndexOp))
-                    and sub_op.index_name in bm25_names
-                )
+                if not (isinstance(sub_op, (CreateIndexOp, DropIndexOp)) and sub_op.index_name in bm25_names)
             ]
 
 
@@ -317,38 +367,34 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
             upgrade_ops.ops.append(DropBM25IndexOp(index_name=key[1], if_exists=True, schema=key[0]))
 
     # Emit create ops for indexes present in MetaData but absent from DB.
-    # Also re-create indexes whose expression list or key_field differs from the DB.
+    # Also re-create indexes whose expression list, key_field, or WHERE clause differs from the DB.
     for key, index in meta_bm25.items():
         with_opts = index.dialect_options["postgresql"].get("with") or {}
         key_field = with_opts.get("key_field", "")
         expressions = [
-            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name)
-            for expr in index.expressions
+            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name) for expr in index.expressions
         ]
+        meta_where = _render_where_from_index(index)
+        create_op = CreateBM25IndexOp(
+            index_name=index.name,
+            table_name=index.table.name,
+            expressions=expressions,
+            key_field=key_field,
+            table_schema=key[0],
+            where=meta_where,
+        )
 
         if key not in db_bm25:
-            upgrade_ops.ops.append(
-                CreateBM25IndexOp(
-                    index_name=index.name,
-                    table_name=index.table.name,
-                    expressions=expressions,
-                    key_field=key_field,
-                    table_schema=key[0],
-                )
-            )
+            upgrade_ops.ops.append(create_op)
         else:
             db = db_bm25[key]
-            if _normalized_expression_list(db["expressions"]) != _normalized_expression_list(expressions) or db["key_field"] != key_field:
-                # Index configuration changed: drop the old one, create the new one.
+            expressions_changed = _normalized_expression_list(db["expressions"]) != _normalized_expression_list(
+                expressions
+            )
+            key_field_changed = db["key_field"] != key_field
+            where_changed = _normalize_where(db.get("where")) != _normalize_where(meta_where)
+            if expressions_changed or key_field_changed or where_changed:
                 upgrade_ops.ops.append(DropBM25IndexOp(index_name=key[1], if_exists=True, schema=key[0]))
-                upgrade_ops.ops.append(
-                    CreateBM25IndexOp(
-                        index_name=index.name,
-                        table_name=index.table.name,
-                        expressions=expressions,
-                        key_field=key_field,
-                        table_schema=key[0],
-                    )
-                )
+                upgrade_ops.ops.append(create_op)
 
     return PriorityDispatchResult.CONTINUE

@@ -452,9 +452,8 @@ class IndexMeta:
 
 _KEY_FIELD_RE = re.compile(r"key_field\s*=\s*'?\"?([^'\",)\s]+)\"?'?", re.IGNORECASE)
 _ALIAS_RE = re.compile(r"alias\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
-_CAST_FIELD_RE = re.compile(r"^\(*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\)*\s*::\s*pdb\.", re.IGNORECASE)
-_PLAIN_FIELD_RE = re.compile(r'^\(*"?([A-Za-z_][A-Za-z0-9_]*)"?\)*$')
 _TOKENIZER_NAME_RE = re.compile(r"::pdb\.([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _split_top_level_csv(expr: str) -> list[str]:
@@ -520,20 +519,66 @@ def _extract_bm25_field_list(indexdef: str) -> list[str]:
 
 
 def _extract_field_name(field_expr: str) -> str | None:
-    expr = field_expr.strip()
-    cast_match = _CAST_FIELD_RE.match(expr)
-    if cast_match:
-        return cast_match.group(1)
-    plain_match = _PLAIN_FIELD_RE.match(expr)
-    if plain_match:
-        return plain_match.group(1)
+    expr = _strip_outer_parens(field_expr.strip())
+    cast_marker = re.search(r"::\s*pdb\.", expr, re.IGNORECASE)
+    if cast_marker is not None:
+        expr = _strip_outer_parens(expr[: cast_marker.start()].strip())
+
+    if "->" in expr:
+        expr = _strip_outer_parens(expr.split("->", 1)[0].strip())
+
+    # Strip schema/table qualifiers and keep the terminal identifier.
+    if "." in expr:
+        expr = _strip_outer_parens(expr.rsplit(".", 1)[1].strip())
+
+    if expr.startswith('"') and expr.endswith('"') and len(expr) >= 2:
+        return expr[1:-1].replace('""', '"')
+    if _IDENT_RE.match(expr):
+        return expr
     return None
+
+
+def _strip_outer_parens(value: str) -> str:
+    """Strip matching outer parentheses from a string."""
+    expr = value
+    while expr.startswith("(") and expr.endswith(")"):
+        # Verify the outer parens are actually a matched pair by checking
+        # that the depth never hits zero before the final character.
+        depth = 0
+        matched = True
+        for i, ch in enumerate(expr):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0 and i != len(expr) - 1:
+                    matched = False
+                    break
+        if not matched:
+            break
+        expr = expr[1:-1].strip()
+    return expr
 
 
 def _extract_key_field(indexdef: str) -> str | None:
     match = _KEY_FIELD_RE.search(indexdef)
     if match:
         return match.group(1)
+    return None
+
+
+_WHERE_CLAUSE_RE = re.compile(r"\bWHERE\s*\((.+)\)\s*$", re.IGNORECASE)
+
+
+def _extract_where_clause(indexdef: str) -> str | None:
+    """Extract the WHERE predicate from a ``pg_indexes.indexdef`` string.
+
+    PostgreSQL normalizes partial index predicates as ``WHERE (<condition>)``.
+    Returns the inner condition text or ``None`` if not present.
+    """
+    match = _WHERE_CLAUSE_RE.search(indexdef)
+    if match:
+        return match.group(1).strip()
     return None
 
 

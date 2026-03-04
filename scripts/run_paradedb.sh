@@ -8,24 +8,12 @@ else
   RUNNING=0
 fi
 
-PARADEDB_IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:0.21.10-pg18}"
-PARADEDB_CONTAINER_NAME="${PARADEDB_CONTAINER_NAME:-paradedb-sqlalchemy-integration}"
-PARADEDB_PORT="${PARADEDB_PORT:-5443}"
-PARADEDB_USER="${PARADEDB_USER:-postgres}"
-PARADEDB_PASSWORD="${PARADEDB_PASSWORD:-postgres}"
-PARADEDB_DB="${PARADEDB_DB:-postgres}"
-PARADEDB_WAIT_ATTEMPTS="${PARADEDB_WAIT_ATTEMPTS:-45}"
-
-export PARADEDB_IMAGE
-export PARADEDB_CONTAINER_NAME
-export PARADEDB_PORT
-export PARADEDB_USER
-export PARADEDB_PASSWORD
-export PARADEDB_DB
-export PARADEDB_WAIT_ATTEMPTS
-
-IMAGE="${PARADEDB_IMAGE}"
-CONTAINER_NAME="${PARADEDB_CONTAINER_NAME}"
+IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:0.21.10-pg18}"
+CONTAINER_NAME="${PARADEDB_CONTAINER_NAME:-paradedb-sqlalchemy-integration}"
+export PARADEDB_PORT="${PARADEDB_PORT:-5443}"
+export PARADEDB_USER="${PARADEDB_USER:-postgres}"
+export PARADEDB_PASSWORD="${PARADEDB_PASSWORD:-postgres}"
+export PARADEDB_DB="${PARADEDB_DB:-postgres}"
 PORT="${PARADEDB_PORT}"
 USER="${PARADEDB_USER}"
 PASSWORD="${PARADEDB_PASSWORD}"
@@ -36,12 +24,8 @@ if ! command -v docker >/dev/null 2>&1; then
   if [[ "$RUNNING" == "1" ]]; then exit 1; else return 1; fi
 fi
 
-container_exists=0
-if docker ps -a --format '{{.Names}}' | grep -Eq "^${CONTAINER_NAME}$"; then
-  container_exists=1
-fi
-
-run_container() {
+if ! docker ps -a --format '{{.Names}}' | grep -Eq "^${CONTAINER_NAME}$"; then
+  echo "Starting ParadeDB container ${CONTAINER_NAME} from ${IMAGE}..."
   docker run -d \
     --name "${CONTAINER_NAME}" \
     -e "POSTGRES_USER=${USER}" \
@@ -49,77 +33,24 @@ run_container() {
     -e "POSTGRES_DB=${DB}" \
     -p "${PORT}:5432" \
     "${IMAGE}" >/dev/null
-}
-
-if [[ "$container_exists" == "0" ]]; then
-  echo "Starting ParadeDB container ${CONTAINER_NAME} from ${IMAGE}..."
-  run_container
 else
-  current_image="$(docker inspect -f '{{.Config.Image}}' "${CONTAINER_NAME}" 2>/dev/null || true)"
-  if [[ -n "${current_image}" && "${current_image}" != "${IMAGE}" ]]; then
-    echo "Container ${CONTAINER_NAME} uses image ${current_image}; recreating with ${IMAGE}..."
-    docker rm -f "${CONTAINER_NAME}" >/dev/null
-    echo "Starting ParadeDB container ${CONTAINER_NAME} from ${IMAGE}..."
-    run_container
-    container_exists=0
-  fi
-
-  if [[ "$container_exists" == "1" ]]; then
-    mapped_port="$(docker port "${CONTAINER_NAME}" 5432/tcp 2>/dev/null | head -n1 | awk -F: '{print $NF}')"
-    if [[ -n "${mapped_port}" && "${mapped_port}" != "${PORT}" ]]; then
-      echo "Container ${CONTAINER_NAME} is already mapped to host port ${mapped_port}; using that port."
-      PORT="${mapped_port}"
-    elif [[ -z "${mapped_port}" ]]; then
-      echo "Container ${CONTAINER_NAME} has no published 5432 port; recreating with ${PORT}:5432..."
-      docker rm -f "${CONTAINER_NAME}" >/dev/null
-      run_container
-    fi
-    echo "Container ${CONTAINER_NAME} already exists; starting it..."
-    docker start "${CONTAINER_NAME}" >/dev/null
-  fi
+  echo "Container ${CONTAINER_NAME} already exists; starting it..."
+  docker start "${CONTAINER_NAME}" >/dev/null
 fi
 
-export PARADEDB_PORT="${PORT}"
 DATABASE_URL="postgresql+psycopg://${USER}:${PASSWORD}@localhost:${PORT}/${DB}"
 export DATABASE_URL
 
 echo "Waiting for ParadeDB to become ready..."
-for _ in $(seq 1 "${PARADEDB_WAIT_ATTEMPTS}"); do
-  in_container_ready=0
-  host_ready=0
-
+for _ in $(seq 1 "${PARADEDB_WAIT_ATTEMPTS:-45}"); do
   if docker exec "${CONTAINER_NAME}" pg_isready -U "${USER}" -d "${DB}" >/dev/null 2>&1; then
-    in_container_ready=1
-  fi
-
-  if command -v pg_isready >/dev/null 2>&1; then
-    if PGPASSWORD="${PASSWORD}" pg_isready -h localhost -p "${PORT}" -U "${USER}" -d "${DB}" >/dev/null 2>&1; then
-      host_ready=1
-    fi
-  else
-    if (echo >/dev/tcp/127.0.0.1/"${PORT}") >/dev/null 2>&1; then
-      host_ready=1
-    fi
-  fi
-
-  if [[ "${in_container_ready}" == "1" && "${host_ready}" == "1" ]]; then
     break
   fi
   sleep 2
 done
 
 if ! docker exec "${CONTAINER_NAME}" pg_isready -U "${USER}" -d "${DB}" >/dev/null 2>&1; then
-  echo "ParadeDB did not become ready in time (container check failed)" >&2
-  if [[ "$RUNNING" == "1" ]]; then exit 1; else return 1; fi
-fi
-
-if command -v pg_isready >/dev/null 2>&1; then
-  if ! PGPASSWORD="${PASSWORD}" pg_isready -h localhost -p "${PORT}" -U "${USER}" -d "${DB}" >/dev/null 2>&1; then
-    echo "ParadeDB did not become reachable on localhost:${PORT} in time" >&2
-    if [[ "$RUNNING" == "1" ]]; then exit 1; else return 1; fi
-  fi
-elif ! (echo >/dev/tcp/127.0.0.1/"${PORT}") >/dev/null 2>&1; then
-  echo "ParadeDB TCP port localhost:${PORT} is not reachable" >&2
+  echo "ParadeDB did not become ready in time" >&2
   if [[ "$RUNNING" == "1" ]]; then exit 1; else return 1; fi
 fi
 

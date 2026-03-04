@@ -358,6 +358,51 @@ def test_describe_includes_tokenizers(engine):
     _drop_table_and_index(engine, table_name, index_name)
 
 
+def test_describe_and_assert_indexed_for_json_expression_tokenizer(engine):
+    """JSON expression BM25 fields map back to the base column for introspection checks."""
+    if not _tokenizer_cast_supported(engine):
+        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
+
+    table_name = "describe_json_expr_products"
+    index_name = "describe_json_expr_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("metadata", JSONB, nullable=False),
+        Column("extra", Text, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(
+            json_text(products.c.metadata, "color"),
+            tokenizer=tokenize.literal(alias="metadata_color"),
+        ),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    metas = describe(engine, products)
+    meta = next(m for m in metas if m.index_name == index_name)
+
+    assert meta.fields == ("id", "metadata")
+    assert "literal" in meta.tokenizers.get("metadata", ())
+
+    assert_indexed(engine, products.c.metadata)
+    assert_indexed(engine, products.c.metadata, tokenizer="literal")
+    with pytest.raises(FieldNotIndexedError, match="'extra'"):
+        assert_indexed(engine, products.c.extra)
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
 def test_assert_indexed_passes_and_raises(engine):
     """assert_indexed passes for an indexed column and raises for an unindexed one."""
     table_name = "assert_indexed_products"
