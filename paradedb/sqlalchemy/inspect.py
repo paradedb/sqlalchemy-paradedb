@@ -41,7 +41,7 @@ def has_fuzzy_predicate(clause: Any) -> bool:
         if found:
             return
         opstring = getattr(binary.operator, "opstring", None)
-        if opstring != "===":
+        if opstring not in _PARADEDB_PREDICATE_OPS:
             return
         right = getattr(binary, "right", None)
         if _contains_fuzzy_cast(right):

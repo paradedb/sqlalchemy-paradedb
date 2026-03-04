@@ -49,19 +49,68 @@ def _apply_boost(expr: ClauseElement, boost: float | None) -> ClauseElement:
     return PDBCast(expr, "boost", (boost,))
 
 
-def match_all(field: ColumnElement, *terms: str, boost: float | None = None) -> ColumnElement[bool]:
-    payload = _apply_boost(_to_term_payload(*terms), boost)
+def _apply_fuzzy(
+    expr: ClauseElement,
+    *,
+    distance: int | None = None,
+    prefix: bool = False,
+    transpose_cost_one: bool = False,
+) -> ClauseElement:
+    if distance is not None and (distance < 0 or distance > 2):
+        raise InvalidArgumentError("distance must be between 0 and 2")
+
+    if distance is None and not prefix and not transpose_cost_one:
+        return expr
+
+    args: list[object] = [1 if distance is None else distance]
+    if prefix or transpose_cost_one:
+        args.append(prefix)
+    if transpose_cost_one:
+        args.append(True)
+    return PDBCast(expr, "fuzzy", args)
+
+
+def match_all(
+    field: ColumnElement,
+    *terms: str,
+    boost: float | None = None,
+    distance: int | None = None,
+    prefix: bool = False,
+    transpose_cost_one: bool = False,
+) -> ColumnElement[bool]:
+    payload = _to_term_payload(*terms)
+    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
+    payload = _apply_boost(payload, boost)
     return field.operate(_MATCH_ALL, payload)
 
 
-def match_any(field: ColumnElement, *terms: str, boost: float | None = None) -> ColumnElement[bool]:
-    payload = _apply_boost(_to_term_payload(*terms), boost)
+def match_any(
+    field: ColumnElement,
+    *terms: str,
+    boost: float | None = None,
+    distance: int | None = None,
+    prefix: bool = False,
+    transpose_cost_one: bool = False,
+) -> ColumnElement[bool]:
+    payload = _to_term_payload(*terms)
+    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
+    payload = _apply_boost(payload, boost)
     return field.operate(_MATCH_ANY, payload)
 
 
-def term(field: ColumnElement, value: str, boost: float | None = None) -> ColumnElement[bool]:
+def term(
+    field: ColumnElement,
+    value: str,
+    boost: float | None = None,
+    *,
+    distance: int | None = None,
+    prefix: bool = False,
+    transpose_cost_one: bool = False,
+) -> ColumnElement[bool]:
     require_non_empty_string(value, field_name="value")
-    payload = _apply_boost(literal(value), boost)
+    payload: ClauseElement = literal(value)
+    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
+    payload = _apply_boost(payload, boost)
     return field.operate(_TERM, payload)
 
 
@@ -76,29 +125,6 @@ def phrase(
         payload = PDBCast(payload, "slop", (slop,))
     payload = _apply_boost(payload, boost)
     return field.operate(_PHRASE, payload)
-
-
-def fuzzy(
-    field: ColumnElement,
-    value: str,
-    *,
-    distance: int,
-    prefix: bool | None = None,
-    transpose_cost_one: bool | None = None,
-    boost: float | None = None,
-) -> ColumnElement[bool]:
-    require_non_empty_string(value, field_name="value")
-    if distance < 0 or distance > 2:
-        raise InvalidArgumentError("distance must be between 0 and 2")
-    args: list[object] = [distance]
-    if prefix is not None or transpose_cost_one is not None:
-        args.append(bool(prefix))
-    if transpose_cost_one is not None:
-        args.append(bool(transpose_cost_one))
-
-    payload: ClauseElement = PDBCast(literal(value), "fuzzy", args)
-    payload = _apply_boost(payload, boost)
-    return field.operate(_TERM, payload)
 
 
 def regex(field: ColumnElement, pattern: str) -> ColumnElement[bool]:

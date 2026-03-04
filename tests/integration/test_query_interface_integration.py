@@ -9,6 +9,8 @@ from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
 
 
 pytestmark = pytest.mark.integration
+RUNNING_PRODUCT_IDS = [1, 2]
+WIRELESS_PRODUCT_IDS = [3]
 
 
 def test_match_all_returns_expected_rows(session):
@@ -40,10 +42,10 @@ def test_regex_match(session):
 
 
 def test_fuzzy_match(session):
-    stmt = select(Product.id).where(search.fuzzy(Product.description, "wirless", distance=1))
+    stmt = select(Product.id).where(search.match_any(Product.description, "wirless", distance=1))
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
-    assert ids == [3]
+    assert ids == WIRELESS_PRODUCT_IDS
 
 
 def test_score_and_ordering(session):
@@ -79,25 +81,24 @@ def test_select_with_helpers(session):
     assert_uses_paradedb_scan(session, stmt)
 
     rows = session.execute(stmt.order_by(Product.id)).all()
-    assert len(rows) == 2
-    assert rows[0][1] is not None
-    assert rows[0][2] is not None
+    assert [row[0] for row in rows] == RUNNING_PRODUCT_IDS
+    assert [row[3] for row in rows] == [[[6, 13]], [[6, 13]]]
 
 
 def test_select_with_snippet_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet(base, Product.description)
 
 
 def test_select_with_snippets_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippets(base, Product.description)
 
 
 def test_select_with_snippet_positions_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet_positions(base, Product.description)
 
@@ -115,9 +116,10 @@ def test_snippets_and_positions_projection(session):
     assert_uses_paradedb_scan(session, stmt)
 
     rows = session.execute(stmt).all()
-    assert len(rows) == 2
-    assert rows[0][1] is not None
-    assert rows[0][2] is not None
+    assert rows == [
+        (1, ["Sleek <b>running</b> shoes"], [[6, 13]]),
+        (2, ["Trail <b>running</b> shoes"], [[6, 13]]),
+    ]
 
 
 def test_agg_function_projection(session):
@@ -125,4 +127,4 @@ def test_agg_function_projection(session):
     assert_uses_paradedb_scan(session, stmt)
 
     value = session.execute(stmt).scalar_one()
-    assert value is not None
+    assert value == {"value": 5.0}

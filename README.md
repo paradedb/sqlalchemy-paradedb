@@ -23,7 +23,7 @@ uv sync --extra test --extra dev
 ## Core Modules
 
 - `paradedb.sqlalchemy.indexing`: BM25 field definitions and tokenizer specs.
-- `paradedb.sqlalchemy.search`: ParadeDB predicates (`match_all`, `fuzzy`, `parse`, `more_like_this`, etc.).
+- `paradedb.sqlalchemy.search`: ParadeDB predicates (`match_all`, `term`, `parse`, `more_like_this`, etc.).
 - `paradedb.sqlalchemy.pdb`: function wrappers (`score`, `snippet`, `snippets`, `agg`).
 - `paradedb.sqlalchemy.facets`: aggregate/facet JSON builders and rows+facets helper.
 - `paradedb.sqlalchemy.select_with`: select decorators for score/snippet/snippets/snippet_positions columns.
@@ -107,11 +107,22 @@ products_bm25_idx = Index(
 
 ## Query APIs
 
-- Basic predicates: `match_all`, `match_any`, `term`, `phrase`, `fuzzy`, `regex`, `all`
+- Basic predicates: `match_all`, `match_any`, `term`, `phrase`, `regex`, `all`
 - Advanced predicates: `parse`, `phrase_prefix`, `regex_phrase`, `near`, `proximity`, `more_like_this`
 - Scoring/snippets: `pdb.score`, `pdb.snippet`, `pdb.snippets`, `pdb.snippet_positions`, `select_with.score`, `select_with.snippet`, `select_with.snippets`, `select_with.snippet_positions`
 - Aggregations/facets: `facets.*` builders + `pdb.agg(...)`
 - Rows + facets: `facets.with_rows(...)`
+
+Fuzzy search uses the normal term-style builders:
+
+```python
+search.term(Product.description, "shose", distance=1)
+search.match_any(Product.description, "wirless", distance=1, prefix=True)
+search.term(Product.description, "rnnuing", distance=1, transpose_cost_one=True)
+```
+
+There is no separate `search.fuzzy(...)` helper. Use the standard term-style
+builders with fuzzy arguments instead.
 
 ## Facets
 

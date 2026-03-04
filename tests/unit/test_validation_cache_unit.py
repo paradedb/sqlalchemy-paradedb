@@ -31,7 +31,7 @@ def _sql(stmt) -> str:
 
 def test_search_argument_validation_errors():
     with pytest.raises(InvalidArgumentError, match="distance must be between 0 and 2"):
-        search.fuzzy(products.c.description, "oops", distance=3)
+        search.term(products.c.description, "oops", distance=3)
 
     with pytest.raises(InvalidArgumentError, match="slop must be >= 0"):
         search.phrase(products.c.description, "running shoes", slop=-1)

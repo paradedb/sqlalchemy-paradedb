@@ -17,7 +17,12 @@ pytestmark = pytest.mark.integration
 
 RUNNING_IDS = {3}
 SHOES_IDS = {3, 4, 5}
+WIRELESS_IDS = {12}
 RUNNING_OR_WIRELESS_IDS = {3, 12}
+SHOES_RATING_GTE4_IDS = {3, 5}
+MLT_RUNNING_SHOES_IDS = {3, 4, 5}
+MLT_COMBINED_IDS = {3, 4, 5, 12}
+ALL_MOCK_ITEM_COUNT = 41
 
 
 def _ids(session, stmt) -> set[int]:
@@ -71,8 +76,8 @@ def test_phrase_with_slop(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt_slop, index_name="mock_items_bm25_idx")
     ids_slop = _ids(mock_session, stmt_slop)
     ids_exact = _ids(mock_session, stmt_exact)
-    # Slop >= 0 should match at least everything exact does
-    assert ids_exact.issubset(ids_slop)
+    assert ids_exact == RUNNING_IDS
+    assert ids_slop == RUNNING_IDS
 
 
 def test_regex_match(mock_session):
@@ -89,45 +94,46 @@ def test_regex_match(mock_session):
 
 
 def test_fuzzy_distance_1(mock_session):
-    """fuzzy() with distance=1 catches single-character typos."""
-    stmt = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1))
+    """match_any(..., distance=1) catches single-character typos."""
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    # Should match "running" with one edit
-    assert len(ids) > 0
+    assert ids == RUNNING_IDS
 
 
 def test_fuzzy_distance_2(mock_session):
-    """fuzzy() with distance=2 catches two-character typos."""
-    stmt_d1 = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    stmt_d2 = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=2))
+    """match_any(..., distance=2) catches two-character typos."""
+    stmt_d1 = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
+    stmt_d2 = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=2))
     assert_uses_paradedb_scan(mock_session, stmt_d2, index_name="mock_items_bm25_idx")
     ids_d1 = _ids(mock_session, stmt_d1)
     ids_d2 = _ids(mock_session, stmt_d2)
-    # More distance = more or equal matches
-    assert ids_d1.issubset(ids_d2)
+    assert ids_d1 == RUNNING_IDS
+    assert ids_d2 == RUNNING_IDS
 
 
 def test_fuzzy_with_prefix(mock_session):
-    """fuzzy() with prefix=True matches prefix expansions."""
-    stmt = select(MockItem.id).where(search.fuzzy(MockItem.description, "runn", distance=0, prefix=True))
+    """match_any(..., prefix=True) matches prefix expansions."""
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runn", distance=1, prefix=True))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    assert ids == RUNNING_IDS
 
 
 def test_fuzzy_with_transpose_cost_one(mock_session):
-    """fuzzy() with transpose_cost_one=True treats transpositions as single edits."""
-    stmt = select(MockItem.id).where(search.fuzzy(MockItem.description, "rnnuing", distance=2, transpose_cost_one=True))
+    """match_any(..., transpose_cost_one=True) treats transpositions as single edits."""
+    stmt = select(MockItem.id).where(
+        search.match_any(MockItem.description, "rnnuing", distance=2, transpose_cost_one=True)
+    )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert isinstance(ids, set)
+    assert ids == RUNNING_IDS
 
 
 def test_fuzzy_with_boost(mock_session):
-    """fuzzy() with boost= does not change the result set, only scores."""
-    stmt_base = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    stmt_boost = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1, boost=2.0))
+    """match_any(..., boost=) does not change the result set, only scores."""
+    stmt_base = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
+    stmt_boost = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1, boost=2.0))
     assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_bm25_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)
@@ -158,7 +164,8 @@ def test_parse_conjunction_mode_narrows_results(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt_conj, index_name="mock_items_bm25_idx")
     ids_default = _ids(mock_session, stmt_default)
     ids_conj = _ids(mock_session, stmt_conj)
-    assert ids_conj.issubset(ids_default)
+    assert ids_default == SHOES_IDS
+    assert ids_conj == RUNNING_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +192,8 @@ def test_phrase_prefix_max_expansions(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt_200, index_name="mock_items_bm25_idx")
     ids_50 = _ids(mock_session, stmt_50)
     ids_200 = _ids(mock_session, stmt_200)
-    assert ids_50.issubset(ids_200)
+    assert ids_50 == RUNNING_IDS
+    assert ids_200 == RUNNING_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +206,7 @@ def test_regex_phrase_basic(mock_session):
     stmt = select(MockItem.id).where(search.regex_phrase(MockItem.description, ["run.*", "shoe.*"]))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    assert ids == RUNNING_IDS
 
 
 def test_regex_phrase_with_slop(mock_session):
@@ -208,7 +216,8 @@ def test_regex_phrase_with_slop(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt_slop, index_name="mock_items_bm25_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_slop = _ids(mock_session, stmt_slop)
-    assert ids_base.issubset(ids_slop)
+    assert ids_base == RUNNING_IDS
+    assert ids_slop == RUNNING_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +230,7 @@ def test_near_unordered(mock_session):
     stmt = select(MockItem.id).where(search.near(MockItem.description, "running", "shoes", distance=3))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    assert ids == RUNNING_IDS
 
 
 def test_near_ordered(mock_session):
@@ -229,7 +238,7 @@ def test_near_ordered(mock_session):
     stmt = select(MockItem.id).where(search.near(MockItem.description, "running", "shoes", distance=3, ordered=True))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    assert ids == RUNNING_IDS
 
 
 def test_near_ordered_is_subset_of_unordered(mock_session):
@@ -240,7 +249,8 @@ def test_near_ordered_is_subset_of_unordered(mock_session):
     )
     ids_unordered = _ids(mock_session, stmt_unordered)
     ids_ordered = _ids(mock_session, stmt_ordered)
-    assert ids_ordered.issubset(ids_unordered)
+    assert ids_unordered == RUNNING_IDS
+    assert ids_ordered == RUNNING_IDS
 
 
 def test_proximity_expr_chain_unordered(mock_session):
@@ -249,7 +259,7 @@ def test_proximity_expr_chain_unordered(mock_session):
     stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert isinstance(ids, set)
+    assert ids == RUNNING_IDS
 
 
 def test_proximity_expr_chain_ordered(mock_session):
@@ -258,7 +268,7 @@ def test_proximity_expr_chain_ordered(mock_session):
     stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert isinstance(ids, set)
+    assert ids == RUNNING_IDS
 
 
 def test_prox_regex_with_ordered(mock_session):
@@ -267,7 +277,7 @@ def test_prox_regex_with_ordered(mock_session):
     stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert isinstance(ids, set)
+    assert ids == RUNNING_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +306,8 @@ def test_boost_does_not_change_result_set(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_bm25_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)
-    assert ids_base == ids_boost
+    assert ids_base == SHOES_IDS
+    assert ids_boost == SHOES_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -306,44 +317,26 @@ def test_boost_does_not_change_result_set(mock_session):
 
 def test_more_like_this_by_document_id(mock_session):
     """MLT by single document_id returns similar documents."""
-    # Find a running-shoes item first
-    shoe_items = list(
-        mock_session.scalars(
-            select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes")).limit(1)
-        )
-    )
-    assert shoe_items, "Need at least one running-shoes item"
-    source_id = shoe_items[0]
-
-    stmt = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=source_id, fields=["description"]))
+    stmt = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=3, fields=["description"]))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert source_id in ids
+    assert ids == MLT_RUNNING_SHOES_IDS
 
 
 def test_more_like_this_by_document_ids(mock_session):
     """MLT with multiple document_ids ORs the results together."""
-    shoe_items = list(
-        mock_session.scalars(select(MockItem.id).where(search.match_any(MockItem.description, "shoes")).limit(1))
-    )
-    wireless_items = list(
-        mock_session.scalars(select(MockItem.id).where(search.match_any(MockItem.description, "wireless")).limit(1))
-    )
-    assert shoe_items and wireless_items, "Need both shoe and wireless items"
-
-    id1, id2 = shoe_items[0], wireless_items[0]
     stmt_combined = select(MockItem.id).where(
-        search.more_like_this(MockItem.id, document_ids=[id1, id2], fields=["description"])
+        search.more_like_this(MockItem.id, document_ids=[3, 12], fields=["description"])
     )
-    stmt_id1 = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=id1, fields=["description"]))
-    stmt_id2 = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=id2, fields=["description"]))
+    stmt_id1 = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=3, fields=["description"]))
+    stmt_id2 = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=12, fields=["description"]))
     assert_uses_paradedb_scan(mock_session, stmt_combined, index_name="mock_items_bm25_idx")
     ids_combined = _ids(mock_session, stmt_combined)
     ids_1 = _ids(mock_session, stmt_id1)
     ids_2 = _ids(mock_session, stmt_id2)
-    # Union of individual MLTs should be a subset of combined (OR logic)
-    assert ids_1.issubset(ids_combined)
-    assert ids_2.issubset(ids_combined)
+    assert ids_1 == MLT_RUNNING_SHOES_IDS
+    assert ids_2 == WIRELESS_IDS
+    assert ids_combined == MLT_COMBINED_IDS
 
 
 def test_more_like_this_by_document_payload(mock_session):
@@ -353,58 +346,39 @@ def test_more_like_this_by_document_payload(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    assert len(ids) > 0
+    assert ids == WIRELESS_IDS
 
 
 def test_more_like_this_with_stopwords(mock_session):
     """MLT with stopwords changes which terms drive similarity."""
-    shoe_items = list(
-        mock_session.scalars(
-            select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes")).limit(1)
-        )
-    )
-    assert shoe_items
-    source_id = shoe_items[0]
-
     ids_baseline = _ids(
         mock_session,
-        select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=source_id, fields=["description"])),
+        select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=3, fields=["description"])),
     )
     ids_with_stopword = _ids(
         mock_session,
         select(MockItem.id).where(
-            search.more_like_this(MockItem.id, document_id=source_id, fields=["description"], stopwords=["shoes"])
+            search.more_like_this(MockItem.id, document_id=3, fields=["description"], stopwords=["shoes"])
         ),
     )
-    # Source item should always be included
-    assert source_id in ids_baseline
-    assert source_id in ids_with_stopword
-    # Stopwords should not increase result count
-    assert len(ids_with_stopword) <= len(ids_baseline)
+    assert ids_baseline == MLT_RUNNING_SHOES_IDS
+    assert ids_with_stopword == RUNNING_IDS
 
 
 def test_more_like_this_with_min_word_length(mock_session):
     """MLT with min_word_length filters short terms from driving similarity."""
-    shoe_items = list(
-        mock_session.scalars(
-            select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes")).limit(1)
-        )
-    )
-    assert shoe_items
-    source_id = shoe_items[0]
-
     ids_baseline = _ids(
         mock_session,
-        select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=source_id, fields=["description"])),
+        select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=3, fields=["description"])),
     )
     ids_filtered = _ids(
         mock_session,
         select(MockItem.id).where(
-            search.more_like_this(MockItem.id, document_id=source_id, fields=["description"], min_word_length=6)
+            search.more_like_this(MockItem.id, document_id=3, fields=["description"], min_word_length=6)
         ),
     )
-    assert source_id in ids_baseline
-    assert source_id in ids_filtered
+    assert ids_baseline == MLT_RUNNING_SHOES_IDS
+    assert ids_filtered == RUNNING_IDS
 
 
 def test_more_like_this_document_ids_empty_raises(mock_session):
@@ -525,10 +499,7 @@ def test_search_combined_with_standard_filter(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
-    # All returned items should have rating >= 4
-    if ids:
-        ratings = list(mock_session.scalars(select(MockItem.rating).where(MockItem.id.in_(ids))))
-        assert all(r >= 4 for r in ratings)
+    assert ids == SHOES_RATING_GTE4_IDS
 
 
 def test_all_predicate_matches_everything(mock_session):
@@ -536,5 +507,4 @@ def test_all_predicate_matches_everything(mock_session):
     total = mock_session.scalar(
         select(MockItem.id).where(search.all(MockItem.id)).with_only_columns(__import__("sqlalchemy").func.count())
     )
-    # mock_items typically has many rows (paradedb creates ~41)
-    assert total is not None and total > 0
+    assert total == ALL_MOCK_ITEM_COUNT

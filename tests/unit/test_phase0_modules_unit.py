@@ -66,8 +66,10 @@ def test_inspect_no_predicate_for_plain_sql():
 
 
 def test_inspect_detects_fuzzy_predicate():
-    fuzzy_stmt = select(products.c.id).where(search.fuzzy(products.c.description, "wirless", distance=1))
-    boosted_fuzzy_stmt = select(products.c.id).where(search.fuzzy(products.c.description, "wirless", distance=1, boost=2))
+    fuzzy_stmt = select(products.c.id).where(search.match_any(products.c.description, "wirless", distance=1))
+    boosted_fuzzy_stmt = select(products.c.id).where(
+        search.match_any(products.c.description, "wirless", distance=1, boost=2)
+    )
     non_fuzzy_stmt = select(products.c.id).where(search.term(products.c.description, "wireless"))
 
     assert pdb_inspect.has_fuzzy_predicate(fuzzy_stmt)
@@ -76,12 +78,16 @@ def test_inspect_detects_fuzzy_predicate():
 
 
 def test_select_with_snippet_guard_raises_on_fuzzy():
-    base = select(products.c.id, products.c.description).where(search.fuzzy(products.c.description, "wirless", distance=1))
+    base = select(products.c.id, products.c.description).where(
+        search.match_any(products.c.description, "wirless", distance=1)
+    )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet(base, products.c.description)
 
 
 def test_select_with_snippet_positions_guard_raises_on_fuzzy():
-    base = select(products.c.id, products.c.description).where(search.fuzzy(products.c.description, "wirless", distance=1))
+    base = select(products.c.id, products.c.description).where(
+        search.match_any(products.c.description, "wirless", distance=1)
+    )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet_positions(base, products.c.description)
