@@ -76,6 +76,17 @@ def test_with_rows_adds_window_agg_column():
     assert facet_plan.label == "facets"
 
 
+def test_with_rows_accepts_fetch_clause():
+    base = select(products.c.id, products.c.description).order_by(products.c.id).fetch(10)
+    stmt, facet_plan = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+    sql = _sql(stmt)
+
+    assert "OVER () AS facets" in sql
+    assert "FETCH FIRST (10) ROWS ONLY" in sql
+    assert "products.id @@@ pdb.all()" in sql
+    assert facet_plan.label == "facets"
+
+
 def test_facet_plan_extract_empty_rows_returns_none():
     base = select(products.c.id).order_by(products.c.id).limit(1)
     _, facet_plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)

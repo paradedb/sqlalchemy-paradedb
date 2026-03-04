@@ -39,6 +39,9 @@ class MockItem(Base):
     metadata_: Mapped[Any] = mapped_column("metadata", JSONB, nullable=True)
 
 
+PARADEDB_SCAN_PROVIDERS = {"ParadeDB Scan", "ParadeDB Aggregate Scan", "ParadeDB Join Scan"}
+
+
 @pytest.fixture(scope="session")
 def db_url() -> str:
     url = (
@@ -120,19 +123,25 @@ def walk_plan_nodes(node: dict[str, Any]) -> Iterator[dict[str, Any]]:
         yield from walk_plan_nodes(child)
 
 
-def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "products_bm25_idx") -> None:
-    plan = explain_plan_json(session, stmt)
+def assert_plan_uses_paradedb_scan(plan: dict[str, Any], *, index_name: str | None = None) -> None:
     root = plan["Plan"]
     nodes = list(walk_plan_nodes(root))
 
     parade_nodes = [
         node
         for node in nodes
-        if node.get("Node Type") == "Custom Scan"
-        and node.get("Custom Plan Provider") in {"ParadeDB Scan", "ParadeDB Aggregate Scan"}
+        if node.get("Node Type") == "Custom Scan" and node.get("Custom Plan Provider") in PARADEDB_SCAN_PROVIDERS
     ]
     assert parade_nodes, f"Expected ParadeDB Custom Scan in plan, got: {plan}"
-    assert any(node.get("Index") == index_name for node in parade_nodes), f"Expected index {index_name} in plan: {plan}"
+    if index_name is not None:
+        assert any(node.get("Index") == index_name for node in parade_nodes), (
+            f"Expected index {index_name} in plan: {plan}"
+        )
+
+
+def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "products_bm25_idx") -> None:
+    plan = explain_plan_json(session, stmt)
+    assert_plan_uses_paradedb_scan(plan, index_name=index_name)
 
 
 @pytest.fixture(scope="session")
