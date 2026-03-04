@@ -11,7 +11,6 @@ from .sqlalchemy.pdb import agg, score, snippet, snippet_positions, snippets
 from .sqlalchemy.search import (
     ProximityExpr,
     all,
-    fuzzy,
     match_all,
     match_any,
     more_like_this,
@@ -35,7 +34,6 @@ __all__ = [
     "all",
     "assert_indexed",
     "describe",
-    "fuzzy",
     "match_all",
     "match_any",
     "more_like_this",

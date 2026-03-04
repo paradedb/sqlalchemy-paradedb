@@ -55,10 +55,12 @@ def test_match_any_fuzzy_compile():
     assert "description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)" in sql
 
 
-def test_fuzzy_wrapper_matches_term_compile():
-    fuzzy_stmt = select(products.c.id).where(search.fuzzy(products.c.description, "shose", distance=1))
-    term_stmt = select(products.c.id).where(search.term(products.c.description, "shose", distance=1))
-    assert _sql(fuzzy_stmt) == _sql(term_stmt)
+def test_term_fuzzy_compile_with_transpose_implicit_prefix_slot():
+    stmt = select(products.c.id).where(
+        search.term(products.c.description, "shose", distance=1, transpose_cost_one=True)
+    )
+    sql = _sql(stmt)
+    assert "description === 'shose'::pdb.fuzzy(1, f, t)" in sql
 
 
 def test_regex_and_all_compile():

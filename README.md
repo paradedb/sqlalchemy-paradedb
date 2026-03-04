@@ -118,7 +118,11 @@ Fuzzy search uses the normal term-style builders:
 ```python
 search.term(Product.description, "shose", distance=1)
 search.match_any(Product.description, "wirless", distance=1, prefix=True)
+search.term(Product.description, "rnnuing", distance=1, transpose_cost_one=True)
 ```
+
+There is no separate `search.fuzzy(...)` helper. Use the standard term-style
+builders with fuzzy arguments instead.
 
 ## Facets
 

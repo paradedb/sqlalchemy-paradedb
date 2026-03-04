@@ -127,25 +127,6 @@ def phrase(
     return field.operate(_PHRASE, payload)
 
 
-def fuzzy(
-    field: ColumnElement,
-    value: str,
-    *,
-    distance: int,
-    prefix: bool | None = None,
-    transpose_cost_one: bool | None = None,
-    boost: float | None = None,
-) -> ColumnElement[bool]:
-    return term(
-        field,
-        value,
-        boost,
-        distance=distance,
-        prefix=bool(prefix),
-        transpose_cost_one=bool(transpose_cost_one),
-    )
-
-
 def regex(field: ColumnElement, pattern: str) -> ColumnElement[bool]:
     require_non_empty_string(pattern, field_name="pattern")
     return field.operate(_QUERY, func.pdb.regex(pattern))
