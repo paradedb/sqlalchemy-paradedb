@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Text, func, literal, literal_column, or_
-from sqlalchemy.dialects.postgresql import array
+from sqlalchemy import Text, cast, func, literal, literal_column, or_
+from sqlalchemy.dialects.postgresql import ARRAY, array
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
@@ -32,6 +34,7 @@ _PHRASE: Any = operators.custom_op("###", precedence=5, is_comparison=True)
 _QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
 _NEAR: Any = operators.custom_op("##", precedence=5)
 _NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
+_PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _to_term_payload(*terms: str) -> ClauseElement:
@@ -47,6 +50,54 @@ def _apply_boost(expr: ClauseElement, boost: float | None) -> ClauseElement:
     if boost is None:
         return expr
     return PDBCast(expr, "boost", (boost,))
+
+
+def _apply_const(expr: ClauseElement, const: float | None) -> ClauseElement:
+    if const is None:
+        return expr
+    if isinstance(expr, PDBCast) and expr.type_name in {"fuzzy", "slop"}:
+        expr = PDBCast(expr, "query")
+    return PDBCast(expr, "const", (const,))
+
+
+def _validate_pdb_identifier(name: str, *, field_name: str) -> str:
+    require_non_empty_string(name, field_name=field_name)
+    if not _PDB_IDENTIFIER_RE.fullmatch(name):
+        raise InvalidArgumentError(
+            f"{field_name} must be a bare identifier (letters, digits, underscore) for safe pdb cast rendering"
+        )
+    return name
+
+
+def _apply_tokenizer(expr: ClauseElement, tokenizer: str | None) -> ClauseElement:
+    if tokenizer is None:
+        return expr
+    tokenizer_name = _validate_pdb_identifier(tokenizer, field_name="tokenizer")
+    return PDBCast(expr, tokenizer_name)
+
+
+def _to_phrase_payload(value: str | Sequence[str]) -> ClauseElement:
+    if isinstance(value, str):
+        require_non_empty_string(value, field_name="value")
+        return literal(value)
+    if not isinstance(value, Sequence):
+        raise InvalidArgumentError("value must be a non-empty string or a sequence of non-empty strings")
+    if not value:
+        raise InvalidArgumentError("value must contain at least one token")
+    require_non_empty_strings(value, field_name="value")
+    return array(list(value), type_=Text())
+
+
+def _apply_score_tuning(
+    expr: ClauseElement,
+    *,
+    boost: float | None = None,
+    const: float | None = None,
+) -> ClauseElement:
+    if boost is not None and const is not None:
+        raise InvalidArgumentError("boost and const are mutually exclusive")
+    expr = _apply_boost(expr, boost)
+    return _apply_const(expr, const)
 
 
 def _apply_fuzzy(
@@ -74,13 +125,16 @@ def match_all(
     field: ColumnElement,
     *terms: str,
     boost: float | None = None,
+    const: float | None = None,
     distance: int | None = None,
     prefix: bool = False,
     transpose_cost_one: bool = False,
+    tokenizer: str | None = None,
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_boost(payload, boost)
+    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ALL, payload)
 
 
@@ -88,13 +142,16 @@ def match_any(
     field: ColumnElement,
     *terms: str,
     boost: float | None = None,
+    const: float | None = None,
     distance: int | None = None,
     prefix: bool = False,
     transpose_cost_one: bool = False,
+    tokenizer: str | None = None,
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_boost(payload, boost)
+    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ANY, payload)
 
 
@@ -102,38 +159,63 @@ def term(
     field: ColumnElement,
     value: str,
     boost: float | None = None,
+    const: float | None = None,
     *,
     distance: int | None = None,
     prefix: bool = False,
     transpose_cost_one: bool = False,
+    tokenizer: str | None = None,
 ) -> ColumnElement[bool]:
     require_non_empty_string(value, field_name="value")
     payload: ClauseElement = literal(value)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_boost(payload, boost)
+    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_TERM, payload)
 
 
 def phrase(
-    field: ColumnElement, value: str, *, slop: int | None = None, boost: float | None = None
+    field: ColumnElement,
+    value: str | Sequence[str],
+    *,
+    slop: int | None = None,
+    boost: float | None = None,
+    const: float | None = None,
+    tokenizer: str | None = None,
 ) -> ColumnElement[bool]:
-    require_non_empty_string(value, field_name="value")
     if slop is not None:
         require_non_negative(slop, field_name="slop")
-    payload: ClauseElement = literal(value)
+    is_token_array = not isinstance(value, str)
+    payload: ClauseElement = _to_phrase_payload(value)
+    payload = _apply_tokenizer(payload, tokenizer)
     if slop is not None:
+        # psycopg binds array elements as VARCHAR by default; slop cast requires TEXT[].
+        if is_token_array:
+            payload = cast(payload, ARRAY(Text()))
         payload = PDBCast(payload, "slop", (slop,))
-    payload = _apply_boost(payload, boost)
+    payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_PHRASE, payload)
 
 
-def regex(field: ColumnElement, pattern: str) -> ColumnElement[bool]:
+def regex(
+    field: ColumnElement,
+    pattern: str,
+    *,
+    boost: float | None = None,
+    const: float | None = None,
+) -> ColumnElement[bool]:
     require_non_empty_string(pattern, field_name="pattern")
-    return field.operate(_QUERY, func.pdb.regex(pattern))
+    payload: ClauseElement = func.pdb.regex(pattern)
+    payload = _apply_score_tuning(payload, boost=boost, const=const)
+    return field.operate(_QUERY, payload)
 
 
 def all(field: ColumnElement) -> ColumnElement[bool]:
     return field.operate(_QUERY, func.pdb.all())
+
+
+def exists(field: ColumnElement) -> ColumnElement[bool]:
+    return field.operate(_QUERY, func.pdb.exists())
 
 
 class ProximityExpr:
@@ -264,7 +346,7 @@ def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> Colu
 
 def range_term(
     field: ColumnElement,
-    bounds: str,
+    bounds: str | ClauseElement | int | float,
     *,
     relation: str = "Intersects",
     range_type: str | None = None,
@@ -273,19 +355,31 @@ def range_term(
 
     Args:
         field: A range-typed column (int4range, daterange, tstzrange, etc.).
-        bounds: A range literal string, e.g. ``"[3,9]"``, ``"(3,9]"``.
+        bounds: Either a scalar point (e.g. ``1``) or a range literal string
+                (e.g. ``"[3,9]"``, ``"(3,9]"``).
         relation: One of ``"Intersects"``, ``"Contains"``, ``"Within"``,
                   ``"ContainsOrIntersects"``. Defaults to ``"Intersects"``.
+                  Only used when ``bounds`` is a range literal string.
         range_type: Optional PostgreSQL range type for explicit casting, e.g.
                     ``"int4range"``, ``"int8range"``, ``"numrange"``,
                     ``"daterange"``, ``"tsrange"``, ``"tstzrange"``.
                     When provided, generates ``'bounds'::range_type`` cast.
+                    Only used when ``bounds`` is a range literal string.
 
     Generates::
 
+        field @@@ pdb.range_term(1)
         field @@@ pdb.range_term('[3,9]', 'Contains')
         field @@@ pdb.range_term('[3,9]'::int4range, 'Contains')
     """
+    if not isinstance(bounds, str):
+        if relation != "Intersects":
+            raise InvalidArgumentError("relation is only supported when bounds is a range literal string")
+        if range_type is not None:
+            raise InvalidArgumentError("range_type is only supported when bounds is a range literal string")
+        scalar_arg = bounds if isinstance(bounds, ClauseElement) else literal(bounds)
+        return field.operate(_QUERY, func.pdb.range_term(scalar_arg))
+
     require_non_empty_string(bounds, field_name="bounds")
     if relation not in _VALID_RANGE_RELATIONS:
         raise InvalidArgumentError(f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}")
@@ -295,10 +389,10 @@ def range_term(
         if range_type not in _VALID_RANGE_TYPES:
             raise InvalidArgumentError(f"range_type must be one of: {', '.join(sorted(_VALID_RANGE_TYPES))}")
         escaped = bounds.replace("'", "''")
-        bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
+        range_bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
     else:
-        bounds_arg = literal(bounds)
-    return field.operate(_QUERY, func.pdb.range_term(bounds_arg, relation_arg))
+        range_bounds_arg = literal(bounds)
+    return field.operate(_QUERY, func.pdb.range_term(range_bounds_arg, relation_arg))
 
 
 def more_like_this(

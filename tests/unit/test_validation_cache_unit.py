@@ -72,6 +72,21 @@ def test_search_argument_validation_errors():
     with pytest.raises(InvalidArgumentError, match="pattern must be a non-empty string"):
         search.regex(products.c.description, "")
 
+    with pytest.raises(InvalidArgumentError, match="tokenizer must be a bare identifier"):
+        search.match_any(products.c.description, "running shoes", tokenizer="whitespace;drop")
+
+    with pytest.raises(InvalidArgumentError, match="value must contain at least one token"):
+        search.phrase(products.c.description, [])
+
+    with pytest.raises(InvalidArgumentError, match="range_type is only supported"):
+        search.range_term(products.c.id, 1, range_type="int4range")
+
+    with pytest.raises(InvalidArgumentError, match="relation is only supported"):
+        search.range_term(products.c.id, 1, relation="Contains")
+
+    with pytest.raises(InvalidArgumentError, match="mutually exclusive"):
+        search.match_any(products.c.description, "shoes", boost=2.0, const=1.0)
+
 
 def test_more_like_this_uses_specific_error_type():
     with pytest.raises(InvalidMoreLikeThisOptionsError, match="exactly one"):

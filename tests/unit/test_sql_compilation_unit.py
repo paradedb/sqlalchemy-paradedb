@@ -14,6 +14,7 @@ products = table(
     column("id", Integer),
     column("description", Text),
     column("category", String),
+    column("rating", Integer),
 )
 
 
@@ -71,6 +72,56 @@ def test_regex_and_all_compile():
 
     assert "description @@@ pdb.regex('run.*')" in regex_sql
     assert "id @@@ pdb.all()" in all_sql
+
+
+def test_match_any_with_tokenizer_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(products.c.description, "running shoes", tokenizer="whitespace")
+    )
+    sql = _sql(stmt)
+    assert "description ||| 'running shoes'::pdb.whitespace" in sql
+
+
+def test_phrase_with_tokenizer_compile():
+    stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", tokenizer="whitespace"))
+    sql = _sql(stmt)
+    assert "description ### 'running shoes'::pdb.whitespace" in sql
+
+
+def test_phrase_pretokenized_with_slop_compile():
+    stmt = select(products.c.id).where(search.phrase(products.c.description, ["shoes", "running"], slop=2))
+    sql = _sql(stmt)
+    assert "description ### CAST(ARRAY['shoes', 'running'] AS TEXT[])::pdb.slop(2)" in sql
+
+
+def test_phrase_with_slop_and_const_compile():
+    stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", slop=2, const=1.0))
+    sql = _sql(stmt)
+    assert "description ### 'running shoes'::pdb.slop(2)::pdb.query::pdb.const(1.0)" in sql
+
+
+def test_regex_boost_compile():
+    stmt = select(products.c.id).where(search.regex(products.c.description, "key.*", boost=2.0))
+    sql = _sql(stmt)
+    assert "description @@@ pdb.regex('key.*')::pdb.boost(2.0)" in sql
+
+
+def test_match_any_fuzzy_with_const_compile():
+    stmt = select(products.c.id).where(search.match_any(products.c.description, "shose", distance=2, const=1.0))
+    sql = _sql(stmt)
+    assert "description ||| 'shose'::pdb.fuzzy(2)::pdb.query::pdb.const(1.0)" in sql
+
+
+def test_match_any_const_compile():
+    stmt = select(products.c.id).where(search.match_any(products.c.description, "shoes", const=1.0))
+    sql = _sql(stmt)
+    assert "description ||| 'shoes'::pdb.const(1.0)" in sql
+
+
+def test_exists_compile():
+    stmt = select(products.c.id).where(search.exists(products.c.rating))
+    sql = _sql(stmt)
+    assert "rating @@@ pdb.exists()" in sql
 
 
 def test_pdb_helpers_compile():
@@ -260,6 +311,13 @@ def test_range_term_explicit_relation_compile():
 def test_range_term_invalid_relation_raises():
     with pytest.raises(ValueError, match="relation must be one of"):
         search.range_term(products.c.id, "[3,9]", relation="BadRelation")
+
+
+def test_range_term_scalar_compile():
+    range_items = table("range_items", column("id", Integer), column("weight_range", postgresql.INT4RANGE))
+    stmt = select(range_items.c.id).where(search.range_term(range_items.c.weight_range, 1))
+    sql = _sql(stmt)
+    assert "weight_range @@@ pdb.range_term(1)" in sql
 
 
 # ---------------------------------------------------------------------------
