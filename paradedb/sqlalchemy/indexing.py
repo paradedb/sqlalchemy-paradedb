@@ -621,9 +621,10 @@ def _normalize_reloption_value(value: str | None) -> str | None:
 
 
 def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | None = None):
-    return conn.execute(
-        text(
-            """
+    return (
+        conn.execute(
+            text(
+                """
             SELECT
               ns.nspname AS schemaname,
               tbl.relname AS tablename,
@@ -652,9 +653,12 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
               AND pg_get_indexdef(idx.oid) ILIKE '%USING bm25%'
             ORDER BY idx.relname, key_ord.ord
             """
-        ),
-        {"schema_name": schema_name, "table_name": table_name},
-    ).mappings().all()
+            ),
+            {"schema_name": schema_name, "table_name": table_name},
+        )
+        .mappings()
+        .all()
+    )
 
 
 def describe(engine: Engine, table, *, schema: str | None = None) -> list[IndexMeta]:
@@ -787,8 +791,6 @@ def validate_pushdown(stmt: Any) -> list[str]:
         warnings.append("No ParadeDB predicate found in WHERE clause; query will not use a BM25 index")
 
     if has_order_by(stmt) and not has_limit(stmt):
-        warnings.append(
-            "ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both"
-        )
+        warnings.append("ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both")
 
     return warnings

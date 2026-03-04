@@ -18,9 +18,7 @@ pytestmark = pytest.mark.integration
 def _running_ids(mock_session) -> set[int]:
     return set(
         mock_session.scalars(
-            select(MockItem.id)
-            .where(search.match_any(MockItem.description, "running"))
-            .order_by(MockItem.id)
+            select(MockItem.id).where(search.match_any(MockItem.description, "running")).order_by(MockItem.id)
         )
     )
 
@@ -187,10 +185,7 @@ def test_select_with_score_adds_column(mock_session):
 
 def test_select_with_snippet_adds_column(mock_session):
     """select_with.snippet() appends a snippet column to the statement."""
-    base = (
-        select(MockItem.id, MockItem.description)
-        .where(search.match_any(MockItem.description, "running"))
-    )
+    base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippet(base, MockItem.description, label="snip")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     expected_ids = _running_ids(mock_session)
@@ -202,10 +197,7 @@ def test_select_with_snippet_adds_column(mock_session):
 
 def test_select_with_snippets_adds_column(mock_session):
     """select_with.snippets() appends a snippets column to the statement."""
-    base = (
-        select(MockItem.id, MockItem.description)
-        .where(search.match_any(MockItem.description, "running"))
-    )
+    base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippets(base, MockItem.description, label="snips")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     expected_ids = _running_ids(mock_session)
@@ -216,10 +208,7 @@ def test_select_with_snippets_adds_column(mock_session):
 
 def test_select_with_snippet_positions_adds_column(mock_session):
     """select_with.snippet_positions() appends positions column to the statement."""
-    base = (
-        select(MockItem.id, MockItem.description)
-        .where(search.match_any(MockItem.description, "running"))
-    )
+    base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippet_positions(base, MockItem.description, label="positions")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     expected_ids = _running_ids(mock_session)
@@ -231,30 +220,21 @@ def test_select_with_snippet_positions_adds_column(mock_session):
 
 def test_select_with_snippet_rejects_fuzzy_predicate(mock_session):
     """select_with.snippet() raises when the predicate is fuzzy (no positions)."""
-    base = (
-        select(MockItem.id, MockItem.description)
-        .where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    )
+    base = select(MockItem.id, MockItem.description).where(search.fuzzy(MockItem.description, "runnning", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet(base, MockItem.description)
 
 
 def test_select_with_snippets_rejects_fuzzy_predicate(mock_session):
     """select_with.snippets() raises when the predicate is fuzzy."""
-    base = (
-        select(MockItem.id, MockItem.description)
-        .where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    )
+    base = select(MockItem.id, MockItem.description).where(search.fuzzy(MockItem.description, "runnning", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippets(base, MockItem.description)
 
 
 def test_select_with_snippet_positions_rejects_fuzzy_predicate(mock_session):
     """select_with.snippet_positions() raises when the predicate is fuzzy."""
-    base = (
-        select(MockItem.id, MockItem.description)
-        .where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    )
+    base = select(MockItem.id, MockItem.description).where(search.fuzzy(MockItem.description, "runnning", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet_positions(base, MockItem.description)
 

@@ -21,7 +21,9 @@ from .validation import (
 )
 
 _VALID_RANGE_RELATIONS: frozenset[str] = frozenset({"Intersects", "Contains", "Within", "ContainsOrIntersects"})
-_VALID_RANGE_TYPES: frozenset[str] = frozenset({"int4range", "int8range", "numrange", "daterange", "tsrange", "tstzrange"})
+_VALID_RANGE_TYPES: frozenset[str] = frozenset(
+    {"int4range", "int8range", "numrange", "daterange", "tsrange", "tstzrange"}
+)
 
 _MATCH_ALL: Any = operators.custom_op("&&&", precedence=5, is_comparison=True)
 _MATCH_ANY: Any = operators.custom_op("|||", precedence=5, is_comparison=True)
@@ -63,7 +65,9 @@ def term(field: ColumnElement, value: str, boost: float | None = None) -> Column
     return field.operate(_TERM, payload)
 
 
-def phrase(field: ColumnElement, value: str, *, slop: int | None = None, boost: float | None = None) -> ColumnElement[bool]:
+def phrase(
+    field: ColumnElement, value: str, *, slop: int | None = None, boost: float | None = None
+) -> ColumnElement[bool]:
     require_non_empty_string(value, field_name="value")
     if slop is not None:
         require_non_negative(slop, field_name="slop")
@@ -139,7 +143,13 @@ def _to_proximity_clause(value: str | ClauseElement | ProximityExpr) -> ClauseEl
     return PDBCast(operand, "proximityclause")
 
 
-def _near_chain(left: str | ClauseElement | ProximityExpr, right: str | ClauseElement | ProximityExpr, *, distance: int, ordered: bool = False) -> ClauseElement:
+def _near_chain(
+    left: str | ClauseElement | ProximityExpr,
+    right: str | ClauseElement | ProximityExpr,
+    *,
+    distance: int,
+    ordered: bool = False,
+) -> ClauseElement:
     require_non_negative(distance, field_name="distance")
     left_expr = _to_proximity_clause(left)
     right_expr = _to_proximity_clause(right)
@@ -164,7 +174,9 @@ def _resolve_near_operand(
     return right
 
 
-def parse(field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False) -> ColumnElement[bool]:
+def parse(
+    field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False
+) -> ColumnElement[bool]:
     require_non_empty_string(query, field_name="query")
     return field.operate(_QUERY, func.pdb.parse(query, lenient, conjunction_mode))
 
@@ -250,16 +262,12 @@ def range_term(
     """
     require_non_empty_string(bounds, field_name="bounds")
     if relation not in _VALID_RANGE_RELATIONS:
-        raise InvalidArgumentError(
-            f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}"
-        )
+        raise InvalidArgumentError(f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}")
     escaped_relation = relation.replace("'", "''")
     relation_arg: ClauseElement = literal_column(f"'{escaped_relation}'")
     if range_type is not None:
         if range_type not in _VALID_RANGE_TYPES:
-            raise InvalidArgumentError(
-                f"range_type must be one of: {', '.join(sorted(_VALID_RANGE_TYPES))}"
-            )
+            raise InvalidArgumentError(f"range_type must be one of: {', '.join(sorted(_VALID_RANGE_TYPES))}")
         escaped = bounds.replace("'", "''")
         bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
     else:
@@ -360,7 +368,9 @@ def more_like_this(
         return PDBFunctionWithNamedArgs("more_like_this", positional_args, named_options)
 
     if document_ids is not None:
-        clauses = [field.operate(_QUERY, _build_mlt_call(literal(doc_id), include_fields=True)) for doc_id in document_ids]
+        clauses = [
+            field.operate(_QUERY, _build_mlt_call(literal(doc_id), include_fields=True)) for doc_id in document_ids
+        ]
         return or_(*clauses)
 
     if document_id is not None:
