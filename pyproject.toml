@@ -8,9 +8,43 @@ version = "0.1.0"
 description = "Typed SQLAlchemy helpers for ParadeDB"
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [
+  { name = "ParadeDB" },
+]
+keywords = [
+  "paradedb",
+  "sqlalchemy",
+  "postgres",
+  "postgresql",
+  "search",
+  "bm25",
+  "text search",
+  "full text search",
+  "hybrid search",
+  "faceted search",
+  "facets",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Database",
+]
 dependencies = [
   "sqlalchemy>=2.0.32",
 ]
+
+[project.urls]
+Homepage = "https://github.com/paradedb/sqlalchemy-paradedb"
+Repository = "https://github.com/paradedb/sqlalchemy-paradedb"
+Issues = "https://github.com/paradedb/sqlalchemy-paradedb/issues"
+Changelog = "https://github.com/paradedb/sqlalchemy-paradedb/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = [
