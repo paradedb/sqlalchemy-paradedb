@@ -14,6 +14,7 @@ from paradedb.sqlalchemy.errors import (
     InvalidArgumentError,
     InvalidMoreLikeThisOptionsError,
 )
+from paradedb.sqlalchemy.indexing import validate_pushdown
 
 
 products = table(
@@ -123,10 +124,40 @@ def test_with_rows_guard_error_types():
 
 
 def test_with_rows_does_not_inject_sentinel_when_predicate_exists():
-    base = select(products.c.id).where(search.match_all(products.c.description, "running")).order_by(products.c.id).limit(5)
+    base = (
+        select(products.c.id)
+        .where(search.match_all(products.c.description, "running"))
+        .order_by(products.c.id)
+        .limit(5)
+    )
     stmt, _ = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
     sql = _sql(stmt)
     assert "pdb.all()" not in sql
+
+
+def test_with_rows_limit_guard_ignores_limit_identifier_names():
+    odd_table = table(
+        "odd_products",
+        column("id", Integer),
+        column("limit", Integer),
+    )
+    stmt = select(odd_table.c.limit).order_by(odd_table.c.id)
+
+    with pytest.raises(FacetRequiresLimitError):
+        facets.with_rows(stmt, agg=facets.value_count(field="id"), key_field=odd_table.c.id)
+
+
+def test_validate_pushdown_ignores_limit_identifier_names():
+    odd_table = table(
+        "odd_products",
+        column("id", Integer),
+        column("limit", Integer),
+    )
+    stmt = select(odd_table.c.limit).where(search.match_all(odd_table.c.id, "1")).order_by(odd_table.c.id)
+
+    warnings = validate_pushdown(stmt)
+
+    assert "ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both" in warnings
 
 
 def test_custom_nodes_have_cache_keys():

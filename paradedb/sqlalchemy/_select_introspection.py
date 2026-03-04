@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import re
 from typing import Any
-
-_ORDER_BY_RE = re.compile(r"\border\s+by\b", re.IGNORECASE)
-_LIMIT_RE = re.compile(r"\blimit\b", re.IGNORECASE)
 
 
 def has_order_by(stmt: Any) -> bool:
+    clauses = getattr(stmt, "_order_by_clauses", None)
+    if clauses is not None:
+        return bool(tuple(clauses))
+
     getter = getattr(stmt, "get_order_by", None)
     if callable(getter):
         clauses = tuple(getter())
@@ -21,10 +21,13 @@ def has_order_by(stmt: Any) -> bool:
             return bool(tuple(order_by_clauses))
         return bool(str(order_by_clause).strip())
 
-    return bool(_ORDER_BY_RE.search(str(stmt)))
+    return False
 
 
 def has_limit(stmt: Any) -> bool:
+    if getattr(stmt, "_limit_clause", None) is not None:
+        return True
+
     getter = getattr(stmt, "get_limit", None)
     if callable(getter):
         if getter() is not None:
@@ -34,4 +37,4 @@ def has_limit(stmt: Any) -> bool:
     if limit_clause is not None:
         return True
 
-    return bool(_LIMIT_RE.search(str(stmt)))
+    return False

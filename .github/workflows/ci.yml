@@ -1,9 +1,23 @@
+# workflows/ci.yml
+#
+# CI
+# Run linting and test matrix across supported Python versions.
+
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: postgres
 
 jobs:
   lint:
@@ -44,6 +58,27 @@ jobs:
           - "3.12"
           - "3.13"
           - "3.14"
+
+    services:
+      paradedb:
+        image: paradedb/paradedb:0.21.10-pg18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      PARADEDB_TEST_DSN: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+      PGPASSWORD: postgres
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -61,28 +96,13 @@ jobs:
       - name: Sync dependencies
         run: uv sync --extra test --extra dev
 
-    services:
-      paradedb:
-        image: paradedb/paradedb:0.21.10-pg18
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
       - name: Install pg client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Wait for ParadeDB
-        env:
-          PGPASSWORD: postgres
         run: |
           for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            pg_isready -h localhost -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" && exit 0
             sleep 2
           done
           echo "ParadeDB did not become ready" >&2
@@ -93,9 +113,8 @@ jobs:
 
       - name: Run integration tests
         run: uv run --extra test pytest -m integration
+
       - name: Run examples
-        env:
-          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
         run: |
           uv run --extra test python examples/quickstart.py
           uv run --extra test python examples/autocomplete.py
