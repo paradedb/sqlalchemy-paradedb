@@ -39,12 +39,26 @@ def test_phrase_with_slop_and_boost_compile():
     assert "::pdb.slop(2)::pdb.boost(3)" in sql
 
 
-def test_fuzzy_compile_with_options():
+def test_term_fuzzy_compile_with_options():
     stmt = select(products.c.id).where(
-        search.fuzzy(products.c.description, "shose", distance=1, prefix=False, transpose_cost_one=True)
+        search.term(products.c.description, "shose", distance=1, prefix=False, transpose_cost_one=True)
     )
     sql = _sql(stmt)
     assert "description === 'shose'::pdb.fuzzy(1, f, t)" in sql
+
+
+def test_match_any_fuzzy_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(products.c.description, "running", "shose", distance=1, prefix=True)
+    )
+    sql = _sql(stmt)
+    assert "description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)" in sql
+
+
+def test_fuzzy_wrapper_matches_term_compile():
+    fuzzy_stmt = select(products.c.id).where(search.fuzzy(products.c.description, "shose", distance=1))
+    term_stmt = select(products.c.id).where(search.term(products.c.description, "shose", distance=1))
+    assert _sql(fuzzy_stmt) == _sql(term_stmt)
 
 
 def test_regex_and_all_compile():
@@ -156,7 +170,9 @@ def test_near_with_right_pattern_compile():
 
 
 def test_more_like_this_compile():
-    by_id_stmt = select(products.c.id).where(search.more_like_this(products.c.id, document_id=3, fields=["description"]))
+    by_id_stmt = select(products.c.id).where(
+        search.more_like_this(products.c.id, document_id=3, fields=["description"])
+    )
     by_doc_stmt = select(products.c.id).where(
         search.more_like_this(products.c.id, document={"description": "wireless earbuds"})
     )
@@ -176,7 +192,7 @@ def test_more_like_this_compile():
     with_opts_sql = _sql(with_opts_stmt)
 
     assert "id @@@ pdb.more_like_this(3, ARRAY['description'])" in by_id_sql
-    assert "id @@@ pdb.more_like_this('{\"description\":\"wireless earbuds\"}')" in by_doc_sql
+    assert 'id @@@ pdb.more_like_this(\'{"description":"wireless earbuds"}\')' in by_doc_sql
     assert "id @@@ pdb.more_like_this(3, ARRAY['description']" in with_opts_sql
     assert "min_term_frequency => 2" in with_opts_sql
     assert "max_query_terms => 10" in with_opts_sql
@@ -193,10 +209,7 @@ def test_more_like_this_requires_exactly_one_source():
 
 def test_alias_subquery_cte_compile():
     ProductAlias = aliased(products, name="p_alias")
-    aliased_stmt = (
-        select(ProductAlias.c.id)
-        .where(search.match_any(ProductAlias.c.description, "running"))
-    )
+    aliased_stmt = select(ProductAlias.c.id).where(search.match_any(ProductAlias.c.description, "running"))
 
     sq = select(products.c.id.label("pid"), products.c.description.label("description")).subquery("sq")
     sq_stmt = select(sq.c.pid).where(search.match_all(sq.c.description, "running", "shoes"))
@@ -229,18 +242,15 @@ def test_alias_subquery_cte_compile():
 # New feature: search.range_term
 # ---------------------------------------------------------------------------
 
+
 def test_range_term_default_relation_compile():
-    stmt = select(products.c.id).where(
-        search.range_term(products.c.id, "[3,9]")
-    )
+    stmt = select(products.c.id).where(search.range_term(products.c.id, "[3,9]"))
     sql = _sql(stmt)
     assert "id @@@ pdb.range_term('[3,9]', 'Intersects')" in sql
 
 
 def test_range_term_explicit_relation_compile():
-    stmt = select(products.c.id).where(
-        search.range_term(products.c.id, "(3,9]", relation="Contains")
-    )
+    stmt = select(products.c.id).where(search.range_term(products.c.id, "(3,9]", relation="Contains"))
     sql = _sql(stmt)
     assert "id @@@ pdb.range_term('(3,9]', 'Contains')" in sql
 
@@ -253,6 +263,7 @@ def test_range_term_invalid_relation_raises():
 # ---------------------------------------------------------------------------
 # New feature: indexing.validate_pushdown
 # ---------------------------------------------------------------------------
+
 
 def test_validate_pushdown_no_paradedb_predicate():
     from paradedb.sqlalchemy.indexing import validate_pushdown
@@ -273,11 +284,7 @@ def test_validate_pushdown_no_where_clause():
 def test_validate_pushdown_order_by_without_limit():
     from paradedb.sqlalchemy.indexing import validate_pushdown
 
-    stmt = (
-        select(products.c.id)
-        .where(search.match_any(products.c.description, "running"))
-        .order_by(products.c.id)
-    )
+    stmt = select(products.c.id).where(search.match_any(products.c.description, "running")).order_by(products.c.id)
     warnings = validate_pushdown(stmt)
     assert any("LIMIT" in w for w in warnings)
 

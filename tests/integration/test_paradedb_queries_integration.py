@@ -89,8 +89,8 @@ def test_regex_match(mock_session):
 
 
 def test_fuzzy_distance_1(mock_session):
-    """fuzzy() with distance=1 catches single-character typos."""
-    stmt = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1))
+    """match_any(..., distance=1) catches single-character typos."""
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
     # Should match "running" with one edit
@@ -98,9 +98,9 @@ def test_fuzzy_distance_1(mock_session):
 
 
 def test_fuzzy_distance_2(mock_session):
-    """fuzzy() with distance=2 catches two-character typos."""
-    stmt_d1 = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    stmt_d2 = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=2))
+    """match_any(..., distance=2) catches two-character typos."""
+    stmt_d1 = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
+    stmt_d2 = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=2))
     assert_uses_paradedb_scan(mock_session, stmt_d2, index_name="mock_items_bm25_idx")
     ids_d1 = _ids(mock_session, stmt_d1)
     ids_d2 = _ids(mock_session, stmt_d2)
@@ -109,25 +109,27 @@ def test_fuzzy_distance_2(mock_session):
 
 
 def test_fuzzy_with_prefix(mock_session):
-    """fuzzy() with prefix=True matches prefix expansions."""
-    stmt = select(MockItem.id).where(search.fuzzy(MockItem.description, "runn", distance=0, prefix=True))
+    """match_any(..., prefix=True) matches prefix expansions."""
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runn", distance=1, prefix=True))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
     assert len(ids) > 0
 
 
 def test_fuzzy_with_transpose_cost_one(mock_session):
-    """fuzzy() with transpose_cost_one=True treats transpositions as single edits."""
-    stmt = select(MockItem.id).where(search.fuzzy(MockItem.description, "rnnuing", distance=2, transpose_cost_one=True))
+    """match_any(..., transpose_cost_one=True) treats transpositions as single edits."""
+    stmt = select(MockItem.id).where(
+        search.match_any(MockItem.description, "rnnuing", distance=2, transpose_cost_one=True)
+    )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
     assert isinstance(ids, set)
 
 
 def test_fuzzy_with_boost(mock_session):
-    """fuzzy() with boost= does not change the result set, only scores."""
-    stmt_base = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1))
-    stmt_boost = select(MockItem.id).where(search.fuzzy(MockItem.description, "runnning", distance=1, boost=2.0))
+    """match_any(..., boost=) does not change the result set, only scores."""
+    stmt_base = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
+    stmt_boost = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1, boost=2.0))
     assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_bm25_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)

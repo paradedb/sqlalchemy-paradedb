@@ -40,7 +40,7 @@ def test_regex_match(session):
 
 
 def test_fuzzy_match(session):
-    stmt = select(Product.id).where(search.fuzzy(Product.description, "wirless", distance=1))
+    stmt = select(Product.id).where(search.match_any(Product.description, "wirless", distance=1))
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [3]
@@ -85,19 +85,19 @@ def test_select_with_helpers(session):
 
 
 def test_select_with_snippet_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet(base, Product.description)
 
 
 def test_select_with_snippets_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippets(base, Product.description)
 
 
 def test_select_with_snippet_positions_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.fuzzy(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet_positions(base, Product.description)
 
