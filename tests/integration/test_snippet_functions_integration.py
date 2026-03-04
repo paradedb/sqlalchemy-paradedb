@@ -14,6 +14,11 @@ from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
 
 pytestmark = pytest.mark.integration
 RUNNING_IDS = {3}
+RUNNING_SNIPPET = "Sleek <b>running</b> shoes"
+RUNNING_MARK_SNIPPET = "Sleek <mark>running</mark> shoes"
+RUNNING_BRACKET_SNIPPET = "Sleek [running] shoes"
+RUNNING_EM_SNIPPET = "Sleek <em>running</em> shoes"
+RUNNING_POSITIONS = [[6, 13]]
 
 
 # ---------------------------------------------------------------------------
@@ -30,9 +35,7 @@ def test_snippet_contains_highlight_tags(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    snippets = [row[1] for row in rows if row[1]]
-    assert any("<b>" in s for s in snippets)
+    assert rows == [(3, RUNNING_SNIPPET)]
 
 
 def test_snippet_custom_tags(mock_session):
@@ -51,10 +54,7 @@ def test_snippet_custom_tags(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    snippets = [row[1] for row in rows if row[1]]
-    assert any("<mark>" in s for s in snippets)
-    assert not any("<b>" in s for s in snippets)
+    assert rows == [(3, RUNNING_MARK_SNIPPET)]
 
 
 def test_snippet_max_num_chars(mock_session):
@@ -74,9 +74,8 @@ def test_snippet_max_num_chars(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt_short, index_name="mock_items_bm25_idx")
     long_rows = mock_session.execute(stmt_long).all()
     short_rows = mock_session.execute(stmt_short).all()
-    if long_rows and short_rows and long_rows[0][1] and short_rows[0][1]:
-        # Shorter max_num_chars should not produce longer raw content
-        assert len(short_rows[0][1]) <= len(long_rows[0][1])
+    assert long_rows == [(3, RUNNING_SNIPPET)]
+    assert short_rows == [(3, RUNNING_SNIPPET)]
 
 
 # ---------------------------------------------------------------------------
@@ -93,9 +92,7 @@ def test_snippets_returns_value(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    # snippets() returns a JSON value (list or string)
-    assert all(row[1] is not None for row in rows)
+    assert rows == [(3, [RUNNING_SNIPPET])]
 
 
 def test_snippets_with_limit(mock_session):
@@ -108,8 +105,7 @@ def test_snippets_with_limit(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert rows
-    assert {row[0] for row in rows} == RUNNING_IDS
+    assert rows == [(3, [RUNNING_SNIPPET])]
 
 
 def test_snippets_with_custom_tags(mock_session):
@@ -129,8 +125,7 @@ def test_snippets_with_custom_tags(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert rows
-    assert {row[0] for row in rows} == RUNNING_IDS
+    assert rows == [(3, [RUNNING_BRACKET_SNIPPET])]
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +142,7 @@ def test_snippet_positions_returns_ranges(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    assert all(row[1] is not None for row in rows)
+    assert rows == [(3, RUNNING_POSITIONS)]
 
 
 # ---------------------------------------------------------------------------
@@ -162,8 +156,7 @@ def test_select_with_score_adds_column(mock_session):
     stmt = select_with.score(base, MockItem.id, label="search_score")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    assert all(row[1] is not None for row in rows)
+    assert rows == [(3, 3.3322046)]
 
 
 def test_select_with_snippet_adds_column(mock_session):
@@ -172,8 +165,7 @@ def test_select_with_snippet_adds_column(mock_session):
     stmt = select_with.snippet(base, MockItem.description, label="snip")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    assert any(row[2] is not None for row in rows)
+    assert rows == [(3, "Sleek running shoes", RUNNING_SNIPPET)]
 
 
 def test_select_with_snippets_adds_column(mock_session):
@@ -182,7 +174,7 @@ def test_select_with_snippets_adds_column(mock_session):
     stmt = select_with.snippets(base, MockItem.description, label="snips")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
+    assert rows == [(3, "Sleek running shoes", [RUNNING_SNIPPET])]
 
 
 def test_select_with_snippet_positions_adds_column(mock_session):
@@ -191,8 +183,7 @@ def test_select_with_snippet_positions_adds_column(mock_session):
     stmt = select_with.snippet_positions(base, MockItem.description, label="positions")
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
-    assert {row[0] for row in rows} == RUNNING_IDS
-    assert any(row[2] is not None for row in rows)
+    assert rows == [(3, "Sleek running shoes", RUNNING_POSITIONS)]
 
 
 def test_select_with_snippet_rejects_fuzzy_predicate(mock_session):
@@ -241,9 +232,4 @@ def test_snippet_and_score_together(mock_session):
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     rows = mock_session.execute(stmt).all()
-    assert len(rows) > 0
-    # Score should be numeric and non-negative
-    assert all(row[1] >= 0 for row in rows)
-    # Snippets should contain highlights
-    snippets = [row[2] for row in rows if row[2]]
-    assert any("<em>" in s for s in snippets)
+    assert rows == [(3, 3.3322046, RUNNING_EM_SNIPPET)]
