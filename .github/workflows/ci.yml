@@ -116,9 +116,9 @@ jobs:
 
       - name: Run examples
         run: |
-          uv run --extra test python examples/quickstart.py
-          uv run --extra test python examples/autocomplete.py
-          uv run --extra test python examples/more_like_this.py
-          uv run --extra test python examples/faceted_search.py
-          uv run --extra test python examples/hybrid_rrf.py
-          uv run --extra test python examples/rag.py
+          uv run --extra test python examples/quickstart/quickstart.py
+          uv run --extra test python examples/autocomplete/autocomplete.py
+          uv run --extra test python examples/more_like_this/more_like_this.py
+          uv run --extra test python examples/faceted_search/faceted_search.py
+          uv run --extra test python examples/hybrid_rrf/hybrid_rrf.py
+          uv run --extra test python examples/rag/rag.py
