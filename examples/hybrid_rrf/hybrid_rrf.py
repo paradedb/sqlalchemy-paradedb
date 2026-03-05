@@ -1,27 +1,15 @@
 from __future__ import annotations
 
-from sqlalchemy import Float, Integer, String, Text, func, literal, select, union_all
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy import Float, func, literal, select, union_all
+from sqlalchemy.orm import Session
 
-from common import engine_from_env, setup_products
 from paradedb.sqlalchemy import pdb, search
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class Product(Base):
-    __tablename__ = "products"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    category: Mapped[str] = mapped_column(String(120), nullable=False)
+from setup import Product, engine_from_env, setup_database
 
 
 def main() -> None:
     engine = engine_from_env()
-    setup_products(engine)
+    setup_database(engine)
 
     query = "running shoes"
 

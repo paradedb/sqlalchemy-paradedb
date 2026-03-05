@@ -1,26 +1,15 @@
 from __future__ import annotations
 
-from sqlalchemy import Integer, Text, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from common import engine_from_env, setup_documents
 from paradedb.sqlalchemy import pdb, search, select_with
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class Document(Base):
-    __tablename__ = "documents"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+from setup import Document, engine_from_env, setup_database
 
 
 def retrieve(query: str, limit: int = 5) -> None:
     engine = engine_from_env()
-    setup_documents(engine)
+    setup_database(engine)
 
     base = (
         select(Document.id, Document.content)
