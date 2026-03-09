@@ -791,6 +791,6 @@ def validate_pushdown(stmt: Any) -> list[str]:
         warnings.append("No ParadeDB predicate found in WHERE clause; query will not use a BM25 index")
 
     if has_order_by(stmt) and not has_limit(stmt):
-        warnings.append("ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both")
+        warnings.append("ORDER BY is present without LIMIT; Top K pushdown to ParadeDB requires both")
 
     return warnings

@@ -172,7 +172,7 @@ def test_validate_pushdown_ignores_limit_identifier_names():
 
     warnings = validate_pushdown(stmt)
 
-    assert "ORDER BY is present without LIMIT; top-N pushdown to ParadeDB requires both" in warnings
+    assert "ORDER BY is present without LIMIT; Top K pushdown to ParadeDB requires both" in warnings
 
 
 def test_custom_nodes_have_cache_keys():
