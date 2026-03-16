@@ -395,12 +395,12 @@ def test_autogenerate_emits_schema_on_drop_for_non_default_schema(engine):
 
 
 def _assert_bm25_queryable(conn, table_name, index_name, search_column, search_term):
-    """Run EXPLAIN (FORMAT TEXT) on a BM25 query and assert ParadeDB Scan is used."""
+    """Run EXPLAIN (FORMAT TEXT) on a BM25 query and assert ParadeDB Base Scan is used."""
     sql = f'EXPLAIN (FORMAT TEXT) SELECT * FROM "{table_name}" WHERE "{search_column}" @@@ \'{search_term}\''
     rows = conn.execute(text(sql)).fetchall()
     plan_text = "\n".join(str(row[0]) for row in rows)
     assert any(scan in plan_text for scan in PARADEDB_SCAN_PROVIDERS), (
-        f"Expected ParadeDB scan node in plan:\n{plan_text}"
+        f"Expected ParadeDB Base Scan node in plan:\n{plan_text}"
     )
     assert index_name in plan_text, f"Expected index {index_name} in plan:\n{plan_text}"
 

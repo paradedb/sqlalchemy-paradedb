@@ -39,7 +39,7 @@ class MockItem(Base):
     metadata_: Mapped[Any] = mapped_column("metadata", JSONB, nullable=True)
 
 
-PARADEDB_SCAN_PROVIDERS = {"ParadeDB Scan", "ParadeDB Aggregate Scan", "ParadeDB Join Scan"}
+PARADEDB_SCAN_PROVIDERS = {"ParadeDB Base Scan", "ParadeDB Aggregate Scan", "ParadeDB Join Scan"}
 
 
 @pytest.fixture(scope="session")
