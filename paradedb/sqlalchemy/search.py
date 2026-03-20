@@ -226,12 +226,6 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
-    def boost(self, value: float) -> ClauseElement:
-        return PDBCast(self.expr.self_group(), "boost", (value,))
-
-    def const(self, value: float) -> ClauseElement:
-        return PDBCast(self.expr.self_group(), "const", (value,))
-
     def within(
         self,
         distance: int,
@@ -260,8 +254,16 @@ def prox_str(clause: str) -> ProximityExpr:
     return ProximityExpr(_to_proximity_operand(clause))
 
 
-def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
+def proximity(
+    field: ColumnElement, prox: ProximityExpr | ClauseElement, boost: float | None = None, const: float | None = None
+) -> ColumnElement[bool]:
     prox_expr = prox.expr if isinstance(prox, ProximityExpr) else prox
+    if boost is not None and const is not None:
+        raise InvalidArgumentError("boost and const cannot both be set at the same time")
+    if boost is not None:
+        prox_expr = PDBCast(prox_expr.self_group(), "boost", (boost,))
+    if const is not None:
+        prox_expr = PDBCast(prox_expr.self_group(), "const", (const,))
     return field.operate(_QUERY, prox_expr)
 
 

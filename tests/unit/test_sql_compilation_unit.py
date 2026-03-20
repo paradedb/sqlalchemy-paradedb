@@ -7,6 +7,7 @@ from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
 
 from paradedb.sqlalchemy import pdb, search, select_with
+from paradedb.sqlalchemy.errors import InvalidArgumentError
 
 
 products = table(
@@ -303,7 +304,7 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')"""
 
 def test_proximity_query_with_boost():
     prox_stmt = select(products.c.id).where(
-        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe").boost(1.24))
+        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe"), boost=1.24)
     )
 
     assert (
@@ -316,15 +317,22 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.boost(1.24)"""
 
 def test_proximity_query_with_const():
     prox_stmt = select(products.c.id).where(
-        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe").const(1.24))
+        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe"), const=1.25)
     )
 
     assert (
         _sql(prox_stmt)
         == """SELECT products.id
 FROM products
-WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.const(1.24)"""
+WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.const(1.25)"""
     )
+
+
+def test_proximity_error_is_thrown_if_boost_and_const_are_both_set():
+    with pytest.raises(InvalidArgumentError, match="boost and const cannot both be set at the same time"):
+        _ = search.proximity(
+            products.c.description, search.prox_str("running").within(2, "shoe"), const=1.25, boost=123
+        )
 
 
 def test_proximity_terms_are_escaped_properly():
