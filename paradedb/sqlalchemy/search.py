@@ -249,14 +249,14 @@ def prox_regex(pattern: str, max_expansions: int | None = None) -> ProximityExpr
     return ProximityExpr(func.pdb.prox_regex(pattern))
 
 
-def prox_array(*clauses: str | ClauseElement | ProximityExpr) -> ProximityExpr:
+def prox_array(*clauses: str | ProximityExpr) -> ProximityExpr:
     if not clauses:
         raise InvalidArgumentError("prox_array requires at least one clause")
     casted_clauses = [_to_proximity_operand(clause) for clause in clauses]
     return ProximityExpr(func.pdb.prox_array(*casted_clauses))
 
 
-def prox_str(clause: str | ClauseElement | ProximityExpr) -> ProximityExpr:
+def prox_str(clause: str) -> ProximityExpr:
     return ProximityExpr(_to_proximity_operand(clause))
 
 
