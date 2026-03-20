@@ -241,10 +241,12 @@ class ProximityExpr:
         return ProximityExpr(_near_chain(self.expr, other, distance=distance, ordered=ordered))
 
 
-def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
+def prox_regex(pattern: str, max_expansions: int | None = None) -> ProximityExpr:
     require_non_empty_string(pattern, field_name="pattern")
-    require_non_negative(max_expansions, field_name="max_expansions")
-    return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
+    if max_expansions is not None:
+        require_non_negative(max_expansions, field_name="max_expansions")
+        return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
+    return ProximityExpr(func.pdb.prox_regex(pattern))
 
 
 def prox_array(*clauses: str | ClauseElement | ProximityExpr) -> ProximityExpr:

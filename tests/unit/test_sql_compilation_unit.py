@@ -415,7 +415,7 @@ def test_complex_proximity_query():
         prox_sql
         == """SELECT products.id
 FROM products
-WHERE products.description @@@ ((((((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1) ## 'shoes') ##> 2) ##> 'store') ## 3) ## ((pdb.prox_regex('right', 100) ## 3) ## 'associative'))"""
+WHERE products.description @@@ ((((((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1) ## 'shoes') ##> 2) ##> 'store') ## 3) ## ((pdb.prox_regex('right') ## 3) ## 'associative'))"""
     )
 
 
