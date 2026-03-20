@@ -118,16 +118,16 @@ def test_proximity(session):
 
 
 def test_proximity_with_boost(session):
-    prox = search.prox_str("sleek").within(3, "shoes").boost(2)
-    stmt = select(Product.id).where(search.proximity(Product.description, prox)).order_by(Product.id)
+    prox = search.prox_str("sleek").within(3, "shoes")
+    stmt = select(Product.id).where(search.proximity(Product.description, prox, boost=2)).order_by(Product.id)
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [1]
 
 
 def test_proximity_with_const(session):
-    prox = search.prox_str("sleek").within(3, "shoes").const(2)
-    stmt = select(Product.id).where(search.proximity(Product.description, prox)).order_by(Product.id)
+    prox = search.prox_str("sleek").within(3, "shoes")
+    stmt = select(Product.id).where(search.proximity(Product.description, prox, const=2)).order_by(Product.id)
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [1]
