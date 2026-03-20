@@ -226,6 +226,12 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
+    def boost(self, value: float) -> ClauseElement:
+        return PDBCast(self.expr.self_group(), "boost", (value,))
+
+    def const(self, value: float) -> ClauseElement:
+        return PDBCast(self.expr.self_group(), "const", (value,))
+
     def within(
         self,
         distance: int,

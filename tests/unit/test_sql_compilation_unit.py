@@ -301,6 +301,32 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')"""
     )
 
 
+def test_proximity_query_with_boost():
+    prox_stmt = select(products.c.id).where(
+        search.proximity_query(products.c.description, search.proximity("running").within(2, "shoe").boost(1.24))
+    )
+
+    assert (
+        _sql(prox_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.boost(1.24)"""
+    )
+
+
+def test_proximity_query_with_const():
+    prox_stmt = select(products.c.id).where(
+        search.proximity_query(products.c.description, search.proximity("running").within(2, "shoe").const(1.24))
+    )
+
+    assert (
+        _sql(prox_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.const(1.24)"""
+    )
+
+
 def test_proximity_terms_are_escaped_properly():
     prox_stmt = select(products.c.id).where(
         search.proximity_query(products.c.description, search.proximity("running'").within(2, "sh'oe"))
