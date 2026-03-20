@@ -32,8 +32,8 @@ _MATCH_ANY: Any = operators.custom_op("|||", precedence=5, is_comparison=True)
 _TERM: Any = operators.custom_op("===", precedence=5, is_comparison=True)
 _PHRASE: Any = operators.custom_op("###", precedence=5, is_comparison=True)
 _QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
-_NEAR: Any = operators.custom_op("##", precedence=5, natural_self_precedent=True)
-_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5, natural_self_precedent=True)
+_NEAR: Any = operators.custom_op("##", precedence=5)
+_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 

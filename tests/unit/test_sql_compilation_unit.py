@@ -288,31 +288,37 @@ WHERE products.description @@@ pdb.regex_phrase(ARRAY['run.*', 'shoe.*'], 1, 100
     )
 
 
-def test_complex_proximity_query():
+def test_simple_proximity_query():
     prox_stmt = select(products.c.id).where(
-        search.proximity_query(
-            products.c.description,
-            search.prox_array(search.prox_regex("sl.*"), "running")
-            .near("shoes", distance=1)
-            .near("store", distance=2, ordered=True),
-        )
+        search.proximity_query(products.c.description, search.proximity("running").near("shoe", distance=2))
     )
-
-    prox_sql = _sql(prox_stmt)
 
     assert (
-        prox_sql.rstrip()
+        _sql(prox_stmt)
         == """SELECT products.id
 FROM products
-WHERE products.description @@@ ((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1 ## 'shoes') ##> 2 ##> 'store')"""
+WHERE products.description @@@ (('running' ## 2) ## 'shoe')"""
     )
 
 
-def test_near_with_right_pattern_compile():
+def test_proximity_terms_are_escaped_properly():
+    prox_stmt = select(products.c.id).where(
+        search.proximity_query(products.c.description, search.proximity("running'").near("sh'oe", distance=2))
+    )
+
+    assert (
+        _sql(prox_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ (('running''' ## 2) ## 'sh''oe')"""
+    )
+
+
+def test_proximity_supports_right_associativity():
     stmt = select(products.c.id).where(
         search.proximity_query(
             products.c.description,
-            search.proximity("running").near(search.prox_regex("sho.*", 80), distance=1),
+            search.proximity("running").near(search.proximity("shoe").near("store", distance=2), distance=1),
         )
     )
     sql = _sql(stmt)
@@ -320,7 +326,70 @@ def test_near_with_right_pattern_compile():
         sql
         == """SELECT products.id
 FROM products
-WHERE products.description @@@ ('running' ## 1 ## pdb.prox_regex('sho.*', 80))"""
+WHERE products.description @@@ (('running' ## 1) ## (('shoe' ## 2) ## 'store'))"""
+    )
+
+
+def test_proximity_query_with_regex_compile():
+    stmt = select(products.c.id).where(
+        search.proximity_query(products.c.description, search.prox_regex("sho.*", 80).near("store", distance=2))
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ((pdb.prox_regex('sho.*', 80) ## 2) ## 'store')"""
+    )
+
+
+def test_proximity_query_with_array_compile():
+    stmt = select(products.c.id).where(
+        search.proximity_query(products.c.description, search.prox_array("sleek", "running").near("shoe", distance=1))
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ((pdb.prox_array('sleek', 'running') ## 1) ## 'shoe')"""
+    )
+
+
+def test_proximity_query_with_ordered_near_compile():
+    stmt = select(products.c.id).where(
+        search.proximity_query(
+            products.c.description,
+            search.proximity("running").near("shoes", distance=3, ordered=True),
+        )
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ (('running' ##> 3) ##> 'shoes')"""
+    )
+
+
+def test_complex_proximity_query():
+    prox_stmt = select(products.c.id).where(
+        search.proximity_query(
+            products.c.description,
+            search.prox_array(search.prox_regex("sl.*"), "running")
+            .near("shoes", distance=1)
+            .near("store", distance=2, ordered=True)
+            .near(search.proximity(search.prox_regex("right")).near("associative", distance=3), distance=3),
+        )
+    )
+
+    prox_sql = _sql(prox_stmt)
+
+    assert (
+        prox_sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ((((((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1) ## 'shoes') ##> 2) ##> 'store') ## 3) ## ((pdb.prox_regex('right', 100) ## 3) ## 'associative'))"""
     )
 
 
