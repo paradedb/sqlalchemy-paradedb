@@ -36,22 +36,6 @@ def test_regex_phrase_predicate(session):
     assert ids == [1, 2]
 
 
-def test_near_predicate(session):
-    prox = search.proximity("sleek").within(3, "shoes")
-    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
-    assert_uses_paradedb_scan(session, stmt)
-    ids = list(session.scalars(stmt))
-    assert ids == [1]
-
-
-def test_proximity_with_prox_array_and_regex(session):
-    prox = search.prox_array(search.prox_regex("sl.*"), "running").within(1, "shoes").within(3, "running")
-    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
-    assert_uses_paradedb_scan(session, stmt)
-    ids = list(session.scalars(stmt))
-    assert 1 in ids
-
-
 def test_more_like_this_by_document_id(session):
     stmt = (
         select(Product.id)
@@ -125,7 +109,47 @@ def test_more_like_this_by_document_ids(session):
     assert ids_3.issubset(ids_combined)
 
 
-def test_near_ordered_predicate(session):
+def test_proximity(session):
+    prox = search.proximity("sleek").within(3, "shoes")
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
+    assert_uses_paradedb_scan(session, stmt)
+    ids = list(session.scalars(stmt))
+    assert ids == [1]
+
+
+def test_proximity_with_boost(session):
+    prox = search.proximity("sleek").within(3, "shoes").boost(2)
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
+    assert_uses_paradedb_scan(session, stmt)
+    ids = list(session.scalars(stmt))
+    assert ids == [1]
+
+
+def test_proximity_with_const(session):
+    prox = search.proximity("sleek").within(3, "shoes").const(2)
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
+    assert_uses_paradedb_scan(session, stmt)
+    ids = list(session.scalars(stmt))
+    assert ids == [1]
+
+
+def test_proximity_with_right_associativity(session):
+    prox = search.proximity("sleek").within(1, search.proximity("running").within(1, "shoes"))
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
+    assert_uses_paradedb_scan(session, stmt)
+    ids = list(session.scalars(stmt))
+    assert ids == [1]
+
+
+def test_proximity_with_prox_array_and_regex(session):
+    prox = search.prox_array(search.prox_regex("sl.*"), "running").within(1, "shoes").within(3, "running")
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
+    assert_uses_paradedb_scan(session, stmt)
+    ids = list(session.scalars(stmt))
+    assert 1 in ids
+
+
+def test_proximity_ordered_predicate(session):
     """near() with ordered=True uses ##> and finds terms in sequence."""
     prox_ordered = search.proximity("sleek").within(5, "shoes", ordered=True)
     prox_unordered = search.proximity("sleek").within(5, "shoes")
