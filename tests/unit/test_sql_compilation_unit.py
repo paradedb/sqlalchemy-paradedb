@@ -193,29 +193,32 @@ def test_parse_phrase_prefix_regex_phrase_compile():
     assert "description @@@ pdb.regex_phrase(ARRAY['run.*', 'shoe.*'], 1, 100)" in regex_phrase_sql
 
 
-def test_near_and_proximity_compile():
-    near_stmt = select(products.c.id).where(search.near(products.c.description, "sleek", "shoes", distance=1))
+def test_complex_proximity_query():
     prox_stmt = select(products.c.id).where(
-        search.proximity(
+        search.proximity_query(
             products.c.description,
-            search.prox_array(search.prox_regex("sl.*"), "running").near("shoes", distance=1),
+            search.prox_array(search.prox_regex("sl.*"), "running")
+            .near("shoes", distance=1)
+            .near("store", distance=2, ordered=True),
         )
     )
 
-    near_sql = _sql(near_stmt)
     prox_sql = _sql(prox_stmt)
 
-    assert "description @@@" in near_sql
-    assert "'sleek'::pdb.proximityclause ## 1" in near_sql
-    assert "## 'shoes'::pdb.proximityclause" in near_sql
-    assert "pdb.prox_regex('sl.*', 100)" in prox_sql
-    assert "pdb.prox_array" in prox_sql
-    assert "## 1" in prox_sql
+    assert (
+        prox_sql
+        == """SELECT products.id 
+FROM products 
+WHERE products.description @@@ (((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running'::pdb.proximityclause)::pdb.proximityclause ## 1) ## 'shoes'::pdb.proximityclause::pdb.proximityclause ##> 2) ##> 'store'::pdb.proximityclause)"""
+    )
 
 
 def test_near_with_right_pattern_compile():
     stmt = select(products.c.id).where(
-        search.near(products.c.description, "running", distance=1, right_pattern="sho.*", max_expansions=80)
+        search.proximity_query(
+            products.c.description,
+            search.proximity("running").near(search.prox_regex("sho.*", 80), distance=1),
+        )
     )
     sql = _sql(stmt)
     assert "pdb.prox_regex('sho.*', 80)" in sql

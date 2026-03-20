@@ -33,15 +33,16 @@ def test_regex_phrase_predicate(session):
 
 
 def test_near_predicate(session):
-    stmt = select(Product.id).where(search.near(Product.description, "sleek", "shoes", distance=3)).order_by(Product.id)
+    prox = search.proximity("sleek").near("shoes", distance=3)
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [1]
 
 
 def test_proximity_with_prox_array_and_regex(session):
-    prox = search.prox_array(search.prox_regex("sl.*"), "running").near("shoes", distance=1)
-    stmt = select(Product.id).where(search.proximity(Product.description, prox)).order_by(Product.id)
+    prox = search.prox_array(search.prox_regex("sl.*"), "running").near("shoes", distance=1).near("running", distance=3)
+    stmt = select(Product.id).where(search.proximity_query(Product.description, prox)).order_by(Product.id)
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert 1 in ids
@@ -118,14 +119,16 @@ def test_more_like_this_by_document_ids(session):
 
 def test_near_ordered_predicate(session):
     """near() with ordered=True uses ##> and finds terms in sequence."""
+    prox_ordered = search.proximity("sleek").near("shoes", distance=5, ordered=True)
+    prox_unordered = search.proximity("sleek").near("shoes", distance=5)
     stmt_ordered = (
         select(Product.id)
-        .where(search.near(Product.description, "sleek", "shoes", distance=5, ordered=True))
+        .where(search.proximity_query(Product.description, prox_ordered))
         .order_by(Product.id)
     )
     stmt_unordered = (
         select(Product.id)
-        .where(search.near(Product.description, "sleek", "shoes", distance=5))
+        .where(search.proximity_query(Product.description, prox_unordered))
         .order_by(Product.id)
     )
     assert_uses_paradedb_scan(session, stmt_ordered)

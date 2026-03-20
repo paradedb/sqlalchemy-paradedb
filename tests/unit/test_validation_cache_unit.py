@@ -43,22 +43,13 @@ def test_search_argument_validation_errors():
         search.regex_phrase(products.c.description, ["run.*"], slop=-1)
 
     with pytest.raises(InvalidArgumentError, match="distance must be >= 0"):
-        search.near(products.c.description, "running", "shoes", distance=-1)
+        search.proximity("running").near("shoes", distance=-1)
 
     with pytest.raises(InvalidArgumentError, match="max_expansions must be >= 0"):
         search.prox_regex("sho.*", max_expansions=-1)
 
-    with pytest.raises(InvalidArgumentError, match="cannot be used together"):
-        search.near(
-            products.c.description,
-            "running",
-            "shoes",
-            distance=1,
-            right_pattern="sho.*",
-        )
-
-    with pytest.raises(InvalidArgumentError, match="right is required"):
-        search.near(products.c.description, "running", distance=1)
+    with pytest.raises(InvalidArgumentError, match="clause must be a non-empty string"):
+        search.proximity("")
 
     with pytest.raises(InvalidArgumentError, match="terms entries must be non-empty strings"):
         search.match_any(products.c.description, "running", "")
