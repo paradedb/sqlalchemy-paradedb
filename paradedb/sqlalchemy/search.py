@@ -254,11 +254,11 @@ def prox_array(*clauses: str | ClauseElement | ProximityExpr) -> ProximityExpr:
     return ProximityExpr(func.pdb.prox_array(*casted_clauses))
 
 
-def proximity(clause: str | ClauseElement | ProximityExpr) -> ProximityExpr:
+def prox_str(clause: str | ClauseElement | ProximityExpr) -> ProximityExpr:
     return ProximityExpr(_to_proximity_operand(clause))
 
 
-def proximity_query(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
+def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
     prox_expr = prox.expr if isinstance(prox, ProximityExpr) else prox
     return field.operate(_QUERY, prox_expr)
 

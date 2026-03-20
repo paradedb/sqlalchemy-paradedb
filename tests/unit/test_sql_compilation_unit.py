@@ -290,7 +290,7 @@ WHERE products.description @@@ pdb.regex_phrase(ARRAY['run.*', 'shoe.*'], 1, 100
 
 def test_simple_proximity_query():
     prox_stmt = select(products.c.id).where(
-        search.proximity_query(products.c.description, search.proximity("running").within(2, "shoe"))
+        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe"))
     )
 
     assert (
@@ -303,7 +303,7 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')"""
 
 def test_proximity_query_with_boost():
     prox_stmt = select(products.c.id).where(
-        search.proximity_query(products.c.description, search.proximity("running").within(2, "shoe").boost(1.24))
+        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe").boost(1.24))
     )
 
     assert (
@@ -316,7 +316,7 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.boost(1.24)"""
 
 def test_proximity_query_with_const():
     prox_stmt = select(products.c.id).where(
-        search.proximity_query(products.c.description, search.proximity("running").within(2, "shoe").const(1.24))
+        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe").const(1.24))
     )
 
     assert (
@@ -329,7 +329,7 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.const(1.24)"""
 
 def test_proximity_terms_are_escaped_properly():
     prox_stmt = select(products.c.id).where(
-        search.proximity_query(products.c.description, search.proximity("running'").within(2, "sh'oe"))
+        search.proximity(products.c.description, search.prox_str("running'").within(2, "sh'oe"))
     )
 
     assert (
@@ -342,9 +342,9 @@ WHERE products.description @@@ (('running''' ## 2) ## 'sh''oe')"""
 
 def test_proximity_supports_right_associativity():
     stmt = select(products.c.id).where(
-        search.proximity_query(
+        search.proximity(
             products.c.description,
-            search.proximity("running").within(1, search.proximity("shoe").within(2, "store")),
+            search.prox_str("running").within(1, search.prox_str("shoe").within(2, "store")),
         )
     )
     sql = _sql(stmt)
@@ -358,7 +358,7 @@ WHERE products.description @@@ (('running' ## 1) ## (('shoe' ## 2) ## 'store'))"
 
 def test_proximity_query_with_regex_compile():
     stmt = select(products.c.id).where(
-        search.proximity_query(products.c.description, search.prox_regex("sho.*", 80).within(2, "store"))
+        search.proximity(products.c.description, search.prox_regex("sho.*", 80).within(2, "store"))
     )
     sql = _sql(stmt)
     assert (
@@ -371,7 +371,7 @@ WHERE products.description @@@ ((pdb.prox_regex('sho.*', 80) ## 2) ## 'store')""
 
 def test_proximity_query_with_array_compile():
     stmt = select(products.c.id).where(
-        search.proximity_query(products.c.description, search.prox_array("sleek", "running").within(1, "shoe"))
+        search.proximity(products.c.description, search.prox_array("sleek", "running").within(1, "shoe"))
     )
     sql = _sql(stmt)
     assert (
@@ -384,9 +384,9 @@ WHERE products.description @@@ ((pdb.prox_array('sleek', 'running') ## 1) ## 'sh
 
 def test_proximity_query_with_ordered_near_compile():
     stmt = select(products.c.id).where(
-        search.proximity_query(
+        search.proximity(
             products.c.description,
-            search.proximity("running").within(3, "shoes", ordered=True),
+            search.prox_str("running").within(3, "shoes", ordered=True),
         )
     )
     sql = _sql(stmt)
@@ -400,12 +400,12 @@ WHERE products.description @@@ (('running' ##> 3) ##> 'shoes')"""
 
 def test_complex_proximity_query():
     prox_stmt = select(products.c.id).where(
-        search.proximity_query(
+        search.proximity(
             products.c.description,
             search.prox_array(search.prox_regex("sl.*"), "running")
             .within(1, "shoes")
             .within(2, "store", ordered=True)
-            .within(3, search.proximity(search.prox_regex("right")).within(3, "associative")),
+            .within(3, search.prox_str(search.prox_regex("right")).within(3, "associative")),
         )
     )
 
