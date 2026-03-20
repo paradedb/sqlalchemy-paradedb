@@ -19,12 +19,13 @@ products = table(
 
 
 def _sql(stmt) -> str:
-    return str(
+    sql = str(
         stmt.compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
         )
     )
+    return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
 
 
 def test_match_all_multiple_terms_compile():
@@ -206,10 +207,10 @@ def test_complex_proximity_query():
     prox_sql = _sql(prox_stmt)
 
     assert (
-        prox_sql
-        == """SELECT products.id 
-FROM products 
-WHERE products.description @@@ (((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running'::pdb.proximityclause)::pdb.proximityclause ## 1) ## 'shoes'::pdb.proximityclause::pdb.proximityclause ##> 2) ##> 'store'::pdb.proximityclause)"""
+        prox_sql.rstrip()
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ((((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1) ## 'shoes') ##> 2) ##> 'store')"""
     )
 
 

@@ -38,6 +38,10 @@ _NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+def _inline_string_literal(value: str) -> ClauseElement:
+    return literal_column("'" + value.replace("'", "''") + "'", Text())
+
+
 def _to_term_payload(*terms: str) -> ClauseElement:
     if not terms:
         raise InvalidArgumentError("at least one search term is required")
@@ -242,12 +246,12 @@ def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
 def prox_array(*clauses: str | ClauseElement | ProximityExpr) -> ProximityExpr:
     if not clauses:
         raise InvalidArgumentError("prox_array requires at least one clause")
-    casted_clauses = [_to_proximity_clause(clause) for clause in clauses]
+    casted_clauses = [_to_proximity_operand(clause) for clause in clauses]
     return ProximityExpr(func.pdb.prox_array(*casted_clauses))
 
 
 def proximity(clause: str | ClauseElement | ProximityExpr) -> ProximityExpr:
-    return ProximityExpr(_to_proximity_clause(clause))
+    return ProximityExpr(_to_proximity_operand(clause))
 
 
 def proximity_query(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
@@ -260,16 +264,8 @@ def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseE
         return value.expr
     if isinstance(value, str):
         require_non_empty_string(value, field_name="clause")
-        return literal(value)
+        return _inline_string_literal(value)
     return value
-
-
-def _to_proximity_clause(value: str | ClauseElement | ProximityExpr) -> ClauseElement:
-    if isinstance(value, ProximityExpr):
-        return value.expr
-    operand = _to_proximity_operand(value)
-    return PDBCast(operand, "proximityclause")
-
 
 def _near_chain(
     left: str | ClauseElement | ProximityExpr,
@@ -279,8 +275,8 @@ def _near_chain(
     ordered: bool = False,
 ) -> ClauseElement:
     require_non_negative(distance, field_name="distance")
-    left_expr = _to_proximity_clause(left)
-    right_expr = _to_proximity_clause(right)
+    left_expr = _to_proximity_operand(left)
+    right_expr = _to_proximity_operand(right)
     op = _NEAR_ORDERED if ordered else _NEAR
     return left_expr.operate(op, literal(distance)).operate(op, right_expr)
 
