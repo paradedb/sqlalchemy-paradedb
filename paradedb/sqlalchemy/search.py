@@ -226,11 +226,10 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
-    def near(
+    def within(
         self,
-        other: str | ProximityExpr | ClauseElement,
-        *,
         distance: int,
+        other: str | ProximityExpr | ClauseElement,
         ordered: bool = False,
     ) -> ProximityExpr:
         return ProximityExpr(_near_chain(self.expr, other, distance=distance, ordered=ordered))

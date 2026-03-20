@@ -43,7 +43,7 @@ def test_search_argument_validation_errors():
         search.regex_phrase(products.c.description, ["run.*"], slop=-1)
 
     with pytest.raises(InvalidArgumentError, match="distance must be >= 0"):
-        search.proximity("running").near("shoes", distance=-1)
+        search.proximity("running").within(-1, "shoes")
 
     with pytest.raises(InvalidArgumentError, match="max_expansions must be >= 0"):
         search.prox_regex("sho.*", max_expansions=-1)
