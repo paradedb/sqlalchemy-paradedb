@@ -37,6 +37,10 @@ _NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+def _inline_string_literal(value: str) -> ClauseElement:
+    return literal_column("'" + value.replace("'", "''") + "'", Text())
+
+
 def _to_term_payload(*terms: str) -> ClauseElement:
     if not terms:
         raise InvalidArgumentError("at least one search term is required")
@@ -222,17 +226,43 @@ class ProximityExpr:
     def __init__(self, expr: ClauseElement) -> None:
         self.expr = expr
 
-    def near(
+    def boost(self, value: float) -> ClauseElement:
+        return PDBCast(self.expr.self_group(), "boost", (value,))
+
+    def const(self, value: float) -> ClauseElement:
+        return PDBCast(self.expr.self_group(), "const", (value,))
+
+    def within(
         self,
-        other: str | ClauseElement | ProximityExpr | None = None,
-        *,
         distance: int,
+        other: str | ProximityExpr | ClauseElement,
         ordered: bool = False,
-        right_pattern: str | None = None,
-        max_expansions: int = 100,
     ) -> ProximityExpr:
-        right = _resolve_near_operand(other, right_pattern=right_pattern, max_expansions=max_expansions)
-        return ProximityExpr(_near_chain(self.expr, right, distance=distance, ordered=ordered))
+        return ProximityExpr(_near_chain(self.expr, other, distance=distance, ordered=ordered))
+
+
+def prox_regex(pattern: str, max_expansions: int | None = None) -> ProximityExpr:
+    require_non_empty_string(pattern, field_name="pattern")
+    if max_expansions is not None:
+        require_non_negative(max_expansions, field_name="max_expansions")
+        return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
+    return ProximityExpr(func.pdb.prox_regex(pattern))
+
+
+def prox_array(*clauses: str | ProximityExpr) -> ProximityExpr:
+    if not clauses:
+        raise InvalidArgumentError("prox_array requires at least one clause")
+    casted_clauses = [_to_proximity_operand(clause) for clause in clauses]
+    return ProximityExpr(func.pdb.prox_array(*casted_clauses))
+
+
+def prox_str(clause: str) -> ProximityExpr:
+    return ProximityExpr(_to_proximity_operand(clause))
+
+
+def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
+    prox_expr = prox.expr if isinstance(prox, ProximityExpr) else prox
+    return field.operate(_QUERY, prox_expr)
 
 
 def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseElement:
@@ -240,15 +270,8 @@ def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseE
         return value.expr
     if isinstance(value, str):
         require_non_empty_string(value, field_name="clause")
-        return literal(value)
+        return _inline_string_literal(value)
     return value
-
-
-def _to_proximity_clause(value: str | ClauseElement | ProximityExpr) -> ClauseElement:
-    if isinstance(value, ProximityExpr):
-        return value.expr
-    operand = _to_proximity_operand(value)
-    return PDBCast(operand, "proximityclause")
 
 
 def _near_chain(
@@ -259,27 +282,10 @@ def _near_chain(
     ordered: bool = False,
 ) -> ClauseElement:
     require_non_negative(distance, field_name="distance")
-    left_expr = _to_proximity_clause(left)
-    right_expr = _to_proximity_clause(right)
+    left_expr = _to_proximity_operand(left)
+    right_expr = _to_proximity_operand(right)
     op = _NEAR_ORDERED if ordered else _NEAR
     return left_expr.operate(op, literal(distance)).operate(op, right_expr)
-
-
-def _resolve_near_operand(
-    right: str | ClauseElement | ProximityExpr | None,
-    *,
-    right_pattern: str | None,
-    max_expansions: int,
-) -> str | ClauseElement | ProximityExpr:
-    if right_pattern is not None:
-        if right is not None:
-            raise InvalidArgumentError("right and right_pattern cannot be used together")
-        require_non_empty_string(right_pattern, field_name="right_pattern")
-        require_non_negative(max_expansions, field_name="max_expansions")
-        return prox_regex(right_pattern, max_expansions)
-    if right is None:
-        raise InvalidArgumentError("right is required unless right_pattern is provided")
-    return right
 
 
 def parse(
@@ -310,38 +316,6 @@ def regex_phrase(
     require_non_negative(slop, field_name="slop")
     require_positive(max_expansions, field_name="max_expansions")
     return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
-
-
-def near(
-    field: ColumnElement,
-    left: str | ClauseElement | ProximityExpr,
-    right: str | ClauseElement | ProximityExpr | None = None,
-    *,
-    distance: int,
-    ordered: bool = False,
-    right_pattern: str | None = None,
-    max_expansions: int = 100,
-) -> ColumnElement[bool]:
-    right_operand = _resolve_near_operand(right, right_pattern=right_pattern, max_expansions=max_expansions)
-    return field.operate(_QUERY, _near_chain(left, right_operand, distance=distance, ordered=ordered))
-
-
-def prox_regex(pattern: str, max_expansions: int = 100) -> ProximityExpr:
-    require_non_empty_string(pattern, field_name="pattern")
-    require_non_negative(max_expansions, field_name="max_expansions")
-    return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
-
-
-def prox_array(*clauses: str | ClauseElement | ProximityExpr) -> ProximityExpr:
-    if not clauses:
-        raise InvalidArgumentError("prox_array requires at least one clause")
-    casted_clauses = [_to_proximity_clause(clause) for clause in clauses]
-    return ProximityExpr(func.pdb.prox_array(*casted_clauses))
-
-
-def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
-    prox_expr = prox.expr if isinstance(prox, ProximityExpr) else prox
-    return field.operate(_QUERY, prox_expr)
 
 
 def range_term(

@@ -319,7 +319,8 @@ def test_regex_phrase_with_slop(mock_session):
 
 def test_near_unordered(mock_session):
     """near() with ordered=False (default) uses ## operator."""
-    stmt = select(MockItem.id).where(search.near(MockItem.description, "running", "shoes", distance=3))
+    prox = search.prox_str("running").within(3, "shoes")
+    stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
     assert ids == RUNNING_IDS
@@ -327,7 +328,8 @@ def test_near_unordered(mock_session):
 
 def test_near_ordered(mock_session):
     """near() with ordered=True uses ##> operator; finds terms in order."""
-    stmt = select(MockItem.id).where(search.near(MockItem.description, "running", "shoes", distance=3, ordered=True))
+    prox = search.prox_str("running").within(3, "shoes", ordered=True)
+    stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
     assert ids == RUNNING_IDS
@@ -335,10 +337,10 @@ def test_near_ordered(mock_session):
 
 def test_near_ordered_is_subset_of_unordered(mock_session):
     """Ordered proximity is always a subset of unordered proximity."""
-    stmt_unordered = select(MockItem.id).where(search.near(MockItem.description, "running", "shoes", distance=3))
-    stmt_ordered = select(MockItem.id).where(
-        search.near(MockItem.description, "running", "shoes", distance=3, ordered=True)
-    )
+    prox_unordered = search.prox_str("running").within(3, "shoes")
+    prox_ordered = search.prox_str("running").within(3, "shoes", ordered=True)
+    stmt_unordered = select(MockItem.id).where(search.proximity(MockItem.description, prox_unordered))
+    stmt_ordered = select(MockItem.id).where(search.proximity(MockItem.description, prox_ordered))
     ids_unordered = _ids(mock_session, stmt_unordered)
     ids_ordered = _ids(mock_session, stmt_ordered)
     assert ids_unordered == RUNNING_IDS
@@ -347,7 +349,7 @@ def test_near_ordered_is_subset_of_unordered(mock_session):
 
 def test_proximity_expr_chain_unordered(mock_session):
     """ProximityExpr chaining with near() unordered."""
-    prox = search.prox_array("sleek", "running").near("shoes", distance=1)
+    prox = search.prox_array("sleek", "running").within(1, "shoes")
     stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
@@ -356,7 +358,7 @@ def test_proximity_expr_chain_unordered(mock_session):
 
 def test_proximity_expr_chain_ordered(mock_session):
     """ProximityExpr chaining with near() ordered=True."""
-    prox = search.prox_array("running").near("shoes", distance=2, ordered=True)
+    prox = search.prox_array("running").within(2, "shoes", ordered=True)
     stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
@@ -365,7 +367,7 @@ def test_proximity_expr_chain_ordered(mock_session):
 
 def test_prox_regex_with_ordered(mock_session):
     """prox_regex chained with ordered near."""
-    prox = search.prox_array("running").near(search.prox_regex("sho.*", 50), distance=1, ordered=True)
+    prox = search.prox_array("running").within(1, search.prox_regex("sho.*", 50), ordered=True)
     stmt = select(MockItem.id).where(search.proximity(MockItem.description, prox))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     ids = _ids(mock_session, stmt)
