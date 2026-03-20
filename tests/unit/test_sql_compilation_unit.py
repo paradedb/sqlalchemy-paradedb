@@ -31,14 +31,23 @@ def _sql(stmt) -> str:
 def test_match_all_multiple_terms_compile():
     stmt = select(products.c.id).where(search.match_all(products.c.description, "running", "shoes"))
     sql = _sql(stmt)
-    assert "description &&& ARRAY['running', 'shoes']" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description &&& ARRAY['running', 'shoes']"""
+    )
 
 
 def test_phrase_with_slop_and_boost_compile():
     stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", slop=2, boost=3))
     sql = _sql(stmt)
-    assert "description ###" in sql
-    assert "::pdb.slop(2)::pdb.boost(3)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ### 'running shoes'::pdb.slop(2)::pdb.boost(3)"""
+    )
 
 
 def test_term_fuzzy_compile_with_options():
@@ -46,7 +55,12 @@ def test_term_fuzzy_compile_with_options():
         search.term(products.c.description, "shose", distance=1, prefix=False, transpose_cost_one=True)
     )
     sql = _sql(stmt)
-    assert "description === 'shose'::pdb.fuzzy(1, f, t)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description === 'shose'::pdb.fuzzy(1, f, t)"""
+    )
 
 
 def test_match_any_fuzzy_compile():
@@ -54,7 +68,12 @@ def test_match_any_fuzzy_compile():
         search.match_any(products.c.description, "running", "shose", distance=1, prefix=True)
     )
     sql = _sql(stmt)
-    assert "description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)"""
+    )
 
 
 def test_term_fuzzy_compile_with_transpose_implicit_prefix_slot():
@@ -62,7 +81,12 @@ def test_term_fuzzy_compile_with_transpose_implicit_prefix_slot():
         search.term(products.c.description, "shose", distance=1, transpose_cost_one=True)
     )
     sql = _sql(stmt)
-    assert "description === 'shose'::pdb.fuzzy(1, f, t)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description === 'shose'::pdb.fuzzy(1, f, t)"""
+    )
 
 
 def test_regex_and_all_compile():
@@ -71,8 +95,18 @@ def test_regex_and_all_compile():
     regex_sql = _sql(regex_stmt)
     all_sql = _sql(all_stmt)
 
-    assert "description @@@ pdb.regex('run.*')" in regex_sql
-    assert "id @@@ pdb.all()" in all_sql
+    assert (
+        regex_sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex('run.*')"""
+    )
+    assert (
+        all_sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.all()"""
+    )
 
 
 def test_match_any_with_tokenizer_compile():
@@ -80,49 +114,89 @@ def test_match_any_with_tokenizer_compile():
         search.match_any(products.c.description, "running shoes", tokenizer="whitespace")
     )
     sql = _sql(stmt)
-    assert "description ||| 'running shoes'::pdb.whitespace" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| 'running shoes'::pdb.whitespace"""
+    )
 
 
 def test_phrase_with_tokenizer_compile():
     stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", tokenizer="whitespace"))
     sql = _sql(stmt)
-    assert "description ### 'running shoes'::pdb.whitespace" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ### 'running shoes'::pdb.whitespace"""
+    )
 
 
 def test_phrase_pretokenized_with_slop_compile():
     stmt = select(products.c.id).where(search.phrase(products.c.description, ["shoes", "running"], slop=2))
     sql = _sql(stmt)
-    assert "description ### CAST(ARRAY['shoes', 'running'] AS TEXT[])::pdb.slop(2)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ### CAST(ARRAY['shoes', 'running'] AS TEXT[])::pdb.slop(2)"""
+    )
 
 
 def test_phrase_with_slop_and_const_compile():
     stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", slop=2, const=1.0))
     sql = _sql(stmt)
-    assert "description ### 'running shoes'::pdb.slop(2)::pdb.query::pdb.const(1.0)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ### 'running shoes'::pdb.slop(2)::pdb.query::pdb.const(1.0)"""
+    )
 
 
 def test_regex_boost_compile():
     stmt = select(products.c.id).where(search.regex(products.c.description, "key.*", boost=2.0))
     sql = _sql(stmt)
-    assert "description @@@ pdb.regex('key.*')::pdb.boost(2.0)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex('key.*')::pdb.boost(2.0)"""
+    )
 
 
 def test_match_any_fuzzy_with_const_compile():
     stmt = select(products.c.id).where(search.match_any(products.c.description, "shose", distance=2, const=1.0))
     sql = _sql(stmt)
-    assert "description ||| 'shose'::pdb.fuzzy(2)::pdb.query::pdb.const(1.0)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| 'shose'::pdb.fuzzy(2)::pdb.query::pdb.const(1.0)"""
+    )
 
 
 def test_match_any_const_compile():
     stmt = select(products.c.id).where(search.match_any(products.c.description, "shoes", const=1.0))
     sql = _sql(stmt)
-    assert "description ||| 'shoes'::pdb.const(1.0)" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| 'shoes'::pdb.const(1.0)"""
+    )
 
 
 def test_exists_compile():
     stmt = select(products.c.id).where(search.exists(products.c.rating))
     sql = _sql(stmt)
-    assert "rating @@@ pdb.exists()" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.rating @@@ pdb.exists()"""
+    )
 
 
 def test_pdb_helpers_compile():
@@ -142,30 +216,35 @@ def test_pdb_helpers_compile():
     )
     sql = _sql(stmt)
 
-    assert "pdb.score(products.id) AS score" in sql
-    assert "pdb.snippet(products.description, '<mark>', '</mark>', 100) AS snippet" in sql
-    assert "pdb.snippets(products.description" in sql
-    assert "start_tag => '['" in sql
-    assert "end_tag => ']'" in sql
-    assert "max_num_chars => 15" in sql
-    assert '"limit" => 1' in sql
-    assert '"offset" => 0' in sql
-    assert "sort_by => 'position'" in sql
-    assert "pdb.snippet_positions(products.description) AS positions" in sql
+    assert (
+        sql
+        == """SELECT pdb.score(products.id) AS score, pdb.snippet(products.description, '<mark>', '</mark>', 100) AS snippet, pdb.snippets(products.description, start_tag => '[', end_tag => ']', max_num_chars => 15, "limit" => 1, "offset" => 0, sort_by => 'position') AS snippets, pdb.snippet_positions(products.description) AS positions
+FROM products"""
+    )
 
 
 def test_select_with_score_compile():
     base = select(products.c.id).where(search.match_any(products.c.description, "running"))
     stmt = select_with.score(base, products.c.id, label="search_score")
     sql = _sql(stmt)
-    assert "pdb.score(products.id) AS search_score" in sql
+    assert (
+        sql
+        == """SELECT products.id, pdb.score(products.id) AS search_score
+FROM products
+WHERE products.description ||| 'running'"""
+    )
 
 
 def test_select_with_snippet_positions_compile():
     base = select(products.c.id, products.c.description).where(search.match_any(products.c.description, "running"))
     stmt = select_with.snippet_positions(base, products.c.description, label="positions")
     sql = _sql(stmt)
-    assert "pdb.snippet_positions(products.description) AS positions" in sql
+    assert (
+        sql
+        == """SELECT products.id, products.description, pdb.snippet_positions(products.description) AS positions
+FROM products
+WHERE products.description ||| 'running'"""
+    )
 
 
 def test_match_all_requires_terms():
@@ -189,9 +268,24 @@ def test_parse_phrase_prefix_regex_phrase_compile():
     phrase_prefix_sql = _sql(phrase_prefix_stmt)
     regex_phrase_sql = _sql(regex_phrase_stmt)
 
-    assert "id @@@ pdb.parse('description:sleek', true, false)" in parse_sql
-    assert "description @@@ pdb.phrase_prefix(ARRAY['running', 'sh'], 50)" in phrase_prefix_sql
-    assert "description @@@ pdb.regex_phrase(ARRAY['run.*', 'shoe.*'], 1, 100)" in regex_phrase_sql
+    assert (
+        parse_sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.parse('description:sleek', true, false)"""
+    )
+    assert (
+        phrase_prefix_sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.phrase_prefix(ARRAY['running', 'sh'], 50)"""
+    )
+    assert (
+        regex_phrase_sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex_phrase(ARRAY['run.*', 'shoe.*'], 1, 100)"""
+    )
 
 
 def test_complex_proximity_query():
@@ -210,7 +304,7 @@ def test_complex_proximity_query():
         prox_sql.rstrip()
         == """SELECT products.id
 FROM products
-WHERE products.description @@@ ((((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1) ## 'shoes') ##> 2) ##> 'store')"""
+WHERE products.description @@@ ((pdb.prox_array(pdb.prox_regex('sl.*', 100), 'running') ## 1 ## 'shoes') ##> 2 ##> 'store')"""
     )
 
 
@@ -222,8 +316,12 @@ def test_near_with_right_pattern_compile():
         )
     )
     sql = _sql(stmt)
-    assert "pdb.prox_regex('sho.*', 80)" in sql
-    assert "## 1" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ('running' ## 1 ## pdb.prox_regex('sho.*', 80))"""
+    )
 
 
 def test_more_like_this_compile():
@@ -248,13 +346,24 @@ def test_more_like_this_compile():
     by_doc_sql = _sql(by_doc_stmt)
     with_opts_sql = _sql(with_opts_stmt)
 
-    assert "id @@@ pdb.more_like_this(3, ARRAY['description'])" in by_id_sql
-    assert 'id @@@ pdb.more_like_this(\'{"description":"wireless earbuds"}\')' in by_doc_sql
-    assert "id @@@ pdb.more_like_this(3, ARRAY['description']" in with_opts_sql
-    assert "min_term_frequency => 2" in with_opts_sql
-    assert "max_query_terms => 10" in with_opts_sql
-    assert "stopwords => ARRAY['the', 'a']" in with_opts_sql
-    assert "ARRAY['the', 'a']" in with_opts_sql
+    assert (
+        by_id_sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.more_like_this(3, ARRAY['description'])"""
+    )
+    assert (
+        by_doc_sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.more_like_this('{"description":"wireless earbuds"}')"""
+    )
+    assert (
+        with_opts_sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.more_like_this(3, ARRAY['description'], min_term_frequency => 2, max_query_terms => 10, stopwords => ARRAY['the', 'a'])"""
+    )
 
 
 def test_more_like_this_requires_exactly_one_source():
@@ -289,10 +398,34 @@ def test_alias_subquery_cte_compile():
     cte_sql = _sql(cte_stmt)
     bool_sql = _sql(bool_stmt)
 
-    assert "p_alias.description ||| 'running'" in aliased_sql
-    assert "sq.description &&& ARRAY['running', 'shoes']" in sq_sql
-    assert "base.description ||| 'wireless'" in cte_sql
-    assert "NOT (products.description ||| 'trail')" in bool_sql
+    assert (
+        aliased_sql
+        == """SELECT p_alias.id
+FROM products AS p_alias
+WHERE p_alias.description ||| 'running'"""
+    )
+    assert (
+        sq_sql
+        == """SELECT sq.pid
+FROM (SELECT products.id AS pid, products.description AS description
+FROM products) AS sq
+WHERE sq.description &&& ARRAY['running', 'shoes']"""
+    )
+    assert (
+        cte_sql
+        == """WITH base AS
+(SELECT products.id AS pid, products.description AS description
+FROM products)
+ SELECT base.pid
+FROM base
+WHERE base.description ||| 'wireless'"""
+    )
+    assert (
+        bool_sql
+        == """SELECT products.id
+FROM products
+WHERE products.description &&& 'running' AND NOT (products.description ||| 'trail') OR products.category ||| 'Electronics'"""
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -303,13 +436,23 @@ def test_alias_subquery_cte_compile():
 def test_range_term_default_relation_compile():
     stmt = select(products.c.id).where(search.range_term(products.c.id, "[3,9]"))
     sql = _sql(stmt)
-    assert "id @@@ pdb.range_term('[3,9]', 'Intersects')" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.range_term('[3,9]', 'Intersects')"""
+    )
 
 
 def test_range_term_explicit_relation_compile():
     stmt = select(products.c.id).where(search.range_term(products.c.id, "(3,9]", relation="Contains"))
     sql = _sql(stmt)
-    assert "id @@@ pdb.range_term('(3,9]', 'Contains')" in sql
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.range_term('(3,9]', 'Contains')"""
+    )
 
 
 def test_range_term_invalid_relation_raises():
@@ -321,7 +464,12 @@ def test_range_term_scalar_compile():
     range_items = table("range_items", column("id", Integer), column("weight_range", postgresql.INT4RANGE))
     stmt = select(range_items.c.id).where(search.range_term(range_items.c.weight_range, 1))
     sql = _sql(stmt)
-    assert "weight_range @@@ pdb.range_term(1)" in sql
+    assert (
+        sql
+        == """SELECT range_items.id
+FROM range_items
+WHERE range_items.weight_range @@@ pdb.range_term(1)"""
+    )
 
 
 # ---------------------------------------------------------------------------

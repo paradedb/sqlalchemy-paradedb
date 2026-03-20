@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
 from collections.abc import Sequence
-from typing import Any, TypeAlias
+from typing import Any
 
 from sqlalchemy import Text, cast, func, literal, literal_column, or_
 from sqlalchemy.dialects.postgresql import ARRAY, array
@@ -33,8 +32,8 @@ _MATCH_ANY: Any = operators.custom_op("|||", precedence=5, is_comparison=True)
 _TERM: Any = operators.custom_op("===", precedence=5, is_comparison=True)
 _PHRASE: Any = operators.custom_op("###", precedence=5, is_comparison=True)
 _QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
-_NEAR: Any = operators.custom_op("##", precedence=5)
-_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
+_NEAR: Any = operators.custom_op("##", precedence=5, natural_self_precedent=True)
+_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5, natural_self_precedent=True)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -229,7 +228,7 @@ class ProximityExpr:
 
     def near(
         self,
-        other: str | ProximityExpr,
+        other: str | ProximityExpr | ClauseElement,
         *,
         distance: int,
         ordered: bool = False,
@@ -266,6 +265,7 @@ def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseE
         require_non_empty_string(value, field_name="clause")
         return _inline_string_literal(value)
     return value
+
 
 def _near_chain(
     left: str | ClauseElement | ProximityExpr,
