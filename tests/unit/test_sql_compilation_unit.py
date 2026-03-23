@@ -413,7 +413,7 @@ def test_complex_proximity_query():
             search.prox_array(search.prox_regex("sl.*"), "running")
             .within(1, "shoes")
             .within(2, "store", ordered=True)
-            .within(3, search.prox_str(search.prox_regex("right")).within(3, "associative")),
+            .within(3, search.prox_regex("right").within(3, "associative")),
         )
     )
 
