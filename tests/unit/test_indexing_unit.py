@@ -20,6 +20,7 @@ from paradedb.sqlalchemy.indexing import (
     validate_bm25_index,
 )
 from paradedb.sqlalchemy.errors import FieldNotIndexedError, InvalidArgumentError
+from paradedb.sqlalchemy import pdb
 from paradedb.sqlalchemy.expr import json_text
 
 
@@ -221,6 +222,21 @@ def test_bm25_index_compile_multiple_json_keys():
 
     assert "alias=metadata_color" in sql
     assert "alias=metadata_location" in sql
+
+
+def test_bm25_index_compile_non_text_expression_with_pdb_alias():
+    idx = Index(
+        "products_bm25_expr_idx",
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        BM25Field(pdb.alias(products.c.id + 1, "next_id")),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+
+    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    assert "((id + 1)::pdb.alias('next_id'))" in sql
 
 
 def test_bm25_field_non_postgres_compile_raises():

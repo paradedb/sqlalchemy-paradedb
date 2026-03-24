@@ -202,6 +202,7 @@ WHERE products.rating @@@ pdb.exists()"""
 
 def test_pdb_helpers_compile():
     stmt = select(
+        pdb.alias(products.c.description, "description_simple").label("description_simple"),
         pdb.score(products.c.id).label("score"),
         pdb.snippet(products.c.description, start_tag="<mark>", end_tag="</mark>", max_num_chars=100).label("snippet"),
         pdb.snippets(
@@ -219,8 +220,21 @@ def test_pdb_helpers_compile():
 
     assert (
         sql
-        == """SELECT pdb.score(products.id) AS score, pdb.snippet(products.description, '<mark>', '</mark>', 100) AS snippet, pdb.snippets(products.description, start_tag => '[', end_tag => ']', max_num_chars => 15, "limit" => 1, "offset" => 0, sort_by => 'position') AS snippets, pdb.snippet_positions(products.description) AS positions
+        == """SELECT products.description::pdb.alias('description_simple') AS description_simple, pdb.score(products.id) AS score, pdb.snippet(products.description, '<mark>', '</mark>', 100) AS snippet, pdb.snippets(products.description, start_tag => '[', end_tag => ']', max_num_chars => 15, "limit" => 1, "offset" => 0, sort_by => 'position') AS snippets, pdb.snippet_positions(products.description) AS positions
 FROM products"""
+    )
+
+
+def test_match_any_against_aliased_field_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(pdb.alias(products.c.description, "description_simple"), "running")
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description::pdb.alias('description_simple') ||| 'running'"""
     )
 
 

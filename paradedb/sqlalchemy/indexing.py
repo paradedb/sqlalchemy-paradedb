@@ -12,6 +12,7 @@ from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 
 from ._select_introspection import has_limit, has_order_by
+from ._pdb_cast import PDBCast
 from .errors import (
     DuplicateTokenizerAliasError,
     FieldNotIndexedError,
@@ -432,6 +433,8 @@ class BM25Field(ColumnElement[Any]):
 def _compile_bm25_field(element: BM25Field, compiler, **kw: Any) -> str:
     expr_sql = compiler.process(element.expr, **kw)
     if element.tokenizer is None:
+        if isinstance(element.expr, PDBCast) or _bm25_field_name(element) is None:
+            return f"({expr_sql})"
         return expr_sql
     return f"(({expr_sql})::{element.tokenizer.render()})"
 

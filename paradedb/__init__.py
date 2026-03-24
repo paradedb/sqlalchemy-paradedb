@@ -7,7 +7,7 @@ from .sqlalchemy.diagnostics import (
 )
 from .sqlalchemy.facets import with_rows
 from .sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
-from .sqlalchemy.pdb import agg, score, snippet, snippet_positions, snippets
+from .sqlalchemy.pdb import agg, alias, score, snippet, snippet_positions, snippets
 from .sqlalchemy.search import (
     ProximityExpr,
     all,
@@ -30,6 +30,7 @@ __all__ = [
     "BM25Field",
     "ProximityExpr",
     "agg",
+    "alias",
     "all",
     "assert_indexed",
     "describe",

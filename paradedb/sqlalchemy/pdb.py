@@ -8,6 +8,7 @@ from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from .errors import InvalidArgumentError
 from ._functions import PDBFunctionWithNamedArgs
+from ._pdb_cast import PDBCast
 from .validation import require_non_empty_string, require_non_negative, require_positive
 
 
@@ -17,6 +18,11 @@ def _inline_string_literal(value: str) -> ClauseElement:
 
 def score(field: ColumnElement) -> ClauseElement:
     return func.pdb.score(field)
+
+
+def alias(field: ColumnElement, name: str) -> ClauseElement:
+    require_non_empty_string(name, field_name="name")
+    return PDBCast(field.self_group(), "alias", (name,))
 
 
 def snippet(
