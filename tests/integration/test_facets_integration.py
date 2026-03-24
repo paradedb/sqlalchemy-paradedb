@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
 from conftest import MockItem, Product, assert_uses_paradedb_scan
@@ -75,8 +75,8 @@ def test_window_agg_with_raw_query_operators(mock_session):
     base = (
         select(MockItem.id, MockItem.description, MockItem.rating)
         .where(
-            MockItem.id.op("@@@")(func.pdb.all()),
-            MockItem.category.op("===")(literal_column("'electronics'")),
+            search.all(MockItem.id),
+            search.term(MockItem.category, "electronics"),
         )
         .order_by(MockItem.rating.desc())
         .limit(3)
@@ -90,7 +90,7 @@ def test_window_agg_with_raw_query_operators(mock_session):
         SELECT mock_items.id, mock_items.description, mock_items.rating,
                pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
         FROM mock_items
-        WHERE (mock_items.id @@@ pdb.all()) AND (mock_items.category === 'electronics')
+        WHERE mock_items.id @@@ pdb.all() AND mock_items.category === 'electronics'
         ORDER BY mock_items.rating DESC
         LIMIT 3
     """
