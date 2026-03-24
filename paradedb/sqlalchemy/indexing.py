@@ -198,6 +198,42 @@ def icu(
     )
 
 
+def chinese_compatible(
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        "chinese_compatible",
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
+def jieba(
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        "jieba",
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
 def literal(*, alias: str | None = None) -> TokenizerSpec:
     return _build_spec("literal", alias=alias)
 
@@ -286,6 +322,24 @@ def regex_pattern(
     )
 
 
+def source_code(
+    *,
+    alias: str | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> TokenizerSpec:
+    return _build_spec(
+        "source_code",
+        alias=alias,
+        args=args,
+        named_args=named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
 def raw(sql: str, *, alias: str | None = None) -> TokenizerSpec:
     return TokenizerSpec(raw_sql=sql, alias=alias)
 
@@ -340,11 +394,14 @@ class _TokenizeNamespace:
     simple = staticmethod(simple)
     whitespace = staticmethod(whitespace)
     icu = staticmethod(icu)
+    chinese_compatible = staticmethod(chinese_compatible)
+    jieba = staticmethod(jieba)
     literal = staticmethod(literal)
     literal_normalized = staticmethod(literal_normalized)
     ngram = staticmethod(ngram)
     lindera = staticmethod(lindera)
     regex_pattern = staticmethod(regex_pattern)
+    source_code = staticmethod(source_code)
     raw = staticmethod(raw)
     custom = staticmethod(custom)
     from_config = staticmethod(from_config)

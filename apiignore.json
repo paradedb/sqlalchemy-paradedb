@@ -211,10 +211,6 @@
 
   "types": [
     "pdb.alias",
-    "pdb.chinese_compatible",
-    "pdb.jieba",
-    "pdb.source_code",
-    "pdb.icu",
     "pdb.proximityclause"
   ]
 }

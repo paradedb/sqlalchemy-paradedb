@@ -34,6 +34,43 @@ products = Table(
 )
 
 
+def test_tokenizer_renderers_cover_public_wrappers():
+    assert tokenize.unicode(alias="description_unicode", lowercase=True, stemmer="english").render() == (
+        "pdb.unicode_words('alias=description_unicode,lowercase=true,stemmer=english')"
+    )
+    assert tokenize.simple(
+        alias="description_simple", filters=["lowercase", "stemmer"], stemmer="english"
+    ).render() == ("pdb.simple('alias=description_simple,lowercase=true,stemmer=english')")
+    assert tokenize.whitespace(alias="description_whitespace", named_args={"positions": True}).render() == (
+        "pdb.whitespace('alias=description_whitespace,positions=true')"
+    )
+    assert tokenize.icu(alias="description_icu", filters=["lowercase"]).render() == (
+        "pdb.icu('alias=description_icu,lowercase=true')"
+    )
+    assert tokenize.chinese_compatible(alias="description_cjk").render() == (
+        "pdb.chinese_compatible('alias=description_cjk')"
+    )
+    assert tokenize.jieba(alias="description_jieba", filters=["lowercase"]).render() == (
+        "pdb.jieba('alias=description_jieba,lowercase=true')"
+    )
+    assert tokenize.literal(alias="category_literal").render() == "pdb.literal('alias=category_literal')"
+    assert tokenize.literal_normalized(alias="category_exact").render() == (
+        "pdb.literal_normalized('alias=category_exact')"
+    )
+    assert tokenize.ngram(alias="description_ngram", min_gram=3, max_gram=8, prefix_only=True).render() == (
+        "pdb.ngram(3,8,'alias=description_ngram,prefix_only=true')"
+    )
+    assert tokenize.lindera("japanese", alias="description_jp").render() == (
+        "pdb.lindera('japanese','alias=description_jp')"
+    )
+    assert tokenize.regex_pattern(r"(?i)\\bh\\w*", alias="description_regex").render() == (
+        "pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex')"
+    )
+    assert tokenize.source_code(alias="description_source_code", named_args={"ascii_folding": True}).render() == (
+        "pdb.source_code('alias=description_source_code,ascii_folding=true')"
+    )
+
+
 def test_bm25_index_compile_with_tokenizers():
     idx = Index(
         "products_bm25_idx",
