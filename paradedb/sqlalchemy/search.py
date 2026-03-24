@@ -297,12 +297,15 @@ def parse(
     return field.operate(_QUERY, func.pdb.parse(query, lenient, conjunction_mode))
 
 
-def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int = 50) -> ColumnElement[bool]:
+def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int | None = None) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("phrase_prefix requires at least one term")
     require_non_empty_strings(terms, field_name="terms")
-    require_positive(max_expansions, field_name="max_expansions")
-    return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text()), max_expansions))
+    if max_expansions is not None:
+        require_positive(max_expansions, field_name="max_expansions")
+        return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text()), max_expansions))
+    else:
+        return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text())))
 
 
 def regex_phrase(
@@ -310,14 +313,17 @@ def regex_phrase(
     terms: list[str],
     *,
     slop: int = 0,
-    max_expansions: int = 100,
+    max_expansions: int | None = None,
 ) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("regex_phrase requires at least one term")
     require_non_empty_strings(terms, field_name="terms")
     require_non_negative(slop, field_name="slop")
-    require_positive(max_expansions, field_name="max_expansions")
-    return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
+    if max_expansions is not None:
+        require_positive(max_expansions, field_name="max_expansions")
+        return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
+    else:
+        return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop))
 
 
 def range_term(

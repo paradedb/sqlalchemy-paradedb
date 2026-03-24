@@ -279,7 +279,7 @@ WHERE products.id @@@ pdb.parse('description:sleek', true, false)"""
         phrase_prefix_sql
         == """SELECT products.id
 FROM products
-WHERE products.description @@@ pdb.phrase_prefix(ARRAY['running', 'sh'], 50)"""
+WHERE products.description @@@ pdb.phrase_prefix(ARRAY['running', 'sh'])"""
     )
     assert (
         regex_phrase_sql

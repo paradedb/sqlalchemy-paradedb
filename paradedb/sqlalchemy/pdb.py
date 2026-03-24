@@ -11,7 +11,6 @@ from ._functions import PDBFunctionWithNamedArgs
 from .validation import require_non_empty_string, require_non_negative, require_positive
 
 
-# TODO: dedupe this?
 def _inline_string_literal(value: str) -> ClauseElement:
     return literal_column("'" + value.replace("'", "''") + "'", Text())
 
