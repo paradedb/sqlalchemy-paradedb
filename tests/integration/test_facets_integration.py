@@ -12,7 +12,8 @@ pytestmark = pytest.mark.integration
 
 
 def _sql(stmt) -> str:
-    return str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
 
 
 def test_agg_value_count_with_search_predicate(session):
@@ -22,6 +23,13 @@ def test_agg_value_count_with_search_predicate(session):
         .where(search.match_all(Product.description, "running"))
     )
     assert_uses_paradedb_scan(session, stmt)
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"value_count":{"field":"id"}}') AS agg_1
+FROM products
+WHERE products.description &&& 'running'"""
+    )
     payload = session.execute(stmt).scalar_one()
     assert payload is not None
 
@@ -36,6 +44,13 @@ def test_multiple_agg_columns_with_search_all(session):
         .where(search.all(Product.id))
     )
     assert_uses_paradedb_scan(session, stmt)
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"avg":{"field":"rating"}}') AS avg_rating, pdb.agg('{"value_count":{"field":"id"}}') AS count
+FROM products
+WHERE products.id @@@ pdb.all()"""
+    )
     row = session.execute(stmt).one()
     assert row._mapping["avg_rating"] is not None
     assert row._mapping["count"] is not None
@@ -48,6 +63,13 @@ def test_percentiles_agg_with_search_all(session):
         .where(search.all(Product.id))
     )
     assert_uses_paradedb_scan(session, stmt)
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"percentiles":{"field":"rating","percents":[50,95]}}') AS pct
+FROM products
+WHERE products.id @@@ pdb.all()"""
+    )
     row = session.execute(stmt).one()
     assert row._mapping["pct"] is not None
 
@@ -67,6 +89,13 @@ def test_top_hits_agg_with_search_all(session):
         .where(search.all(Product.id))
     )
     assert_uses_paradedb_scan(session, stmt)
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"top_hits":{"docvalue_fields":["id","rating"],"size":2,"sort":[{"rating":"desc"}]}}') AS hits
+FROM products
+WHERE products.id @@@ pdb.all()"""
+    )
     row = session.execute(stmt).one()
     assert row._mapping["hits"] is not None
 
@@ -85,16 +114,14 @@ def test_window_agg_with_raw_query_operators(mock_session):
     stmt, plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=MockItem.id)
 
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
-    sql = " ".join(_sql(stmt).split())
-    expected_sql = """
-        SELECT mock_items.id, mock_items.description, mock_items.rating,
-               pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
-        FROM mock_items
-        WHERE mock_items.id @@@ pdb.all() AND mock_items.category === 'electronics'
-        ORDER BY mock_items.rating DESC
-        LIMIT 3
-    """
-    assert sql == " ".join(expected_sql.split())
+    assert (
+        _sql(stmt)
+        == """\
+SELECT mock_items.id, mock_items.description, mock_items.rating, pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
+FROM mock_items
+WHERE mock_items.id @@@ pdb.all() AND mock_items.category === 'electronics' ORDER BY mock_items.rating DESC
+ LIMIT 3"""
+    )
     assert plan.label == "facets"
 
     rows = mock_session.execute(stmt).all()
@@ -114,8 +141,14 @@ def test_with_rows_adds_window_agg_and_extracts_payload(session):
     stmt, facet_plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
     assert_uses_paradedb_scan(session, stmt)
 
-    sql = _sql(stmt)
-    assert "OVER () AS facets" in sql
+    assert (
+        _sql(stmt)
+        == """\
+SELECT products.id, products.description, products.rating, pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
+FROM products
+WHERE products.rating >= 4 AND products.id @@@ pdb.all() ORDER BY products.rating DESC
+ LIMIT 3"""
+    )
     assert facet_plan.label == "facets"
 
 
@@ -127,6 +160,12 @@ def test_with_rows_auto_injects_sentinel_when_no_paradedb_predicate(session):
         .limit(3)
     )
     stmt, _ = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
-    sql = _sql(stmt)
-    assert "products.id @@@ pdb.all()" in sql
+    assert (
+        _sql(stmt)
+        == """\
+SELECT products.id, products.description, products.rating, pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
+FROM products
+WHERE products.rating >= 4 AND products.id @@@ pdb.all() ORDER BY products.rating DESC
+ LIMIT 3"""
+    )
     assert_uses_paradedb_scan(session, stmt)
