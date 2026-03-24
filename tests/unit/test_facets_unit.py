@@ -18,7 +18,8 @@ products = table(
 
 
 def _sql(stmt) -> str:
-    return str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
 
 
 def test_metric_and_bucket_builders():
@@ -68,21 +69,27 @@ def test_with_rows_requires_order_and_limit():
 def test_with_rows_adds_window_agg_column():
     base = select(products.c.id, products.c.description).order_by(products.c.id).limit(10)
     stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
-    sql = _sql(stmt)
-
-    assert 'pdb.agg(\'{"terms":{"field":"category","size":10}}\')' in sql
-    assert "OVER () AS facets" in sql
-    assert "products.id @@@ pdb.all()" in sql
+    assert (
+        _sql(stmt)
+        == """\
+SELECT products.id, products.description, pdb.agg('{"terms":{"field":"category","size":10}}') OVER () AS facets
+FROM products
+WHERE products.id @@@ pdb.all() ORDER BY products.id
+ LIMIT 10"""
+    )
 
 
 def test_with_rows_accepts_fetch_clause():
     base = select(products.c.id, products.c.description).order_by(products.c.id).fetch(10)
     stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
-    sql = _sql(stmt)
-
-    assert "OVER () AS facets" in sql
-    assert "FETCH FIRST (10) ROWS ONLY" in sql
-    assert "products.id @@@ pdb.all()" in sql
+    assert (
+        _sql(stmt)
+        == """\
+SELECT products.id, products.description, pdb.agg('{"terms":{"field":"category","size":10}}') OVER () AS facets
+FROM products
+WHERE products.id @@@ pdb.all() ORDER BY products.id
+ FETCH FIRST (10) ROWS ONLY"""
+    )
 
 
 def test_extract_uses_mapping_label():
@@ -104,24 +111,27 @@ def test_percentiles_requires_non_empty_percents():
 def test_agg_approximate_true_generates_positional_false():
     # approximate=True → skip visibility checks → pass false as second positional arg
     stmt = select(pdb.agg(facets.value_count(field="id"), approximate=True))
-    sql = _sql(stmt)
-    assert "pdb.agg" in sql
-    assert "approximate =>" not in sql  # must NOT use named-arg form
-    assert "false" in sql.lower()
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"value_count":{"field":"id"}}', false) AS agg_1"""
+    )
 
 
 def test_agg_approximate_false_generates_positional_true():
     # approximate=False → force exact → pass true as second positional arg
     stmt = select(pdb.agg(facets.value_count(field="id"), approximate=False))
-    sql = _sql(stmt)
-    assert "pdb.agg" in sql
-    assert "approximate =>" not in sql
-    assert "true" in sql.lower()
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"value_count":{"field":"id"}}', true) AS agg_1"""
+    )
 
 
 def test_agg_no_approximate_omits_second_arg():
     stmt = select(pdb.agg(facets.value_count(field="id")))
-    sql = _sql(stmt)
-    assert 'pdb.agg(\'{"value_count":{"field":"id"}}\')' in sql
-    # Only one argument — no trailing comma with a second value
-    assert sql.count("pdb.agg(") == 1
+    assert (
+        _sql(stmt)
+        == """\
+SELECT pdb.agg('{"value_count":{"field":"id"}}') AS agg_1"""
+    )

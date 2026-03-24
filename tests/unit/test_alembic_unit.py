@@ -306,7 +306,10 @@ def test_create_sql_generation_without_where_clause():
         key_field="id",
     )
     pdb_alembic._create_bm25_index_impl(ops, create_op)
-    assert "WHERE" not in ops.sql[-1]
+    assert (
+        ops.sql[-1]
+        == 'CREATE INDEX "products_bm25_idx" ON "products" USING bm25 (id, description) WITH (key_field=\'id\')'
+    )
 
 
 def test_renderer_emits_where_kwarg():

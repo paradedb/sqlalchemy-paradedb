@@ -35,6 +35,10 @@ products = Table(
 )
 
 
+def _sql(sql) -> str:
+    return "\n".join(line.rstrip() for line in str(sql).split("\n")).strip()
+
+
 def test_tokenizer_renderers_cover_public_wrappers():
     assert tokenize.unicode(alias="description_unicode", lowercase=True, stemmer="english").render() == (
         "pdb.unicode_words('alias=description_unicode,lowercase=true,stemmer=english')"
@@ -82,12 +86,11 @@ def test_bm25_index_compile_with_tokenizers():
         postgresql_with={"key_field": "id"},
     )
 
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "USING bm25" in sql
-    assert "((description)::pdb.unicode_words('lowercase=true,stemmer=english'))" in sql
-    assert "((category)::pdb.literal_normalized('alias=category_exact'))" in sql
-    assert "key_field = id" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_idx ON products USING bm25 (id, ((description)::pdb.unicode_words('lowercase=true,stemmer=english')), ((category)::pdb.literal_normalized('alias=category_exact'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_unicode_omits_none_options():
@@ -99,10 +102,11 @@ def test_bm25_index_compile_unicode_omits_none_options():
         postgresql_with={"key_field": "id"},
     )
 
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((description)::pdb.unicode_words('lowercase=true'))" in sql
-    assert "stemmer=null" not in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_idx ON products USING bm25 (id, ((description)::pdb.unicode_words('lowercase=true'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_with_structured_tokenizer_config():
@@ -123,9 +127,11 @@ def test_bm25_index_compile_with_structured_tokenizer_config():
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((description)::pdb.simple('alias=description_simple,lowercase=true,stemmer=english'))" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_structured_idx ON products USING bm25 (id, ((description)::pdb.simple('alias=description_simple,lowercase=true,stemmer=english'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
@@ -146,9 +152,11 @@ def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((description)::pdb.ngram(3,8,'alias=description_ngram,prefix_only=true,positions=true'))" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_ngram_idx ON products USING bm25 (id, ((description)::pdb.ngram(3,8,'alias=description_ngram,prefix_only=true,positions=true'))) WITH (key_field = id)"""
+    )
 
 
 def test_tokenizer_from_config_rejects_non_identifier_tokenizer_name():
@@ -169,9 +177,11 @@ def test_bm25_index_compile_lindera_wrapper():
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((description)::pdb.lindera('japanese','alias=description_jp'))" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_lindera_idx ON products USING bm25 (id, ((description)::pdb.lindera('japanese','alias=description_jp'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_regex_pattern_wrapper():
@@ -182,9 +192,11 @@ def test_bm25_index_compile_regex_pattern_wrapper():
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((description)::pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex'))" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_regex_idx ON products USING bm25 (id, ((description)::pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_json_key_with_tokenizer():
@@ -198,9 +210,11 @@ def test_bm25_index_compile_json_key_with_tokenizer():
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((metadata ->> 'color')::pdb.literal('alias=metadata_color'))" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_json_idx ON products USING bm25 (id, ((metadata ->> 'color')::pdb.literal('alias=metadata_color'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_multiple_json_keys():
@@ -218,10 +232,11 @@ def test_bm25_index_compile_multiple_json_keys():
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "alias=metadata_color" in sql
-    assert "alias=metadata_location" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_json_multi_idx ON products USING bm25 (id, ((metadata ->> 'color')::pdb.literal('alias=metadata_color')), ((metadata ->> 'location')::pdb.literal('alias=metadata_location'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_index_compile_non_text_expression_with_pdb_alias():
@@ -234,9 +249,11 @@ def test_bm25_index_compile_non_text_expression_with_pdb_alias():
         postgresql_with={"key_field": "id"},
     )
 
-    sql = str(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-
-    assert "((id + 1)::pdb.alias('next_id'))" in sql
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_bm25_expr_idx ON products USING bm25 (id, description, ((id + 1)::pdb.alias('next_id'))) WITH (key_field = id)"""
+    )
 
 
 def test_bm25_field_non_postgres_compile_raises():
