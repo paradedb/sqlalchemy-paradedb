@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import cast, func, literal
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Text, func, literal, literal_column
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from .errors import InvalidArgumentError
 from ._functions import PDBFunctionWithNamedArgs
 from .validation import require_non_empty_string, require_non_negative, require_positive
+
+
+# TODO: dedupe this?
+def _inline_string_literal(value: str) -> ClauseElement:
+    return literal_column("'" + value.replace("'", "''") + "'", Text())
 
 
 def score(field: ColumnElement) -> ClauseElement:
@@ -95,7 +99,7 @@ def agg(spec: dict[str, Any], *, approximate: bool | None = None) -> ClauseEleme
     if not isinstance(spec, dict) or not spec:
         raise InvalidArgumentError("spec must be a non-empty dict")
     payload = json.dumps(spec, separators=(",", ":"), sort_keys=True)
-    payload_expr = cast(literal(payload), JSONB)
+    payload_expr = _inline_string_literal(payload)
     if approximate is None:
         return func.pdb.agg(payload_expr)
     # pdb.agg() takes an optional second positional boolean: true = exact (default),

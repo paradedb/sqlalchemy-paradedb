@@ -118,6 +118,7 @@ class FacetPlan:
         return None
 
 
+# TODO: delete FacetPlan?
 def with_rows(
     base_stmt: Select,
     *,

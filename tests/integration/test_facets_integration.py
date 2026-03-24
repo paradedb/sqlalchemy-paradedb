@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.dialects import postgresql
 
-from conftest import Product, assert_uses_paradedb_scan
+from conftest import MockItem, Product, assert_uses_paradedb_scan
 from paradedb.sqlalchemy import facets, pdb, search
 
 
@@ -69,6 +69,39 @@ def test_top_hits_agg_with_search_all(session):
     assert_uses_paradedb_scan(session, stmt)
     row = session.execute(stmt).one()
     assert row._mapping["hits"] is not None
+
+
+def test_window_agg_with_raw_query_operators(mock_session):
+    base = (
+        select(MockItem.id, MockItem.description, MockItem.rating)
+        .where(
+            MockItem.id.op("@@@")(func.pdb.all()),
+            MockItem.category.op("===")(literal_column("'electronics'")),
+        )
+        .order_by(MockItem.rating.desc())
+        .limit(3)
+    )
+
+    stmt, plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=MockItem.id)
+
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    sql = " ".join(_sql(stmt).split())
+    expected_sql = """
+        SELECT mock_items.id, mock_items.description, mock_items.rating,
+               pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
+        FROM mock_items
+        WHERE (mock_items.id @@@ pdb.all()) AND (mock_items.category === 'electronics')
+        ORDER BY mock_items.rating DESC
+        LIMIT 3
+    """
+    assert sql == " ".join(expected_sql.split())
+    assert plan.label == "facets"
+
+    rows = mock_session.execute(stmt).all()
+    assert len(rows) == 3
+    assert [row.rating for row in rows] == [5, 4, 4]
+    assert {row.id for row in rows[0:]} == {12, 1, 2}
+    assert all(row.facets == {"value": 5.0} for row in rows)
 
 
 def test_with_rows_adds_window_agg_and_extracts_payload(session):

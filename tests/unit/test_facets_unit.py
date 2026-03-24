@@ -70,7 +70,7 @@ def test_with_rows_adds_window_agg_column():
     stmt, facet_plan = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
     sql = _sql(stmt)
 
-    assert 'pdb.agg(CAST(\'{"terms":{"field":"category","size":10}}\' AS JSONB))' in sql
+    assert 'pdb.agg(\'{"terms":{"field":"category","size":10}}\')' in sql
     assert "OVER () AS facets" in sql
     assert "products.id @@@ pdb.all()" in sql
     assert facet_plan.label == "facets"
@@ -119,6 +119,6 @@ def test_agg_approximate_false_generates_positional_true():
 def test_agg_no_approximate_omits_second_arg():
     stmt = select(pdb.agg(facets.value_count(field="id")))
     sql = _sql(stmt)
-    assert "pdb.agg(CAST(" in sql
+    assert 'pdb.agg(\'{"value_count":{"field":"id"}}\')' in sql
     # Only one argument — no trailing comma with a second value
     assert sql.count("pdb.agg(") == 1
