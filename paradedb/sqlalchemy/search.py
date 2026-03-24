@@ -32,8 +32,8 @@ _MATCH_ANY: Any = operators.custom_op("|||", precedence=5, is_comparison=True)
 _TERM: Any = operators.custom_op("===", precedence=5, is_comparison=True)
 _PHRASE: Any = operators.custom_op("###", precedence=5, is_comparison=True)
 _QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
-_NEAR: Any = operators.custom_op("##", precedence=5)
-_NEAR_ORDERED: Any = operators.custom_op("##>", precedence=5)
+_PROXIMITY: Any = operators.custom_op("##", precedence=5)
+_PROXIMITY_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -232,7 +232,7 @@ class ProximityExpr:
         other: str | ProximityExpr | ClauseElement,
         ordered: bool = False,
     ) -> ProximityExpr:
-        return ProximityExpr(_near_chain(self.expr, other, distance=distance, ordered=ordered))
+        return ProximityExpr(_proximity_chain(self.expr, other, distance=distance, ordered=ordered))
 
 
 def prox_regex(pattern: str, max_expansions: int | None = None) -> ProximityExpr:
@@ -276,7 +276,7 @@ def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseE
     return value
 
 
-def _near_chain(
+def _proximity_chain(
     left: str | ClauseElement | ProximityExpr,
     right: str | ClauseElement | ProximityExpr,
     *,
@@ -286,7 +286,7 @@ def _near_chain(
     require_non_negative(distance, field_name="distance")
     left_expr = _to_proximity_operand(left)
     right_expr = _to_proximity_operand(right)
-    op = _NEAR_ORDERED if ordered else _NEAR
+    op = _PROXIMITY_ORDERED if ordered else _PROXIMITY
     return left_expr.operate(op, literal(distance)).operate(op, right_expr)
 
 

@@ -135,11 +135,7 @@ search.more_like_this(Product.id, document_id=1, fields=["description"])
 from sqlalchemy import select
 from paradedb.sqlalchemy import search
 
-prox = search.prox_array("running").near(
-    search.prox_regex("sho.*"),
-    distance=1,
-    ordered=True,
-)
+prox = search.prox_array("running").within(1, search.prox_regex("sho.*"), ordered=True)
 stmt = select(Product.id).where(search.proximity(Product.description, prox))
 ```
 
