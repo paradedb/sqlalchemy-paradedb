@@ -136,7 +136,7 @@ def test_with_rows_does_not_inject_sentinel_when_predicate_exists():
         .order_by(products.c.id)
         .limit(5)
     )
-    stmt, _ = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
     sql = _sql(stmt)
     assert "pdb.all()" not in sql
 

@@ -67,30 +67,33 @@ def test_with_rows_requires_order_and_limit():
 
 def test_with_rows_adds_window_agg_column():
     base = select(products.c.id, products.c.description).order_by(products.c.id).limit(10)
-    stmt, facet_plan = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+    stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
     sql = _sql(stmt)
 
     assert 'pdb.agg(\'{"terms":{"field":"category","size":10}}\')' in sql
     assert "OVER () AS facets" in sql
     assert "products.id @@@ pdb.all()" in sql
-    assert facet_plan.label == "facets"
 
 
 def test_with_rows_accepts_fetch_clause():
     base = select(products.c.id, products.c.description).order_by(products.c.id).fetch(10)
-    stmt, facet_plan = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+    stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
     sql = _sql(stmt)
 
     assert "OVER () AS facets" in sql
     assert "FETCH FIRST (10) ROWS ONLY" in sql
     assert "products.id @@@ pdb.all()" in sql
-    assert facet_plan.label == "facets"
 
 
-def test_facet_plan_extract_empty_rows_returns_none():
-    base = select(products.c.id).order_by(products.c.id).limit(1)
-    _, facet_plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
-    assert facet_plan.extract([]) is None
+def test_extract_uses_mapping_label():
+    class Row:
+        _mapping = {"custom_facets": {"value": 3.0}}
+
+    assert facets.extract([Row()], label="custom_facets") == {"value": 3.0}
+
+
+def test_extract_falls_back_to_last_sequence_value():
+    assert facets.extract([(1, "row", {"value": 3.0})]) == {"value": 3.0}
 
 
 def test_percentiles_requires_non_empty_percents():

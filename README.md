@@ -92,7 +92,7 @@ base = (
     .limit(10)
 )
 
-stmt, facet_plan = facets.with_rows(
+stmt = facets.with_rows(
     base,
     agg=facets.multi(
         facets.value_count(field="id"),
@@ -103,7 +103,7 @@ stmt, facet_plan = facets.with_rows(
 
 with Session(engine) as session:
     rows = session.execute(stmt).all()
-    facet_payload = facet_plan.extract(rows)
+    facet_payload = facets.extract(rows)
 ```
 
 ## Search Patterns

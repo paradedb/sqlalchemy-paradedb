@@ -111,7 +111,7 @@ def test_window_agg_with_raw_query_operators(mock_session):
         .limit(3)
     )
 
-    stmt, plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=MockItem.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=MockItem.id)
 
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
     assert (
@@ -122,12 +122,11 @@ FROM mock_items
 WHERE mock_items.id @@@ pdb.all() AND mock_items.category === 'electronics' ORDER BY mock_items.rating DESC
  LIMIT 3"""
     )
-    assert plan.label == "facets"
-
     rows = mock_session.execute(stmt).all()
     assert len(rows) == 3
     assert [row.rating for row in rows] == [5, 4, 4]
     assert {row.id for row in rows[0:]} == {12, 1, 2}
+    assert facets.extract(rows) == {"value": 5.0}
     assert all(row.facets == {"value": 5.0} for row in rows)
 
 
@@ -138,7 +137,7 @@ def test_with_rows_adds_window_agg_and_extracts_payload(session):
         .order_by(Product.rating.desc())
         .limit(3)
     )
-    stmt, facet_plan = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
     assert_uses_paradedb_scan(session, stmt)
 
     assert (
@@ -149,7 +148,10 @@ FROM products
 WHERE products.rating >= 4 AND products.id @@@ pdb.all() ORDER BY products.rating DESC
  LIMIT 3"""
     )
-    assert facet_plan.label == "facets"
+    rows = session.execute(stmt).all()
+    assert len(rows) == 3
+    assert {row.id for row in rows} == {1, 2, 3}
+    assert facets.extract(rows) == {"value": 3.0}
 
 
 def test_with_rows_auto_injects_sentinel_when_no_paradedb_predicate(session):
@@ -159,7 +161,7 @@ def test_with_rows_auto_injects_sentinel_when_no_paradedb_predicate(session):
         .order_by(Product.rating.desc())
         .limit(3)
     )
-    stmt, _ = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
     assert (
         _sql(stmt)
         == """\
@@ -169,3 +171,5 @@ WHERE products.rating >= 4 AND products.id @@@ pdb.all() ORDER BY products.ratin
  LIMIT 3"""
     )
     assert_uses_paradedb_scan(session, stmt)
+    rows = session.execute(stmt).all()
+    assert facets.extract(rows) == {"value": 3.0}
