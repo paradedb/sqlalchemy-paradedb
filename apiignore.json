@@ -202,13 +202,19 @@
     "pdb.tokenize_simple",
     "pdb.tokenize_source_code",
     "pdb.tokenize_unicode_words",
-    "pdb.tokenize_whitespace"
+    "pdb.tokenize_whitespace",
+    "pdb.index_segments",
+    "pdb.indexes",
+    "pdb.verify_all_indexes",
+    "pdb.verify_index"
   ],
 
   "types": [
     "pdb.alias",
     "pdb.chinese_compatible",
     "pdb.jieba",
-    "pdb.source_code"
+    "pdb.source_code",
+    "pdb.icu",
+    "pdb.proximityclause"
   ]
 }
