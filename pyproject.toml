@@ -49,6 +49,7 @@ Changelog = "https://github.com/paradedb/sqlalchemy-paradedb/blob/main/CHANGELOG
 [project.optional-dependencies]
 test = [
   "pytest>=8.0.0",
+  "pytest-cov>=6.0",
   "psycopg[binary]>=3.1.18",
   "alembic>=1.13.0",
 ]
@@ -87,6 +88,17 @@ disable_error_code = ["no-untyped-def", "no-any-return", "type-arg", "attr-defin
 [[tool.mypy.overrides]]
 module = ["alembic.*"]
 ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["paradedb"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["paradedb"]
