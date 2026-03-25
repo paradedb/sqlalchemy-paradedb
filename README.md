@@ -16,8 +16,8 @@
 | ---------- | ----------------------------- |
 | Python     | 3.10+                         |
 | SQLAlchemy | 2.0.32+                       |
-| ParadeDB   | 0.21.0+ (`pg_search`)         |
-| PostgreSQL | 17+ (with ParadeDB extension) |
+| ParadeDB   | 0.22.0+                       |
+| PostgreSQL | 15+ (with ParadeDB extension) |
 
 ## Installation
 
