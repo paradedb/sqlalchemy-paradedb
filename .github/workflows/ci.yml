@@ -1,7 +1,7 @@
 # workflows/ci.yml
 #
 # CI
-# Run linting and test matrix across supported Python versions.
+# Run linting and test matrix across supported Python and PostgreSQL versions.
 
 name: CI
 
@@ -36,39 +36,54 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
-      - name: Sync dependencies
-        run: uv sync --extra test --extra dev
+      - name: Install dependencies
+        run: |
+          uv venv --python "3.12"
+          uv sync --extra test --extra dev
 
       - name: Ruff check
-        run: uv run --extra dev ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Type check
-        run: uv run --extra dev mypy paradedb
+        run: uv run --no-sync mypy paradedb
 
       - name: Check API coverage
-        run: uv run scripts/check_api_coverage.py
+        run: uv run --no-sync scripts/check_api_coverage.py
 
   matrix-tests:
-    name: Python ${{ matrix.python-version }}
+    name: Python ${{ matrix.python-version }} / PG ${{ matrix.postgres-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version:
-          - "3.10"
-          - "3.11"
-          - "3.12"
-          - "3.13"
-          - "3.14"
+        include:
+          # Python version coverage (all on PG 18)
+          - python-version: "3.10"
+            postgres-version: "18"
+          - python-version: "3.11"
+            postgres-version: "18"
+          - python-version: "3.12"
+            postgres-version: "18"
+          - python-version: "3.13"
+            postgres-version: "18"
+          - python-version: "3.14"
+            postgres-version: "18"
+          # Postgres compatibility coverage for supported older versions
+          - python-version: "3.12"
+            postgres-version: "15"
+          - python-version: "3.12"
+            postgres-version: "16"
+          - python-version: "3.12"
+            postgres-version: "17"
 
     services:
       paradedb:
-        image: paradedb/paradedb:0.22.0-pg18
+        image: paradedb/paradedb:0.22.0-pg${{ matrix.postgres-version }}
         ports:
           - 5432:5432
         env:
@@ -95,13 +110,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
-      - name: Sync dependencies
-        run: uv sync --extra test --extra dev
+      - name: Install dependencies
+        run: |
+          uv venv --python "${{ matrix.python-version }}"
+          uv sync --extra test --extra dev
 
       - name: Install pg client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -116,16 +133,16 @@ jobs:
           exit 1
 
       - name: Run unit tests
-        run: uv run --extra test pytest tests/unit --cov=paradedb
+        run: uv run --no-sync pytest tests/unit --cov=paradedb
 
       - name: Run integration tests
-        run: uv run --extra test pytest -m integration --cov=paradedb --cov-append --cov-report=xml
+        run: uv run --no-sync pytest -m integration --cov=paradedb --cov-append --cov-report=xml
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
-          flags: sqlalchemy-paradedb,py${{ matrix.python-version }}
+          flags: sqlalchemy-paradedb,py${{ matrix.python-version }},pg${{ matrix.postgres-version }}
           fail_ci_if_error: false
           verbose: true
         env:
@@ -133,9 +150,9 @@ jobs:
 
       - name: Run examples
         run: |
-          uv run --extra test python examples/quickstart/quickstart.py
-          uv run --extra test python examples/autocomplete/autocomplete.py
-          uv run --extra test python examples/more_like_this/more_like_this.py
-          uv run --extra test python examples/faceted_search/faceted_search.py
-          uv run --extra test python examples/hybrid_rrf/hybrid_rrf.py
-          uv run --extra test python examples/rag/rag.py
+          uv run --no-sync python examples/quickstart/quickstart.py
+          uv run --no-sync python examples/autocomplete/autocomplete.py
+          uv run --no-sync python examples/more_like_this/more_like_this.py
+          uv run --no-sync python examples/faceted_search/faceted_search.py
+          uv run --no-sync python examples/hybrid_rrf/hybrid_rrf.py
+          uv run --no-sync python examples/rag/rag.py
