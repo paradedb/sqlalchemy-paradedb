@@ -50,6 +50,9 @@ jobs:
       - name: Type check
         run: uv run --extra dev mypy paradedb
 
+      - name: Check API coverage
+        run: uv run scripts/check_api_coverage.py
+
   matrix-tests:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

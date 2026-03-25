@@ -5,6 +5,7 @@ from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, te
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
+from paradedb.sqlalchemy import pdb
 from paradedb.sqlalchemy.expr import json_text
 from paradedb.sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
 from paradedb.sqlalchemy.errors import FieldNotIndexedError
@@ -186,6 +187,50 @@ def test_bm25_index_json_keys_when_supported(engine):
     assert "'color'" in row.indexdef
     assert "'location'" in row.indexdef
     assert row.indexdef.count("pdb.literal(") >= 2
+
+    _drop_table_and_index(engine, table_name, index_name)
+
+
+def test_bm25_index_non_text_expression_with_pdb_alias(engine):
+    table_name = "indexing_products_expr_alias"
+    index_name = "indexing_products_expr_alias_bm25_idx"
+    _drop_table_and_index(engine, table_name, index_name)
+
+    metadata = MetaData()
+    products = Table(
+        table_name,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text, nullable=False),
+        Column("rating", Integer, nullable=False),
+    )
+    metadata.create_all(engine)
+
+    idx = Index(
+        index_name,
+        BM25Field(products.c.id),
+        BM25Field(products.c.description),
+        BM25Field(pdb.alias(products.c.rating + 1, "rating_plus_one")),
+        postgresql_using="bm25",
+        postgresql_with={"key_field": "id"},
+    )
+    idx.create(engine)
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE tablename = :table_name
+                  AND indexname = :index_name
+                """
+            ),
+            {"table_name": table_name, "index_name": index_name},
+        ).one()
+
+    assert "pdb.alias" in row.indexdef
+    assert "rating_plus_one" in row.indexdef
 
     _drop_table_and_index(engine, table_name, index_name)
 

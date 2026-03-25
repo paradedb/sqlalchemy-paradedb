@@ -26,7 +26,8 @@ products = table(
 
 
 def _sql(stmt) -> str:
-    return str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
 
 
 def test_search_argument_validation_errors():
@@ -136,9 +137,15 @@ def test_with_rows_does_not_inject_sentinel_when_predicate_exists():
         .order_by(products.c.id)
         .limit(5)
     )
-    stmt, _ = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
-    sql = _sql(stmt)
-    assert "pdb.all()" not in sql
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
+    assert (
+        _sql(stmt)
+        == """\
+SELECT products.id, pdb.agg('{"value_count":{"field":"id"}}') OVER () AS facets
+FROM products
+WHERE products.description &&& 'running' ORDER BY products.id
+ LIMIT 5"""
+    )
 
 
 def test_with_rows_limit_guard_ignores_limit_identifier_names():

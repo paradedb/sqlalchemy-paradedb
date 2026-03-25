@@ -92,7 +92,7 @@ base = (
     .limit(10)
 )
 
-stmt, facet_plan = facets.with_rows(
+stmt = facets.with_rows(
     base,
     agg=facets.multi(
         facets.value_count(field="id"),
@@ -103,7 +103,7 @@ stmt, facet_plan = facets.with_rows(
 
 with Session(engine) as session:
     rows = session.execute(stmt).all()
-    facet_payload = facet_plan.extract(rows)
+    facet_payload = facets.extract(rows)
 ```
 
 ## Search Patterns
@@ -135,11 +135,7 @@ search.more_like_this(Product.id, document_id=1, fields=["description"])
 from sqlalchemy import select
 from paradedb.sqlalchemy import search
 
-prox = search.prox_array("running").near(
-    search.prox_regex("sho.*"),
-    distance=1,
-    ordered=True,
-)
+prox = search.prox_array("running").within(1, search.prox_regex("sho.*"), ordered=True)
 stmt = select(Product.id).where(search.proximity(Product.description, prox))
 ```
 

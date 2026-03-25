@@ -25,7 +25,8 @@ products = table(
 
 
 def _sql(stmt) -> str:
-    return str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
 
 
 def test_error_hierarchy():
@@ -39,11 +40,18 @@ def test_expr_helpers_compile():
     concat_stmt = select(pdb_expr.concat_ws(" ", products.c.category, products.c.description))
     json_stmt = select(pdb_expr.json_text(products.c.description.cast(postgresql.JSONB), "kind"))
 
-    concat_sql = _sql(concat_stmt)
-    json_sql = _sql(json_stmt)
-
-    assert "concat_ws(' ', products.category, products.description)" in concat_sql
-    assert "CAST(products.description AS JSONB) ->> 'kind'" in json_sql
+    assert (
+        _sql(concat_stmt)
+        == """\
+SELECT concat_ws(' ', products.category, products.description) AS concat_ws_1
+FROM products"""
+    )
+    assert (
+        _sql(json_stmt)
+        == """\
+SELECT CAST(products.description AS JSONB) ->> 'kind' AS anon_1
+FROM products"""
+    )
 
 
 def test_inspect_detects_predicates_in_boolean_tree():

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any
 
@@ -102,20 +101,16 @@ def ensure_operator(stmt: Select, *, key_field: ColumnElement) -> Select:
     return stmt.where(search.all(key_field))
 
 
-@dataclass(frozen=True)
-class FacetPlan:
-    label: str = "facets"
-
-    def extract(self, rows: list[object]) -> Any | None:
-        if not rows:
-            return None
-        first = rows[0]
-        mapping = getattr(first, "_mapping", None)
-        if mapping is not None and self.label in mapping:
-            return mapping[self.label]
-        if isinstance(first, Sequence) and not isinstance(first, (str, bytes)):
-            return first[-1]
+def extract(rows: Sequence[object], *, label: str = "facets") -> Any | None:
+    if not rows:
         return None
+    first = rows[0]
+    mapping = getattr(first, "_mapping", None)
+    if mapping is not None and label in mapping:
+        return mapping[label]
+    if isinstance(first, Sequence) and not isinstance(first, (str, bytes)):
+        return first[-1]
+    return None
 
 
 def with_rows(
@@ -125,7 +120,7 @@ def with_rows(
     key_field: ColumnElement,
     label: str = "facets",
     ensure_predicate: bool = True,
-) -> tuple[Select, FacetPlan]:
+) -> Select:
     if not has_order_by(base_stmt):
         raise FacetRequiresOrderByError("with_rows requires ORDER BY")
     if not has_limit(base_stmt):
@@ -136,4 +131,4 @@ def with_rows(
         raise FacetRequiresParadeDBPredicateError("with_rows requires a ParadeDB predicate")
 
     stmt = stmt.add_columns(pdb.agg(agg).over().label(label))
-    return stmt, FacetPlan(label=label)
+    return stmt
