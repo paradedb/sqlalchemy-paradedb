@@ -39,7 +39,7 @@ def _render_named_arg_value(value: Any, compiler, **kw: Any) -> str:
 @compiles(PDBFunctionWithNamedArgs, "postgresql")
 def _compile_pdb_function_with_named_args(element: PDBFunctionWithNamedArgs, compiler, **kw: Any) -> str:
     positional_sql = [compiler.process(arg, **kw) for arg in element.positional_args]
-    named_sql = [f'{name} => {_render_named_arg_value(value, compiler, **kw)}' for name, value in element.named_args]
+    named_sql = [f"{name} => {_render_named_arg_value(value, compiler, **kw)}" for name, value in element.named_args]
     args_sql = ", ".join([*positional_sql, *named_sql])
     return f"pdb.{element.name}({args_sql})"
 

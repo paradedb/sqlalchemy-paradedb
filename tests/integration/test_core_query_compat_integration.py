@@ -20,17 +20,10 @@ def test_search_with_aliased_entity(session):
 
 
 def test_search_in_cte_then_structured_outer_filter(session):
-    matched = (
-        select(Product.id.label("pid"))
-        .where(search.match_any(Product.description, "running"))
-        .cte("matched")
-    )
+    matched = select(Product.id.label("pid")).where(search.match_any(Product.description, "running")).cte("matched")
 
     stmt = (
-        select(Product.id)
-        .where(Product.id.in_(select(matched.c.pid)))
-        .where(Product.rating >= 5)
-        .order_by(Product.id)
+        select(Product.id).where(Product.id.in_(select(matched.c.pid))).where(Product.rating >= 5).order_by(Product.id)
     )
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
