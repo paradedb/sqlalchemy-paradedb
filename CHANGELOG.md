@@ -15,3 +15,5 @@ All notable changes to this project will be documented in this file. The format 
 - Unit/integration suites for indexing, querying, facets, and migrations.
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
+
+[0.1.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.1.0
