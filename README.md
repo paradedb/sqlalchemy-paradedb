@@ -279,42 +279,34 @@ indexing.tokenize.from_config({"filters": ["lowercase"]})
 
 ## Examples
 
-- Quick Start: [setup](examples/quickstart/setup.py), [run](examples/quickstart/quickstart.py)
-- Faceted Search: [setup](examples/faceted_search/setup.py), [run](examples/faceted_search/faceted_search.py)
-- Autocomplete: [setup](examples/autocomplete/setup.py), [run](examples/autocomplete/autocomplete.py)
-- More Like This: [setup](examples/more_like_this/setup.py), [run](examples/more_like_this/more_like_this.py)
-- Hybrid Search (RRF): [setup](examples/hybrid_rrf/setup.py), [run](examples/hybrid_rrf/hybrid_rrf.py)
-- RAG: [setup](examples/rag/setup.py), [run](examples/rag/rag.py)
-
-## Testing
-
-Use repository script helpers:
-
-```bash
-./scripts/run_unit_tests.sh
-./scripts/run_integration_tests.sh
-./scripts/run_examples.sh
-```
+- [Quick Start](examples/quickstart/quickstart.py)
+- [Faceted Search](examples/faceted_search/faceted_search.py)
+- [Autocomplete](examples/autocomplete/autocomplete.py)
+- [More Like This](examples/more_like_this/more_like_this.py)
+- [Hybrid Search (RRF)](examples/hybrid_rrf/hybrid_rrf.py)
+- [RAG](examples/rag/rag.py)
 
 ## Documentation
 
-- [ParadeDB Docs](https://docs.paradedb.com)
-- [ParadeDB Website](https://paradedb.com)
-- [Changelog](CHANGELOG.md)
+- **Package Documentation**: <https://paradedb.github.io/django-paradedb>
+- **ParadeDB Official Docs**: <https://docs.paradedb.com>
+- **ParadeDB Website**: <https://paradedb.com>
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, linting, tests, and PR workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, running tests, linting, and the PR workflow.
 
 ## Support
 
-If you found a bug or need a feature, open a [GitHub Issue](https://github.com/paradedb/sqlalchemy-paradedb/issues/new/choose).
+If you're missing a feature or have found a bug, please open a
+[GitHub Issue](https://github.com/paradedb/django-paradedb/issues/new/choose).
 
-Community and team support:
+To get community support, you can:
 
-- [ParadeDB Slack Community](https://paradedb.com/slack)
-- [ParadeDB GitHub Discussions](https://github.com/paradedb/paradedb/discussions)
-- [Commercial support](mailto:sales@paradedb.com)
+- Post a question in the [ParadeDB Slack Community](https://paradedb.com/slack)
+- Ask for help on our [GitHub Discussions](https://github.com/paradedb/paradedb/discussions)
+
+If you need commercial support, please [contact the ParadeDB team](mailto:sales@paradedb.com).
 
 ## License
 
