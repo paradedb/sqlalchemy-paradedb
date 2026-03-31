@@ -1,3 +1,23 @@
+<!-- ParadeDB: Postgres for Search and Analytics -->
+<h1 align="center">
+  <a href="https://paradedb.com"><img src="https://github.com/paradedb/paradedb/raw/main/docs/logo/readme.svg" alt="ParadeDB"></a>
+<br>
+</h1>
+
+<p align="center">
+  <b>Simple, Elastic-quality search for Postgres</b><br/>
+</p>
+
+<h3 align="center">
+  <a href="https://paradedb.com">Website</a> &bull;
+  <a href="https://docs.paradedb.com">Docs</a> &bull;
+  <a href="https://paradedb.com/slack/">Community</a> &bull;
+  <a href="https://paradedb.com/blog/">Blog</a> &bull;
+  <a href="https://docs.paradedb.com/changelog/">Changelog</a>
+</h3>
+
+---
+
 # sqlalchemy-paradedb
 
 [![PyPI](https://img.shields.io/pypi/v/sqlalchemy-paradedb)](https://pypi.org/project/sqlalchemy-paradedb/)
@@ -289,7 +309,6 @@ indexing.tokenize.from_config({"filters": ["lowercase"]})
 
 ## Documentation
 
-- **Package Documentation**: <https://paradedb.github.io/django-paradedb>
 - **ParadeDB Official Docs**: <https://docs.paradedb.com>
 - **ParadeDB Website**: <https://paradedb.com>
 
