@@ -37,6 +37,14 @@ _PROXIMITY_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+def _text_literal(value: str) -> ClauseElement:
+    return literal(value, type_=Text())
+
+
+def _text_array(values: Sequence[str]) -> ClauseElement:
+    return array([str(value) for value in values], type_=Text())
+
+
 def _inline_string_literal(value: str) -> ClauseElement:
     return literal_column("'" + value.replace("'", "''") + "'", Text())
 
@@ -46,8 +54,8 @@ def _to_term_payload(*terms: str) -> ClauseElement:
         raise InvalidArgumentError("at least one search term is required")
     require_non_empty_strings(terms, field_name="terms")
     if len(terms) == 1:
-        return literal(terms[0])
-    return array(list(terms), type_=Text())
+        return _text_literal(terms[0])
+    return _text_array(terms)
 
 
 def _apply_boost(expr: ClauseElement, boost: float | None) -> ClauseElement:
@@ -83,13 +91,13 @@ def _apply_tokenizer(expr: ClauseElement, tokenizer: str | None) -> ClauseElemen
 def _to_phrase_payload(value: str | Sequence[str]) -> ClauseElement:
     if isinstance(value, str):
         require_non_empty_string(value, field_name="value")
-        return literal(value)
+        return _text_literal(value)
     if not isinstance(value, Sequence):
         raise InvalidArgumentError("value must be a non-empty string or a sequence of non-empty strings")
     if not value:
         raise InvalidArgumentError("value must contain at least one token")
     require_non_empty_strings(value, field_name="value")
-    return array(list(value), type_=Text())
+    return _text_array(value)
 
 
 def _apply_score_tuning(
@@ -171,7 +179,7 @@ def term(
     tokenizer: str | None = None,
 ) -> ColumnElement[bool]:
     require_non_empty_string(value, field_name="value")
-    payload: ClauseElement = literal(value)
+    payload: ClauseElement = _text_literal(value)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_tokenizer(payload, tokenizer)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
@@ -209,7 +217,7 @@ def regex(
     const: float | None = None,
 ) -> ColumnElement[bool]:
     require_non_empty_string(pattern, field_name="pattern")
-    payload: ClauseElement = func.pdb.regex(pattern)
+    payload: ClauseElement = func.pdb.regex(_text_literal(pattern))
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_QUERY, payload)
 
@@ -239,8 +247,8 @@ def prox_regex(pattern: str, max_expansions: int | None = None) -> ProximityExpr
     require_non_empty_string(pattern, field_name="pattern")
     if max_expansions is not None:
         require_non_negative(max_expansions, field_name="max_expansions")
-        return ProximityExpr(func.pdb.prox_regex(pattern, max_expansions))
-    return ProximityExpr(func.pdb.prox_regex(pattern))
+        return ProximityExpr(func.pdb.prox_regex(_text_literal(pattern), max_expansions))
+    return ProximityExpr(func.pdb.prox_regex(_text_literal(pattern)))
 
 
 def prox_array(*clauses: str | ProximityExpr) -> ProximityExpr:
@@ -294,7 +302,7 @@ def parse(
     field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False
 ) -> ColumnElement[bool]:
     require_non_empty_string(query, field_name="query")
-    return field.operate(_QUERY, func.pdb.parse(query, lenient, conjunction_mode))
+    return field.operate(_QUERY, func.pdb.parse(_text_literal(query), lenient, conjunction_mode))
 
 
 def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int | None = None) -> ColumnElement[bool]:
@@ -303,9 +311,9 @@ def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int
     require_non_empty_strings(terms, field_name="terms")
     if max_expansions is not None:
         require_positive(max_expansions, field_name="max_expansions")
-        return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text()), max_expansions))
+        return field.operate(_QUERY, func.pdb.phrase_prefix(_text_array(terms), max_expansions))
     else:
-        return field.operate(_QUERY, func.pdb.phrase_prefix(array(terms, type_=Text())))
+        return field.operate(_QUERY, func.pdb.phrase_prefix(_text_array(terms)))
 
 
 def regex_phrase(
@@ -321,9 +329,9 @@ def regex_phrase(
     require_non_negative(slop, field_name="slop")
     if max_expansions is not None:
         require_positive(max_expansions, field_name="max_expansions")
-        return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop, max_expansions))
+        return field.operate(_QUERY, func.pdb.regex_phrase(_text_array(terms), slop, max_expansions))
     else:
-        return field.operate(_QUERY, func.pdb.regex_phrase(array(terms, type_=Text()), slop))
+        return field.operate(_QUERY, func.pdb.regex_phrase(_text_array(terms), slop))
 
 
 def range_term(
@@ -373,7 +381,7 @@ def range_term(
         escaped = bounds.replace("'", "''")
         range_bounds_arg: ClauseElement = literal_column(f"'{escaped}'::{range_type}")
     else:
-        range_bounds_arg = literal(bounds)
+        range_bounds_arg = _text_literal(bounds)
     return field.operate(_QUERY, func.pdb.range_term(range_bounds_arg, relation_arg))
 
 
@@ -461,12 +469,12 @@ def more_like_this(
     if boost_factor is not None:
         named_options.append(("boost_factor", boost_factor))
     if stopwords is not None:
-        named_options.append(("stopwords", array(stopwords, type_=Text())))
+        named_options.append(("stopwords", _text_array(stopwords)))
 
     def _build_mlt_call(source_arg: ClauseElement, *, include_fields: bool) -> ClauseElement:
         positional_args: list[ClauseElement] = [source_arg]
         if include_fields and fields is not None:
-            positional_args.append(array(fields, type_=Text()))
+            positional_args.append(_text_array(fields))
         return PDBFunctionWithNamedArgs("more_like_this", positional_args, named_options)
 
     if document_ids is not None:
@@ -479,4 +487,5 @@ def more_like_this(
         return field.operate(_QUERY, _build_mlt_call(literal(document_id), include_fields=True))
 
     payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
-    return field.operate(_QUERY, _build_mlt_call(literal(payload), include_fields=False))
+    payload_arg = _text_literal(payload) if isinstance(payload, str) else literal(payload)
+    return field.operate(_QUERY, _build_mlt_call(payload_arg, include_fields=False))

@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+try:
+    from enum import StrEnum
+except ImportError:
+    # StrEnum was introduced in Python 3.11, so we use this fallback when testing against 3.10
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        def __str__(self) -> str:
+            return str(self.value)
+
+
 import pytest
 from sqlalchemy import Integer, String, Text, and_, not_, or_, select
 from sqlalchemy.dialects import postgresql
@@ -17,6 +28,15 @@ products = table(
     column("category", String),
     column("rating", Integer),
 )
+
+
+class SearchTerm(StrEnum):
+    running = "running"
+    shoes = "shoes"
+    phrase = "running shoes"
+    typo = "shose"
+    regex = "run.*"
+    range_bounds = "[3,9]"
 
 
 def _sql(stmt) -> str:
@@ -110,6 +130,28 @@ WHERE products.id @@@ pdb.all()"""
     )
 
 
+def test_regex_with_str_enum_compile():
+    stmt = select(products.c.id).where(search.regex(products.c.description, SearchTerm.regex))
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex('run.*')"""
+    )
+
+
+def test_parse_with_str_enum_compile():
+    stmt = select(products.c.id).where(search.parse(products.c.id, SearchTerm.phrase, lenient=True))
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.parse('running shoes', true, false)"""
+    )
+
+
 def test_match_any_with_tokenizer_compile():
     stmt = select(products.c.id).where(
         search.match_any(products.c.description, "running shoes", tokenizer="whitespace")
@@ -120,6 +162,58 @@ def test_match_any_with_tokenizer_compile():
         == """SELECT products.id
 FROM products
 WHERE products.description ||| 'running shoes'::pdb.whitespace"""
+    )
+
+
+def test_match_all_with_str_enum_and_tokenizer_compile():
+    stmt = select(products.c.id).where(
+        search.match_all(products.c.description, SearchTerm.phrase, tokenizer="whitespace")
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description &&& 'running shoes'::pdb.whitespace"""
+    )
+
+
+def test_match_all_multiple_str_enum_with_fuzzy_compile():
+    stmt = select(products.c.id).where(
+        search.match_all(products.c.description, SearchTerm.running, SearchTerm.shoes, distance=1)
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description &&& ARRAY['running', 'shoes']::pdb.fuzzy(1)"""
+    )
+
+
+def test_match_any_with_str_enum_and_tokenizer_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(products.c.description, SearchTerm.phrase, tokenizer="whitespace")
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| 'running shoes'::pdb.whitespace"""
+    )
+
+
+def test_match_any_multiple_str_enum_with_fuzzy_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(products.c.description, SearchTerm.running, SearchTerm.typo, distance=1, prefix=True)
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)"""
     )
 
 
@@ -134,6 +228,17 @@ WHERE products.description ### 'running shoes'::pdb.whitespace"""
     )
 
 
+def test_phrase_with_str_enum_and_slop_compile():
+    stmt = select(products.c.id).where(search.phrase(products.c.description, SearchTerm.phrase, slop=2))
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description ### 'running shoes'::pdb.slop(2)"""
+    )
+
+
 def test_phrase_pretokenized_with_slop_compile():
     stmt = select(products.c.id).where(search.phrase(products.c.description, ["shoes", "running"], slop=2))
     sql = _sql(stmt)
@@ -145,6 +250,32 @@ WHERE products.description ### CAST(ARRAY['shoes', 'running'] AS TEXT[])::pdb.sl
     )
 
 
+def test_phrase_prefix_with_str_enum_compile():
+    stmt = select(products.c.id).where(
+        search.phrase_prefix(products.c.description, [SearchTerm.running, SearchTerm.shoes])
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.phrase_prefix(ARRAY['running', 'shoes'])"""
+    )
+
+
+def test_regex_phrase_with_str_enum_compile():
+    stmt = select(products.c.id).where(
+        search.regex_phrase(products.c.description, [SearchTerm.running, SearchTerm.shoes], slop=1)
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex_phrase(ARRAY['running', 'shoes'], 1)"""
+    )
+
+
 def test_phrase_with_slop_and_const_compile():
     stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", slop=2, const=1.0))
     sql = _sql(stmt)
@@ -153,6 +284,17 @@ def test_phrase_with_slop_and_const_compile():
         == """SELECT products.id
 FROM products
 WHERE products.description ### 'running shoes'::pdb.slop(2)::pdb.query::pdb.const(1.0)"""
+    )
+
+
+def test_term_fuzzy_with_str_enum_compile():
+    stmt = select(products.c.id).where(search.term(products.c.description, SearchTerm.typo, distance=1))
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.description === 'shose'::pdb.fuzzy(1)"""
     )
 
 
@@ -303,6 +445,17 @@ WHERE products.description @@@ pdb.regex_phrase(ARRAY['run.*', 'shoe.*'], 1, 100
     )
 
 
+def test_range_term_with_str_enum_compile():
+    stmt = select(products.c.id).where(search.range_term(products.c.id, SearchTerm.range_bounds))
+    sql = _sql(stmt)
+    assert (
+        sql
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.range_term('[3,9]', 'Intersects')"""
+    )
+
+
 def test_simple_proximity_query():
     prox_stmt = select(products.c.id).where(
         search.proximity(products.c.description, search.prox_str("running").within(2, "shoe"))
@@ -313,6 +466,19 @@ def test_simple_proximity_query():
         == """SELECT products.id
 FROM products
 WHERE products.description @@@ (('running' ## 2) ## 'shoe')"""
+    )
+
+
+def test_prox_regex_with_str_enum_compile():
+    prox_stmt = select(products.c.id).where(
+        search.proximity(products.c.description, search.prox_regex(SearchTerm.regex).within(1, SearchTerm.shoes))
+    )
+
+    assert (
+        _sql(prox_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ((pdb.prox_regex('run.*') ## 1) ## 'shoes')"""
     )
 
 
