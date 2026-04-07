@@ -4,7 +4,7 @@ import pytest
 from alembic.autogenerate.api import AutogenContext
 from alembic.autogenerate.render import render_op
 from alembic.migration import MigrationContext
-from alembic.operations.ops import CreateIndexOp, DropIndexOp, ModifyTableOps, UpgradeOps
+from alembic.operations.ops import CreateIndexOp, DowngradeOps, DropIndexOp, ModifyTableOps, UpgradeOps
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 import paradedb.sqlalchemy.alembic as pdb_alembic
@@ -93,6 +93,46 @@ def test_create_bm25_index_rejects_removed_index_schema_kwarg():
             key_field="id",
             index_schema="analytics",
         )
+
+
+def test_create_bm25_index_reverse_returns_drop_op():
+    create_op = pdb_alembic.CreateBM25IndexOp(
+        index_name="products_bm25_idx",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+        table_schema="analytics",
+    )
+
+    reversed_op = create_op.reverse()
+
+    assert isinstance(reversed_op, pdb_alembic.DropBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.schema == "analytics"
+    assert reversed_op.if_exists is True
+
+
+def test_upgrade_ops_reverse_into_handles_bm25_create_op():
+    upgrade_ops = UpgradeOps(
+        [
+            pdb_alembic.CreateBM25IndexOp(
+                index_name="products_bm25_idx",
+                table_name="products",
+                expressions=["id", "description"],
+                key_field="id",
+                table_schema="analytics",
+            )
+        ]
+    )
+
+    downgrade_ops = upgrade_ops.reverse_into(DowngradeOps([]))
+
+    assert len(downgrade_ops.ops) == 1
+    reversed_op = downgrade_ops.ops[0]
+    assert isinstance(reversed_op, pdb_alembic.DropBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.schema == "analytics"
+    assert reversed_op.if_exists is True
 
 
 def test_alembic_renderers_registered_and_emit_python():

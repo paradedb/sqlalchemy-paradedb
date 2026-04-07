@@ -66,6 +66,9 @@ class CreateBM25IndexOp(MigrateOperation):
             )
         )
 
+    def reverse(self) -> MigrateOperation:
+        return DropBM25IndexOp(index_name=self.index_name, if_exists=True, schema=self.table_schema)
+
 
 @Operations.implementation_for(CreateBM25IndexOp)
 def _create_bm25_index_impl(operations: Operations, operation: CreateBM25IndexOp) -> None:
