@@ -112,6 +112,35 @@ def test_create_bm25_index_reverse_returns_drop_op():
     assert reversed_op.if_exists is True
 
 
+def test_drop_bm25_index_reverse_returns_create_op_when_metadata_present():
+    drop_op = pdb_alembic.DropBM25IndexOp(
+        index_name="products_bm25_idx",
+        if_exists=True,
+        schema="analytics",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+        where="rating > 3",
+    )
+
+    reversed_op = drop_op.reverse()
+
+    assert isinstance(reversed_op, pdb_alembic.CreateBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.table_name == "products"
+    assert reversed_op.expressions == ["id", "description"]
+    assert reversed_op.key_field == "id"
+    assert reversed_op.table_schema == "analytics"
+    assert reversed_op.where == "rating > 3"
+
+
+def test_drop_bm25_index_reverse_raises_without_recreate_metadata():
+    drop_op = pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=True, schema="analytics")
+
+    with pytest.raises(NotImplementedError, match="requires recreate metadata"):
+        drop_op.reverse()
+
+
 def test_upgrade_ops_reverse_into_handles_bm25_create_op():
     upgrade_ops = UpgradeOps(
         [
@@ -133,6 +162,34 @@ def test_upgrade_ops_reverse_into_handles_bm25_create_op():
     assert reversed_op.index_name == "products_bm25_idx"
     assert reversed_op.schema == "analytics"
     assert reversed_op.if_exists is True
+
+
+def test_upgrade_ops_reverse_into_handles_bm25_drop_op_with_recreate_metadata():
+    upgrade_ops = UpgradeOps(
+        [
+            pdb_alembic.DropBM25IndexOp(
+                index_name="products_bm25_idx",
+                if_exists=True,
+                schema="analytics",
+                table_name="products",
+                expressions=["id", "description"],
+                key_field="id",
+                where="rating > 3",
+            )
+        ]
+    )
+
+    downgrade_ops = upgrade_ops.reverse_into(DowngradeOps([]))
+
+    assert len(downgrade_ops.ops) == 1
+    reversed_op = downgrade_ops.ops[0]
+    assert isinstance(reversed_op, pdb_alembic.CreateBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.table_name == "products"
+    assert reversed_op.expressions == ["id", "description"]
+    assert reversed_op.key_field == "id"
+    assert reversed_op.table_schema == "analytics"
+    assert reversed_op.where == "rating > 3"
 
 
 def test_alembic_renderers_registered_and_emit_python():
@@ -157,6 +214,22 @@ def test_alembic_renderers_registered_and_emit_python():
         pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=False),
     )
     assert drop_lines == ["op.drop_bm25_index('products_bm25_idx', if_exists=False)"]
+
+    drop_lines_with_recreate = render_op(
+        autogen_ctx,
+        pdb_alembic.DropBM25IndexOp(
+            index_name="products_bm25_idx",
+            if_exists=False,
+            schema="analytics",
+            table_name="products",
+            expressions=["id", "description"],
+            key_field="id",
+            where="rating > 3",
+        ),
+    )
+    assert drop_lines_with_recreate == [
+        "op.drop_bm25_index('products_bm25_idx', if_exists=False, schema='analytics', table_name='products', expressions=['id', 'description'], key_field='id', where='rating > 3')"
+    ]
 
     reindex_lines = render_op(
         autogen_ctx,
