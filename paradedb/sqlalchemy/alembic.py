@@ -207,12 +207,15 @@ def _render_bm25_expression(expr: ClauseElement) -> str:
     return str(expr.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))  # type: ignore[no-untyped-call]
 
 
-def _strip_relation_qualifiers(expr: str, table_name: str) -> str:
-    # SQLAlchemy may render column refs as `table.col` in metadata compilation;
-    # CREATE INDEX field lists should be table-local expressions.
-    stripped = expr.replace(f'"{table_name}".', "")
-    stripped = stripped.replace(f"{table_name}.", "")
-    return stripped
+def _strip_relation_qualifiers(expr: str, table_name: str, schema_name: str) -> str:
+    # SQLAlchemy may render column refs as `table.col` or `schema.col` in metadata
+    # compilation; CREATE INDEX field lists should be table-local expressions.
+    return (
+        expr.replace(f'"{schema_name}".', "")
+        .replace(f"{schema_name}.", "")
+        .replace(f'"{table_name}".', "")
+        .replace(f"{table_name}.", "")
+    )
 
 
 def _normalize_bm25_expression(expr: str) -> str:
@@ -315,8 +318,9 @@ def _render_where_from_index(index) -> str | None:
                 )
             ),
             index.table.name,
+            index.table.schema,
         )
-    return _strip_relation_qualifiers(str(where_clause), index.table.name)
+    return _strip_relation_qualifiers(str(where_clause), index.table.name, index.table.schema)
 
 
 def _suppress_standard_bm25_ops(upgrade_ops, bm25_names: set[str]) -> None:
@@ -374,7 +378,8 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
         with_opts = index.dialect_options["postgresql"].get("with") or {}
         key_field = with_opts.get("key_field", "")
         expressions = [
-            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name) for expr in index.expressions
+            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name, index.table.schema)
+            for expr in index.expressions
         ]
         meta_where = _render_where_from_index(index)
         create_op = CreateBM25IndexOp(

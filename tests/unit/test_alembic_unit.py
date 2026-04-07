@@ -315,6 +315,13 @@ def test_normalize_bm25_expression_strips_relation_qualifiers_only():
     assert normalized == "description::pdb.simple('alias=description_simple')"
 
 
+def test_strip_relation_qualifiers_strips_schema_and_table_prefixes():
+    assert pdb_alembic._strip_relation_qualifiers("analytics.id", "products", "analytics") == "id"
+    assert pdb_alembic._strip_relation_qualifiers('"analytics"."products"."description"', "products", "analytics") == (
+        '"description"'
+    )
+
+
 # ---------------------------------------------------------------------------
 # WHERE clause (partial index) support
 # ---------------------------------------------------------------------------
