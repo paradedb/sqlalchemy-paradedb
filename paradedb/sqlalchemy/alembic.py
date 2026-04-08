@@ -261,15 +261,28 @@ def _render_bm25_expression(expr: ClauseElement) -> str:
     return str(expr.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))  # type: ignore[no-untyped-call]
 
 
-def _strip_relation_qualifiers(expr: str, table_name: str, schema_name: str) -> str:
+def _strip_relation_qualifiers(expr: str, table_name: str, schema_name: str | None) -> str:
     # SQLAlchemy may render column refs as `table.col` or `schema.col` in metadata
     # compilation; CREATE INDEX field lists should be table-local expressions.
-    return (
-        expr.replace(f'"{schema_name}".', "")
-        .replace(f"{schema_name}.", "")
-        .replace(f'"{table_name}".', "")
-        .replace(f"{table_name}.", "")
-    )
+    qualifier_patterns: list[str] = []
+    for name in (schema_name, table_name):
+        if not name:
+            continue
+        qualifier_patterns.append(re.escape(_quote_ident(name)))
+        qualifier_patterns.append(rf"(?<![\w\"]){re.escape(name)}(?![\w\"])")
+
+    if not qualifier_patterns:
+        return expr
+
+    qualifier_re = re.compile(rf"('(?:''|[^'])*')|(?P<qualifier>(?:{'|'.join(qualifier_patterns)}))\.")
+
+    def _strip_match(match: re.Match[str]) -> str:
+        literal = match.group(1)
+        if literal is not None:
+            return literal
+        return ""
+
+    return qualifier_re.sub(_strip_match, expr)
 
 
 def _normalize_bm25_expression(expr: str) -> str:

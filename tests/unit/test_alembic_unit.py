@@ -395,6 +395,14 @@ def test_strip_relation_qualifiers_strips_schema_and_table_prefixes():
     )
 
 
+def test_strip_relation_qualifiers_avoids_substring_false_positive():
+    expr = "featured_products.description = 'analytics.id'"
+    assert pdb_alembic._strip_relation_qualifiers(expr, "products", "analytics") == expr
+
+    expr = '"analytics_schema".products_table."description"'
+    assert pdb_alembic._strip_relation_qualifiers(expr, "products", "analytics") == expr
+
+
 # ---------------------------------------------------------------------------
 # WHERE clause (partial index) support
 # ---------------------------------------------------------------------------
