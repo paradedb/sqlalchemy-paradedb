@@ -66,6 +66,9 @@ class CreateBM25IndexOp(MigrateOperation):
             )
         )
 
+    def reverse(self) -> MigrateOperation:
+        return DropBM25IndexOp(index_name=self.index_name, if_exists=True, schema=self.table_schema)
+
 
 @Operations.implementation_for(CreateBM25IndexOp)
 def _create_bm25_index_impl(operations: Operations, operation: CreateBM25IndexOp) -> None:
@@ -97,16 +100,62 @@ def _render_create_bm25_index_op(autogen_context, op: CreateBM25IndexOp) -> str:
 
 @Operations.register_operation("drop_bm25_index")
 class DropBM25IndexOp(MigrateOperation):
-    def __init__(self, index_name: str, if_exists: bool = True, schema: str | None = None) -> None:
+    def __init__(
+        self,
+        index_name: str,
+        if_exists: bool = True,
+        schema: str | None = None,
+        *,
+        table_name: str | None = None,
+        expressions: list[str] | None = None,
+        key_field: str | None = None,
+        where: str | None = None,
+    ) -> None:
         self.index_name = index_name
         self.if_exists = if_exists
         self.schema = schema
+        self.table_name = table_name
+        self.expressions = expressions
+        self.key_field = key_field
+        self.where = where
 
     @classmethod
     def drop_bm25_index(
-        cls, operations: Operations, index_name: str, if_exists: bool = True, schema: str | None = None
+        cls,
+        operations: Operations,
+        index_name: str,
+        if_exists: bool = True,
+        schema: str | None = None,
+        *,
+        table_name: str | None = None,
+        expressions: list[str] | None = None,
+        key_field: str | None = None,
+        where: str | None = None,
     ) -> MigrateOperation:
-        return operations.invoke(cls(index_name=index_name, if_exists=if_exists, schema=schema))
+        return operations.invoke(
+            cls(
+                index_name=index_name,
+                if_exists=if_exists,
+                schema=schema,
+                table_name=table_name,
+                expressions=expressions,
+                key_field=key_field,
+                where=where,
+            )
+        )
+
+    def reverse(self) -> MigrateOperation:
+        if self.table_name is None or self.expressions is None or self.key_field is None:
+            raise NotImplementedError("DropBM25IndexOp requires recreate metadata for Alembic downgrade generation")
+
+        return CreateBM25IndexOp(
+            index_name=self.index_name,
+            table_name=self.table_name,
+            expressions=self.expressions,
+            key_field=self.key_field,
+            table_schema=self.schema,
+            where=self.where,
+        )
 
 
 @Operations.implementation_for(DropBM25IndexOp)
@@ -120,6 +169,14 @@ def _render_drop_bm25_index_op(autogen_context, op: DropBM25IndexOp) -> str:
     parts = [repr(op.index_name), f"if_exists={op.if_exists!r}"]
     if op.schema is not None:
         parts.append(f"schema={op.schema!r}")
+    if op.table_name is not None:
+        parts.append(f"table_name={op.table_name!r}")
+    if op.expressions is not None:
+        parts.append(f"expressions={op.expressions!r}")
+    if op.key_field is not None:
+        parts.append(f"key_field={op.key_field!r}")
+    if op.where is not None:
+        parts.append(f"where={op.where!r}")
     return f"op.drop_bm25_index({', '.join(parts)})"
 
 
@@ -204,12 +261,28 @@ def _render_bm25_expression(expr: ClauseElement) -> str:
     return str(expr.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))  # type: ignore[no-untyped-call]
 
 
-def _strip_relation_qualifiers(expr: str, table_name: str) -> str:
-    # SQLAlchemy may render column refs as `table.col` in metadata compilation;
-    # CREATE INDEX field lists should be table-local expressions.
-    stripped = expr.replace(f'"{table_name}".', "")
-    stripped = stripped.replace(f"{table_name}.", "")
-    return stripped
+def _strip_relation_qualifiers(expr: str, table_name: str, schema_name: str | None) -> str:
+    # SQLAlchemy may render column refs as `table.col` or `schema.col` in metadata
+    # compilation; CREATE INDEX field lists should be table-local expressions.
+    qualifier_patterns: list[str] = []
+    for name in (schema_name, table_name):
+        if not name:
+            continue
+        qualifier_patterns.append(re.escape(_quote_ident(name)))
+        qualifier_patterns.append(rf"(?<![\w\"]){re.escape(name)}(?![\w\"])")
+
+    if not qualifier_patterns:
+        return expr
+
+    qualifier_re = re.compile(rf"('(?:''|[^'])*')|(?P<qualifier>(?:{'|'.join(qualifier_patterns)}))\.")
+
+    def _strip_match(match: re.Match[str]) -> str:
+        literal = match.group(1)
+        if literal is not None:
+            return literal
+        return ""
+
+    return qualifier_re.sub(_strip_match, expr)
 
 
 def _normalize_bm25_expression(expr: str) -> str:
@@ -312,8 +385,9 @@ def _render_where_from_index(index) -> str | None:
                 )
             ),
             index.table.name,
+            index.table.schema,
         )
-    return _strip_relation_qualifiers(str(where_clause), index.table.name)
+    return _strip_relation_qualifiers(str(where_clause), index.table.name, index.table.schema)
 
 
 def _suppress_standard_bm25_ops(upgrade_ops, bm25_names: set[str]) -> None:
@@ -363,7 +437,18 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
     # Emit drop ops for indexes present in DB but absent from MetaData.
     for key in db_bm25:
         if key not in meta_bm25:
-            upgrade_ops.ops.append(DropBM25IndexOp(index_name=key[1], if_exists=True, schema=key[0]))
+            db = db_bm25[key]
+            upgrade_ops.ops.append(
+                DropBM25IndexOp(
+                    index_name=key[1],
+                    if_exists=True,
+                    schema=key[0],
+                    table_name=db["table_name"],
+                    expressions=db["expressions"],
+                    key_field=db["key_field"],
+                    where=db.get("where"),
+                )
+            )
 
     # Emit create ops for indexes present in MetaData but absent from DB.
     # Also re-create indexes whose expression list, key_field, or WHERE clause differs from the DB.
@@ -371,7 +456,8 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
         with_opts = index.dialect_options["postgresql"].get("with") or {}
         key_field = with_opts.get("key_field", "")
         expressions = [
-            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name) for expr in index.expressions
+            _strip_relation_qualifiers(_render_bm25_expression(expr), index.table.name, index.table.schema)
+            for expr in index.expressions
         ]
         meta_where = _render_where_from_index(index)
         create_op = CreateBM25IndexOp(
@@ -393,7 +479,17 @@ def _compare_bm25_indexes(autogen_context, upgrade_ops, schemas) -> PriorityDisp
             key_field_changed = db["key_field"] != key_field
             where_changed = _normalize_where(db.get("where")) != _normalize_where(meta_where)
             if expressions_changed or key_field_changed or where_changed:
-                upgrade_ops.ops.append(DropBM25IndexOp(index_name=key[1], if_exists=True, schema=key[0]))
+                upgrade_ops.ops.append(
+                    DropBM25IndexOp(
+                        index_name=key[1],
+                        if_exists=True,
+                        schema=key[0],
+                        table_name=db["table_name"],
+                        expressions=db["expressions"],
+                        key_field=db["key_field"],
+                        where=db.get("where"),
+                    )
+                )
                 upgrade_ops.ops.append(create_op)
 
     return PriorityDispatchResult.CONTINUE

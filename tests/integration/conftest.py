@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+import shutil
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, create_engine, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
@@ -40,6 +43,7 @@ class MockItem(Base):
 
 
 PARADEDB_SCAN_PROVIDERS = {"ParadeDB Base Scan", "ParadeDB Aggregate Scan", "ParadeDB Join Scan"}
+ALEMBIC_TEMPLATE_DIR = Path(__file__).with_name("alembic")
 
 
 @pytest.fixture(scope="session")
@@ -165,3 +169,19 @@ def mock_session(engine: Engine, paradedb_ready: None) -> Iterator[Session]:
     """Session fixture for tests using the mock_items table."""
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture()
+def alembic_config_factory(tmp_path: Path, db_url: str):
+    def factory(metadata) -> Config:
+        script_location = tmp_path / "alembic"
+        shutil.copytree(ALEMBIC_TEMPLATE_DIR, script_location)
+        (script_location / "versions").mkdir()
+
+        config = Config()
+        config.set_main_option("script_location", str(script_location))
+        config.set_main_option("sqlalchemy.url", db_url)
+        config.attributes["target_metadata"] = metadata
+        return config
+
+    return factory

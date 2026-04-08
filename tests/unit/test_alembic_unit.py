@@ -4,7 +4,7 @@ import pytest
 from alembic.autogenerate.api import AutogenContext
 from alembic.autogenerate.render import render_op
 from alembic.migration import MigrationContext
-from alembic.operations.ops import CreateIndexOp, DropIndexOp, ModifyTableOps, UpgradeOps
+from alembic.operations.ops import CreateIndexOp, DowngradeOps, DropIndexOp, ModifyTableOps, UpgradeOps
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 import paradedb.sqlalchemy.alembic as pdb_alembic
@@ -95,6 +95,103 @@ def test_create_bm25_index_rejects_removed_index_schema_kwarg():
         )
 
 
+def test_create_bm25_index_reverse_returns_drop_op():
+    create_op = pdb_alembic.CreateBM25IndexOp(
+        index_name="products_bm25_idx",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+        table_schema="analytics",
+    )
+
+    reversed_op = create_op.reverse()
+
+    assert isinstance(reversed_op, pdb_alembic.DropBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.schema == "analytics"
+    assert reversed_op.if_exists is True
+
+
+def test_drop_bm25_index_reverse_returns_create_op_when_metadata_present():
+    drop_op = pdb_alembic.DropBM25IndexOp(
+        index_name="products_bm25_idx",
+        if_exists=True,
+        schema="analytics",
+        table_name="products",
+        expressions=["id", "description"],
+        key_field="id",
+        where="rating > 3",
+    )
+
+    reversed_op = drop_op.reverse()
+
+    assert isinstance(reversed_op, pdb_alembic.CreateBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.table_name == "products"
+    assert reversed_op.expressions == ["id", "description"]
+    assert reversed_op.key_field == "id"
+    assert reversed_op.table_schema == "analytics"
+    assert reversed_op.where == "rating > 3"
+
+
+def test_drop_bm25_index_reverse_raises_without_recreate_metadata():
+    drop_op = pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=True, schema="analytics")
+
+    with pytest.raises(NotImplementedError, match="requires recreate metadata"):
+        drop_op.reverse()
+
+
+def test_upgrade_ops_reverse_into_handles_bm25_create_op():
+    upgrade_ops = UpgradeOps(
+        [
+            pdb_alembic.CreateBM25IndexOp(
+                index_name="products_bm25_idx",
+                table_name="products",
+                expressions=["id", "description"],
+                key_field="id",
+                table_schema="analytics",
+            )
+        ]
+    )
+
+    downgrade_ops = upgrade_ops.reverse_into(DowngradeOps([]))
+
+    assert len(downgrade_ops.ops) == 1
+    reversed_op = downgrade_ops.ops[0]
+    assert isinstance(reversed_op, pdb_alembic.DropBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.schema == "analytics"
+    assert reversed_op.if_exists is True
+
+
+def test_upgrade_ops_reverse_into_handles_bm25_drop_op_with_recreate_metadata():
+    upgrade_ops = UpgradeOps(
+        [
+            pdb_alembic.DropBM25IndexOp(
+                index_name="products_bm25_idx",
+                if_exists=True,
+                schema="analytics",
+                table_name="products",
+                expressions=["id", "description"],
+                key_field="id",
+                where="rating > 3",
+            )
+        ]
+    )
+
+    downgrade_ops = upgrade_ops.reverse_into(DowngradeOps([]))
+
+    assert len(downgrade_ops.ops) == 1
+    reversed_op = downgrade_ops.ops[0]
+    assert isinstance(reversed_op, pdb_alembic.CreateBM25IndexOp)
+    assert reversed_op.index_name == "products_bm25_idx"
+    assert reversed_op.table_name == "products"
+    assert reversed_op.expressions == ["id", "description"]
+    assert reversed_op.key_field == "id"
+    assert reversed_op.table_schema == "analytics"
+    assert reversed_op.where == "rating > 3"
+
+
 def test_alembic_renderers_registered_and_emit_python():
     ctx = MigrationContext.configure(dialect_name="postgresql")
     autogen_ctx = AutogenContext(ctx)
@@ -117,6 +214,22 @@ def test_alembic_renderers_registered_and_emit_python():
         pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=False),
     )
     assert drop_lines == ["op.drop_bm25_index('products_bm25_idx', if_exists=False)"]
+
+    drop_lines_with_recreate = render_op(
+        autogen_ctx,
+        pdb_alembic.DropBM25IndexOp(
+            index_name="products_bm25_idx",
+            if_exists=False,
+            schema="analytics",
+            table_name="products",
+            expressions=["id", "description"],
+            key_field="id",
+            where="rating > 3",
+        ),
+    )
+    assert drop_lines_with_recreate == [
+        "op.drop_bm25_index('products_bm25_idx', if_exists=False, schema='analytics', table_name='products', expressions=['id', 'description'], key_field='id', where='rating > 3')"
+    ]
 
     reindex_lines = render_op(
         autogen_ctx,
@@ -273,6 +386,21 @@ def test_normalize_bm25_expression_strips_relation_qualifiers_only():
     expr = '"public"."products"."description"::pdb.simple(\'alias=description_simple\')'
     normalized = pdb_alembic._normalize_bm25_expression(expr)
     assert normalized == "description::pdb.simple('alias=description_simple')"
+
+
+def test_strip_relation_qualifiers_strips_schema_and_table_prefixes():
+    assert pdb_alembic._strip_relation_qualifiers("analytics.id", "products", "analytics") == "id"
+    assert pdb_alembic._strip_relation_qualifiers('"analytics"."products"."description"', "products", "analytics") == (
+        '"description"'
+    )
+
+
+def test_strip_relation_qualifiers_avoids_substring_false_positive():
+    expr = "featured_products.description = 'analytics.id'"
+    assert pdb_alembic._strip_relation_qualifiers(expr, "products", "analytics") == expr
+
+    expr = '"analytics_schema".products_table."description"'
+    assert pdb_alembic._strip_relation_qualifiers(expr, "products", "analytics") == expr
 
 
 # ---------------------------------------------------------------------------

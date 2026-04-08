@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+## [0.3.0] - 2026-04-07
+
+### Fixed
+
+- Fixed support for auto-generating migrations using Alembic.
+
 ## [0.2.0] - 2026-04-01
 
 ### Added
@@ -22,5 +28,6 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.3.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.3.0
 [0.2.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.2.0
 [0.1.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.1.0
