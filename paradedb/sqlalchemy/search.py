@@ -16,7 +16,6 @@ from .errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
 from .validation import (
     require_non_empty_sequence,
     require_non_empty_string,
-    require_non_empty_strings,
     require_non_negative,
     require_ordered_bounds,
     require_positive,
@@ -35,26 +34,32 @@ _QUERY: Any = operators.custom_op("@@@", precedence=5, is_comparison=True)
 _PROXIMITY: Any = operators.custom_op("##", precedence=5)
 _PROXIMITY_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_TextClause = str | ClauseElement
 
 
 def _text_literal(value: str) -> ClauseElement:
     return literal(value, type_=Text())
 
 
-def _text_array(values: Sequence[str]) -> ClauseElement:
-    return array([str(value) for value in values], type_=Text())
+def _to_text_clause(value: _TextClause) -> ClauseElement:
+    if isinstance(value, ClauseElement):
+        return value
+    return _text_literal(value)
+
+
+def _text_array(values: Sequence[_TextClause]) -> ClauseElement:
+    return array([_to_text_clause(value) for value in values])
 
 
 def _inline_string_literal(value: str) -> ClauseElement:
     return literal_column("'" + value.replace("'", "''") + "'", Text())
 
 
-def _to_term_payload(*terms: str) -> ClauseElement:
+def _to_term_payload(*terms: _TextClause) -> ClauseElement:
     if not terms:
         raise InvalidArgumentError("at least one search term is required")
-    require_non_empty_strings(terms, field_name="terms")
     if len(terms) == 1:
-        return _text_literal(terms[0])
+        return _to_text_clause(terms[0])
     return _text_array(terms)
 
 
@@ -88,15 +93,15 @@ def _apply_tokenizer(expr: ClauseElement, tokenizer: str | None) -> ClauseElemen
     return PDBCast(expr, tokenizer_name)
 
 
-def _to_phrase_payload(value: str | Sequence[str]) -> ClauseElement:
+def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElement:
     if isinstance(value, str):
-        require_non_empty_string(value, field_name="value")
         return _text_literal(value)
+    if isinstance(value, ClauseElement):
+        return value
     if not isinstance(value, Sequence):
-        raise InvalidArgumentError("value must be a non-empty string or a sequence of non-empty strings")
+        raise InvalidArgumentError("value must be a string, SQL expression, or a sequence of those values")
     if not value:
         raise InvalidArgumentError("value must contain at least one token")
-    require_non_empty_strings(value, field_name="value")
     return _text_array(value)
 
 
@@ -135,7 +140,7 @@ def _apply_fuzzy(
 
 def match_all(
     field: ColumnElement,
-    *terms: str,
+    *terms: _TextClause,
     boost: float | None = None,
     const: float | None = None,
     distance: int | None = None,
@@ -152,7 +157,7 @@ def match_all(
 
 def match_any(
     field: ColumnElement,
-    *terms: str,
+    *terms: _TextClause,
     boost: float | None = None,
     const: float | None = None,
     distance: int | None = None,
@@ -169,7 +174,7 @@ def match_any(
 
 def term(
     field: ColumnElement,
-    value: str,
+    value: _TextClause,
     boost: float | None = None,
     const: float | None = None,
     *,
@@ -178,8 +183,7 @@ def term(
     transpose_cost_one: bool = False,
     tokenizer: str | None = None,
 ) -> ColumnElement[bool]:
-    require_non_empty_string(value, field_name="value")
-    payload: ClauseElement = _text_literal(value)
+    payload: ClauseElement = _to_text_clause(value)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_tokenizer(payload, tokenizer)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
@@ -188,7 +192,7 @@ def term(
 
 def phrase(
     field: ColumnElement,
-    value: str | Sequence[str],
+    value: _TextClause | Sequence[_TextClause],
     *,
     slop: int | None = None,
     boost: float | None = None,
@@ -197,7 +201,7 @@ def phrase(
 ) -> ColumnElement[bool]:
     if slop is not None:
         require_non_negative(slop, field_name="slop")
-    is_token_array = not isinstance(value, str)
+    is_token_array = isinstance(value, Sequence) and not isinstance(value, (str, ClauseElement))
     payload: ClauseElement = _to_phrase_payload(value)
     payload = _apply_tokenizer(payload, tokenizer)
     if slop is not None:
@@ -211,13 +215,12 @@ def phrase(
 
 def regex(
     field: ColumnElement,
-    pattern: str,
+    pattern: _TextClause,
     *,
     boost: float | None = None,
     const: float | None = None,
 ) -> ColumnElement[bool]:
-    require_non_empty_string(pattern, field_name="pattern")
-    payload: ClauseElement = func.pdb.regex(_text_literal(pattern))
+    payload: ClauseElement = func.pdb.regex(_to_text_clause(pattern))
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_QUERY, payload)
 
@@ -243,22 +246,21 @@ class ProximityExpr:
         return ProximityExpr(_proximity_chain(self.expr, other, distance=distance, ordered=ordered))
 
 
-def prox_regex(pattern: str, max_expansions: int | None = None) -> ProximityExpr:
-    require_non_empty_string(pattern, field_name="pattern")
+def prox_regex(pattern: _TextClause, max_expansions: int | None = None) -> ProximityExpr:
     if max_expansions is not None:
         require_non_negative(max_expansions, field_name="max_expansions")
-        return ProximityExpr(func.pdb.prox_regex(_text_literal(pattern), max_expansions))
-    return ProximityExpr(func.pdb.prox_regex(_text_literal(pattern)))
+        return ProximityExpr(func.pdb.prox_regex(_to_text_clause(pattern), max_expansions))
+    return ProximityExpr(func.pdb.prox_regex(_to_text_clause(pattern)))
 
 
-def prox_array(*clauses: str | ProximityExpr) -> ProximityExpr:
+def prox_array(*clauses: _TextClause | ProximityExpr) -> ProximityExpr:
     if not clauses:
         raise InvalidArgumentError("prox_array requires at least one clause")
     casted_clauses = [_to_proximity_operand(clause) for clause in clauses]
     return ProximityExpr(func.pdb.prox_array(*casted_clauses))
 
 
-def prox_str(clause: str) -> ProximityExpr:
+def prox_str(clause: _TextClause) -> ProximityExpr:
     return ProximityExpr(_to_proximity_operand(clause))
 
 
@@ -279,7 +281,6 @@ def _to_proximity_operand(value: str | ClauseElement | ProximityExpr) -> ClauseE
     if isinstance(value, ProximityExpr):
         return value.expr
     if isinstance(value, str):
-        require_non_empty_string(value, field_name="clause")
         return _inline_string_literal(value)
     return value
 
@@ -299,16 +300,19 @@ def _proximity_chain(
 
 
 def parse(
-    field: ColumnElement, query: str, *, lenient: bool = False, conjunction_mode: bool = False
+    field: ColumnElement, query: _TextClause, *, lenient: bool = False, conjunction_mode: bool = False
 ) -> ColumnElement[bool]:
-    require_non_empty_string(query, field_name="query")
-    return field.operate(_QUERY, func.pdb.parse(_text_literal(query), lenient, conjunction_mode))
+    return field.operate(_QUERY, func.pdb.parse(_to_text_clause(query), lenient, conjunction_mode))
 
 
-def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int | None = None) -> ColumnElement[bool]:
+def phrase_prefix(
+    field: ColumnElement,
+    terms: list[_TextClause],
+    *,
+    max_expansions: int | None = None,
+) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("phrase_prefix requires at least one term")
-    require_non_empty_strings(terms, field_name="terms")
     if max_expansions is not None:
         require_positive(max_expansions, field_name="max_expansions")
         return field.operate(_QUERY, func.pdb.phrase_prefix(_text_array(terms), max_expansions))
@@ -318,14 +322,13 @@ def phrase_prefix(field: ColumnElement, terms: list[str], *, max_expansions: int
 
 def regex_phrase(
     field: ColumnElement,
-    terms: list[str],
+    terms: list[_TextClause],
     *,
     slop: int = 0,
     max_expansions: int | None = None,
 ) -> ColumnElement[bool]:
     if not terms:
         raise InvalidArgumentError("regex_phrase requires at least one term")
-    require_non_empty_strings(terms, field_name="terms")
     require_non_negative(slop, field_name="slop")
     if max_expansions is not None:
         require_positive(max_expansions, field_name="max_expansions")
@@ -370,7 +373,6 @@ def range_term(
         scalar_arg = bounds if isinstance(bounds, ClauseElement) else literal(bounds)
         return field.operate(_QUERY, func.pdb.range_term(scalar_arg))
 
-    require_non_empty_string(bounds, field_name="bounds")
     if relation not in _VALID_RANGE_RELATIONS:
         raise InvalidArgumentError(f"relation must be one of: {', '.join(sorted(_VALID_RANGE_RELATIONS))}")
     escaped_relation = relation.replace("'", "''")
@@ -412,11 +414,8 @@ def more_like_this(
         raise error_cls("fields can only be used with document_id or document_ids")
     if fields is not None:
         require_non_empty_sequence(fields, field_name="fields", error_cls=error_cls)
-        require_non_empty_strings(fields, field_name="fields", error_cls=error_cls)
     if document_ids is not None and any(doc_id is None for doc_id in document_ids):
         raise error_cls("document_ids entries cannot be null")
-    if isinstance(document, str):
-        require_non_empty_string(document, field_name="document", error_cls=error_cls)
     if isinstance(document, dict) and not document:
         raise error_cls("document must not be empty")
 
@@ -450,8 +449,6 @@ def more_like_this(
         )
     if boost_factor is not None:
         require_non_negative(boost_factor, field_name="boost_factor", error_cls=error_cls)
-    if stopwords is not None:
-        require_non_empty_strings(stopwords, field_name="stopwords", error_cls=error_cls)
 
     named_options: list[tuple[str, Any]] = []
     if min_term_frequency is not None:

@@ -78,11 +78,6 @@ def test_more_like_this_rejects_invalid_numeric_options():
         search.more_like_this(Product.id, document_id=1, boost_factor=-1.0)
 
 
-def test_more_like_this_rejects_invalid_stopwords():
-    with pytest.raises(InvalidArgumentError, match="stopwords entries must be non-empty strings"):
-        search.more_like_this(Product.id, document_id=1, stopwords=["ok", ""])
-
-
 def test_more_like_this_by_document_ids(session):
     """document_ids ORs results from multiple individual MLT queries."""
     stmt_combined = (
