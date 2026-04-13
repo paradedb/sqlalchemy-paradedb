@@ -49,21 +49,6 @@ def test_search_argument_validation_errors():
     with pytest.raises(InvalidArgumentError, match="max_expansions must be >= 0"):
         search.prox_regex("sho.*", max_expansions=-1)
 
-    with pytest.raises(InvalidArgumentError, match="clause must be a non-empty string"):
-        search.prox_str("")
-
-    with pytest.raises(InvalidArgumentError, match="terms entries must be non-empty strings"):
-        search.match_any(products.c.description, "running", "")
-
-    with pytest.raises(InvalidArgumentError, match="value must be a non-empty string"):
-        search.term(products.c.description, "")
-
-    with pytest.raises(InvalidArgumentError, match="query must be a non-empty string"):
-        search.parse(products.c.description, "")
-
-    with pytest.raises(InvalidArgumentError, match="pattern must be a non-empty string"):
-        search.regex(products.c.description, "")
-
     with pytest.raises(InvalidArgumentError, match="tokenizer must be a bare identifier"):
         search.match_any(products.c.description, "running shoes", tokenizer="whitespace;drop")
 
@@ -83,12 +68,6 @@ def test_search_argument_validation_errors():
 def test_more_like_this_uses_specific_error_type():
     with pytest.raises(InvalidMoreLikeThisOptionsError, match="exactly one"):
         search.more_like_this(products.c.id)
-
-    with pytest.raises(InvalidMoreLikeThisOptionsError, match="stopwords entries"):
-        search.more_like_this(products.c.id, document_id=1, stopwords=[""])
-
-    with pytest.raises(InvalidMoreLikeThisOptionsError, match="fields entries"):
-        search.more_like_this(products.c.id, document_id=1, fields=[""])
 
     with pytest.raises(InvalidMoreLikeThisOptionsError, match="document must not be empty"):
         search.more_like_this(products.c.id, document={})

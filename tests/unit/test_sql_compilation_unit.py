@@ -12,7 +12,7 @@ except ImportError:
 
 
 import pytest
-from sqlalchemy import Integer, String, Text, and_, not_, or_, select
+from sqlalchemy import Integer, String, Text, and_, func, not_, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
@@ -149,6 +149,85 @@ def test_parse_with_str_enum_compile():
         == """SELECT products.id
 FROM products
 WHERE products.id @@@ pdb.parse('running shoes', true, false)"""
+    )
+
+
+def test_search_helpers_accept_sql_expressions_compile():
+    match_any_stmt = select(products.c.id).where(
+        search.match_any(products.c.description, func.trim("  running  "), "shoes")
+    )
+    match_all_stmt = select(products.c.id).where(
+        search.match_all(products.c.description, func.trim("  running  "), func.lower("SHOES"))
+    )
+    term_stmt = select(products.c.id).where(search.term(products.c.description, func.trim("  running  ")))
+    phrase_stmt = select(products.c.id).where(
+        search.phrase(products.c.description, func.trim("  running shoes  "), slop=2)
+    )
+    regex_stmt = select(products.c.id).where(search.regex(products.c.description, func.trim("run.*")))
+    parse_stmt = select(products.c.id).where(search.parse(products.c.id, func.trim("description:sleek"), lenient=True))
+    phrase_prefix_stmt = select(products.c.id).where(
+        search.phrase_prefix(products.c.description, [func.trim(" running "), "sh"])
+    )
+    regex_phrase_stmt = select(products.c.id).where(
+        search.regex_phrase(products.c.description, [func.trim("run.*"), func.trim("shoe.*")], slop=1)
+    )
+    proximity_stmt = select(products.c.id).where(
+        search.proximity(products.c.description, search.prox_regex(func.trim("run.*")).within(1, func.trim("shoes")))
+    )
+
+    assert (
+        _sql(match_any_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description ||| ARRAY[trim('  running  '), 'shoes']"""
+    )
+    assert (
+        _sql(match_all_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description &&& ARRAY[trim('  running  '), lower('SHOES')]"""
+    )
+    assert (
+        _sql(term_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description === trim('  running  ')"""
+    )
+    assert (
+        _sql(phrase_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description ### trim('  running shoes  ')::pdb.slop(2)"""
+    )
+    assert (
+        _sql(regex_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex(trim('run.*'))"""
+    )
+    assert (
+        _sql(parse_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.parse(trim('description:sleek'), true, false)"""
+    )
+    assert (
+        _sql(phrase_prefix_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.phrase_prefix(ARRAY[trim(' running '), 'sh'])"""
+    )
+    assert (
+        _sql(regex_phrase_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ pdb.regex_phrase(ARRAY[trim('run.*'), trim('shoe.*')], 1)"""
+    )
+    assert (
+        _sql(proximity_stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.description @@@ ((pdb.prox_regex(trim('run.*')) ## 1) ## trim('shoes'))"""
     )
 
 

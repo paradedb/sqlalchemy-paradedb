@@ -18,3 +18,7 @@ scripts/run_integration_tests.sh tests/integration/test_indexing_integration.py:
 The script sets `PARADEDB_TEST_DSN` and `DATABASE_URL` automatically. The default container name is `paradedb-sqlalchemy-integration` on port `5443`.
 
 Some integration tests require newer pg_search versions and will be automatically skipped if the feature is not available (e.g. diagnostics functions like `pdb.indexes()`).
+
+## Changelog
+
+When you make a change that a user of this project would care about, record it in the `Unreleased` section of the changelog. If the change is breaking, make sure to denote that.
