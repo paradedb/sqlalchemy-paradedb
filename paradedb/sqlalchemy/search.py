@@ -88,7 +88,8 @@ def _validate_pdb_identifier(name: str, *, field_name: str) -> str:
 
 
 def _apply_tokenizer(
-    expr: ClauseElement, tokenizer: str | None,
+    expr: ClauseElement,
+    tokenizer: str | None,
     tokenizer_params: _TOKENIZER_PARAMS = (),
 ) -> ClauseElement:
     if tokenizer is None:
