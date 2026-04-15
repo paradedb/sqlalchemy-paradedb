@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Tuple
 
 from sqlalchemy import Text, cast, func, literal, literal_column, or_
 from sqlalchemy.dialects.postgresql import ARRAY, array
@@ -35,6 +35,7 @@ _PROXIMITY: Any = operators.custom_op("##", precedence=5)
 _PROXIMITY_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _TextClause = str | ClauseElement
+_TOKENIZER_PARAMS = Sequence[Any]
 
 
 def _text_literal(value: str) -> ClauseElement:
@@ -86,11 +87,14 @@ def _validate_pdb_identifier(name: str, *, field_name: str) -> str:
     return name
 
 
-def _apply_tokenizer(expr: ClauseElement, tokenizer: str | None) -> ClauseElement:
+def _apply_tokenizer(
+    expr: ClauseElement, tokenizer: str | None,
+    tokenizer_params: _TOKENIZER_PARAMS = (),
+) -> ClauseElement:
     if tokenizer is None:
         return expr
     tokenizer_name = _validate_pdb_identifier(tokenizer, field_name="tokenizer")
-    return PDBCast(expr, tokenizer_name)
+    return PDBCast(expr, tokenizer_name, tokenizer_params)
 
 
 def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElement:
@@ -147,10 +151,11 @@ def match_all(
     prefix: bool = False,
     transpose_cost_one: bool = False,
     tokenizer: str | None = None,
+    tokenizer_params: _TOKENIZER_PARAMS = (),
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_tokenizer(payload, tokenizer, tokenizer_params)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ALL, payload)
 
@@ -164,10 +169,11 @@ def match_any(
     prefix: bool = False,
     transpose_cost_one: bool = False,
     tokenizer: str | None = None,
+    tokenizer_params: _TOKENIZER_PARAMS = (),
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_tokenizer(payload, tokenizer, tokenizer_params)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ANY, payload)
 
@@ -182,10 +188,11 @@ def term(
     prefix: bool = False,
     transpose_cost_one: bool = False,
     tokenizer: str | None = None,
+    tokenizer_params: _TOKENIZER_PARAMS = (),
 ) -> ColumnElement[bool]:
     payload: ClauseElement = _to_text_clause(value)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_tokenizer(payload, tokenizer, tokenizer_params)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_TERM, payload)
 
@@ -198,12 +205,13 @@ def phrase(
     boost: float | None = None,
     const: float | None = None,
     tokenizer: str | None = None,
+    tokenizer_params: _TOKENIZER_PARAMS = (),
 ) -> ColumnElement[bool]:
     if slop is not None:
         require_non_negative(slop, field_name="slop")
     is_token_array = isinstance(value, Sequence) and not isinstance(value, (str, ClauseElement))
     payload: ClauseElement = _to_phrase_payload(value)
-    payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_tokenizer(payload, tokenizer, tokenizer_params)
     if slop is not None:
         # psycopg binds array elements as VARCHAR by default; slop cast requires TEXT[].
         if is_token_array:
