@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
-from typing import Any, Tuple
+from typing import Any
 
 from sqlalchemy import Text, cast, func, literal, literal_column, or_
 from sqlalchemy.dialects.postgresql import ARRAY, array
