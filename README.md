@@ -16,23 +16,21 @@
   <a href="https://docs.paradedb.com/changelog/">Changelog</a>
 </h3>
 
+<p align="center">
+  <a href="https://pypi.org/project/sqlalchemy-paradedb/"><img src="https://img.shields.io/pypi/v/sqlalchemy-paradedb" alt="PyPI"></a>&nbsp;
+  <a href="https://pypi.org/project/sqlalchemy-paradedb/"><img src="https://img.shields.io/pypi/pyversions/sqlalchemy-paradedb" alt="Python Versions"></a>&nbsp;
+  <a href="https://pypi.org/project/sqlalchemy-paradedb/"><img src="https://img.shields.io/pypi/dm/sqlalchemy-paradedb" alt="Downloads"></a>&nbsp;
+  <a href="https://codecov.io/gh/paradedb/sqlalchemy-paradedb"><img src="https://codecov.io/gh/paradedb/sqlalchemy-paradedb/graph/badge.svg" alt="Codecov"></a>&nbsp;
+  <a href="https://github.com/paradedb/sqlalchemy-paradedb?tab=MIT-1-ov-file#readme"><img src="https://img.shields.io/github/license/paradedb/sqlalchemy-paradedb?color=blue" alt="License"></a>&nbsp;
+  <a href="https://paradedb.com/slack"><img src="https://img.shields.io/badge/Join%20Slack-purple?logo=slack" alt="Community"></a>&nbsp;
+  <a href="https://x.com/paradedb"><img src="https://img.shields.io/twitter/url?url=https%3A%2F%2Ftwitter.com%2Fparadedb&label=Follow%20%40paradedb" alt="Follow @paradedb"></a>
+</p>
+
 ---
 
-# sqlalchemy-paradedb
+## sqlalchemy-paradedb
 
-[![PyPI](https://img.shields.io/pypi/v/sqlalchemy-paradedb)](https://pypi.org/project/sqlalchemy-paradedb/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/sqlalchemy-paradedb)](https://pypi.org/project/sqlalchemy-paradedb/)
-[![Downloads](https://img.shields.io/pypi/dm/sqlalchemy-paradedb)](https://pypi.org/project/sqlalchemy-paradedb/)
-[![Codecov](https://codecov.io/gh/paradedb/sqlalchemy-paradedb/graph/badge.svg)](https://codecov.io/gh/paradedb/sqlalchemy-paradedb)
-[![License](https://img.shields.io/github/license/paradedb/sqlalchemy-paradedb?color=blue)](https://github.com/paradedb/sqlalchemy-paradedb?tab=MIT-1-ov-file#readme)
-[![Slack URL](https://img.shields.io/badge/Join%20Slack-purple?logo=slack&link=https%3A%2F%2Fparadedb.com%2Fslack)](https://paradedb.com/slack)
-[![X URL](https://img.shields.io/twitter/url?url=https%3A%2F%2Ftwitter.com%2Fparadedb&label=Follow%20%40paradedb)](https://x.com/paradedb)
-
-The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) including first class support for for managing BM25 indexes with Alembic and running queries using the full ParadeDB API.
-
-## Usage
-
-Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
+The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) including first class support for for managing BM25 indexes with Alembic and running queries using the full ParadeDB API. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
 
 ## Requirements & Compatibility
 
