@@ -30,7 +30,7 @@
 
 ## ParadeDB for SQLAlchemy
 
-The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) including first class support for for managing BM25 indexes with Alembic and running queries using the full ParadeDB API. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
+The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com), including first-class support for managing BM25 indexes with Alembic and running queries using the full ParadeDB API. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
 
 ## Requirements & Compatibility
 
@@ -57,7 +57,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, running tests, lin
 ## Support
 
 If you're missing a feature or have found a bug, please open a
-[GitHub Issue](https://github.com/paradedb/django-paradedb/issues/new/choose).
+[GitHub Issue](https://github.com/paradedb/sqlalchemy-paradedb/issues/new/choose).
 
 To get community support, you can:
 
