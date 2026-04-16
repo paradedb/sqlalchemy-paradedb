@@ -4,9 +4,17 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+## [0.5.0] - 2026-04-16
+
+### Added
+
+- Added support for passing tokenizer params in query functions.
+
 ## [0.4.0] - 2026-04-13
 
-Added support for passing functions into queries such as `search.term(Table1.field1, func.trim(keyword))`.
+### Added
+
+- Added support for passing functions into queries such as `search.term(Table1.field1, func.trim(keyword))`.
 
 ## [0.3.0] - 2026-04-07
 
@@ -32,6 +40,7 @@ Added support for passing functions into queries such as `search.term(Table1.fie
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.5.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.5.0
 [0.4.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.4.0
 [0.3.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.3.0
 [0.2.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.2.0
