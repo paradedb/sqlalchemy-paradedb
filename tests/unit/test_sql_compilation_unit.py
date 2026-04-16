@@ -231,6 +231,69 @@ WHERE products.description @@@ ((pdb.prox_regex(trim('run.*')) ## 1) ## trim('sh
     )
 
 
+def test_search_helpers_accept_tokenizer_parameters():
+    match_any_stmt = select(products.c.id).where(
+        search.match_any(
+            products.c.description,
+            func.trim("  running  "),
+            "shoes",
+            tokenizer="regex_pattern",
+            tokenizer_params=(r"[^\.]+",),
+        )
+    )
+    match_all_stmt = select(products.c.id).where(
+        search.match_all(
+            products.c.description,
+            func.trim("  running  "),
+            func.lower("SHOES"),
+            tokenizer="regex_pattern",
+            tokenizer_params=(r"[^\.]+",),
+        )
+    )
+    term_stmt = select(products.c.id).where(
+        search.term(
+            products.c.description,
+            func.trim("  running  "),
+            tokenizer="regex_pattern",
+            tokenizer_params=(r"[^\.]+",),
+        )
+    )
+    phrase_stmt = select(products.c.id).where(
+        search.phrase(
+            products.c.description,
+            func.trim("  running shoes  "),
+            slop=2,
+            tokenizer="regex_pattern",
+            tokenizer_params=(r"[^\.]+",),
+        )
+    )
+
+    assert (
+        _sql(match_any_stmt)
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| ARRAY[trim('  running  '), 'shoes']::pdb.regex_pattern('[^\.]+')"""
+    )
+    assert (
+        _sql(match_all_stmt)
+        == r"""SELECT products.id
+FROM products
+WHERE products.description &&& ARRAY[trim('  running  '), lower('SHOES')]::pdb.regex_pattern('[^\.]+')"""
+    )
+    assert (
+        _sql(term_stmt)
+        == r"""SELECT products.id
+FROM products
+WHERE products.description === trim('  running  ')::pdb.regex_pattern('[^\.]+')"""
+    )
+    assert (
+        _sql(phrase_stmt)
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ### trim('  running shoes  ')::pdb.regex_pattern('[^\.]+')::pdb.slop(2)"""
+    )
+
+
 def test_match_any_with_tokenizer_compile():
     stmt = select(products.c.id).where(
         search.match_any(products.c.description, "running shoes", tokenizer="whitespace")
