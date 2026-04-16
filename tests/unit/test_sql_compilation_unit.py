@@ -270,27 +270,27 @@ def test_search_helpers_accept_tokenizer_parameters():
 
     assert (
         _sql(match_any_stmt)
-        == """SELECT products.id
-                  FROM products
-                  WHERE products.description ||| ARRAY[trim('  running  '), 'shoes']::pdb.regex_pattern('[^\.]+')"""
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| ARRAY[trim('  running  '), 'shoes']::pdb.regex_pattern('[^\.]+')"""
     )
     assert (
         _sql(match_all_stmt)
-        == """SELECT products.id
-                  FROM products
-                  WHERE products.description &&& ARRAY[trim('  running  '), lower('SHOES')]::pdb.regex_pattern('[^\.]+')"""
+        == r"""SELECT products.id
+FROM products
+WHERE products.description &&& ARRAY[trim('  running  '), lower('SHOES')]::pdb.regex_pattern('[^\.]+')"""
     )
     assert (
         _sql(term_stmt)
-        == """SELECT products.id
-                  FROM products
-                  WHERE products.description === trim('  running  ')::pdb.regex_pattern('[^\.]+')"""
+        == r"""SELECT products.id
+FROM products
+WHERE products.description === trim('  running  ')::pdb.regex_pattern('[^\.]+')"""
     )
     assert (
         _sql(phrase_stmt)
-        == """SELECT products.id
-                  FROM products
-                  WHERE products.description ### trim('  running shoes  ')::pdb.regex_pattern('[^\.]+')::pdb.slop(2)"""
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ### trim('  running shoes  ')::pdb.regex_pattern('[^\.]+')::pdb.slop(2)"""
     )
 
 
