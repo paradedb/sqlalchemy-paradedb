@@ -26,7 +26,7 @@ class Tokenizer:
         if self.name is None:
             raise InvalidArgumentError("tokenizer name is required unless raw_sql is provided")
 
-        if not self.positional_args and not self.named_args:
+        if not self.positional_args and not self.named_args and not self.alias:
             return f"pdb.{self.name}"
 
         args_sql = [_render_sql_arg(value) for value in self.positional_args]

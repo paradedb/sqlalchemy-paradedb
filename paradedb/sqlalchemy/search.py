@@ -106,10 +106,7 @@ def _apply_tokenizer_new(
 ) -> ClauseElement:
     if tokenizer is None:
         return expr
-    args = tokenizer.positional_args + tokenizer.named_args
-    if tokenizer.alias:
-        args += (tokenizer.alias,)
-    return PDBCast(expr, tokenizer.name or "", args)
+    return PDBCast(expr, None, raw_cast=tokenizer.render())
 
 
 def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElement:
