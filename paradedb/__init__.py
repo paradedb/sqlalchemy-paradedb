@@ -6,7 +6,8 @@ from .sqlalchemy.diagnostics import (
     paradedb_verify_index,
 )
 from .sqlalchemy.facets import with_rows
-from .sqlalchemy.indexing import BM25Field, assert_indexed, describe, tokenize
+from .sqlalchemy.indexing import BM25Field, assert_indexed, describe
+from .sqlalchemy import tokenizer
 from .sqlalchemy.pdb import agg, alias, score, snippet, snippet_positions, snippets
 from .sqlalchemy.search import (
     ProximityExpr,
@@ -56,6 +57,6 @@ __all__ = [
     "snippets",
     "sqlalchemy",
     "term",
-    "tokenize",
+    "tokenizer",
     "with_rows",
 ]

@@ -7,6 +7,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from paradedb.sqlalchemy import indexing
+from paradedb.sqlalchemy.tokenizer import unicode
 
 
 DOCUMENT_ROWS = [
@@ -30,7 +31,7 @@ class Document(Base):
 Index(
     "documents_bm25_idx",
     indexing.BM25Field(Document.id),
-    indexing.BM25Field(Document.content, tokenizer=indexing.tokenize.unicode(lowercase=True)),
+    indexing.BM25Field(Document.content, tokenizer=unicode(lowercase=True)),
     postgresql_using="bm25",
     postgresql_with={"key_field": "id"},
 )
