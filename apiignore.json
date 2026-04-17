@@ -217,7 +217,6 @@
 
   "types": [
     "pdb.alias",
-    "pdb.proximityclause",
-    "pdb.edge_ngram"
+    "pdb.proximityclause"
   ]
 }
