@@ -185,5 +185,5 @@ def test_all_tokenizers(session, expected: str, tokenizer: str, tokenizer_params
         _sql(stmt)
         == f"""SELECT products.id
 FROM products
-WHERE products.description &&& 'running shoes'::pdb.{expected} ORDER BY products.id"""
+WHERE products.description &&& 'running shoes'::{expected} ORDER BY products.id"""
     )

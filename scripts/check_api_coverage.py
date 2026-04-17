@@ -1,27 +1,27 @@
-#!/usr/bin/env python3
-"""Validate that api.json matches the SQLAlchemy wrapper surface."""
+"""Validate that api.json5 matches the SQLAlchemy wrapper surface."""
 
 from __future__ import annotations
 
 import ast
-import json
 import re
 import sys
 from pathlib import Path
 
+import json5
+
 ROOT = Path(__file__).resolve().parents[1]
-API_JSON = ROOT / "api.json"
-APIIGNORE_JSON = ROOT / "apiignore.json"
+API_JSON = ROOT / "api.json5"
+APIIGNORE_JSON = ROOT / "apiignore.json5"
 PDB_SYMBOL_RE = re.compile(r"\bpdb\.[A-Za-z_][A-Za-z0-9_]*\b")
 
 
 def load_json(path: Path) -> object:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json5.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise FileNotFoundError(f"{path} not found") from exc
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON in {path}: {exc}") from exc
+    except ValueError as exc:
+        raise ValueError(f"invalid JSON5 in {path}: {exc}") from exc
 
 
 def flatten_ignore(section: object, *, kind: str) -> set[str]:
@@ -141,10 +141,10 @@ def main() -> int:
         return 1
 
     if not isinstance(api, dict):
-        print("❌ api.json must contain a JSON object.", file=sys.stderr)
+        print("❌ api.json5 must contain a JSON object.", file=sys.stderr)
         return 1
     if not isinstance(apiignore, dict):
-        print("❌ apiignore.json must contain a JSON object.", file=sys.stderr)
+        print("❌ apiignore.json5 must contain a JSON object.", file=sys.stderr)
         return 1
 
     try:
@@ -152,12 +152,12 @@ def main() -> int:
         functions = api["functions"]
         types = api["types"]
     except KeyError as exc:
-        print(f"❌ api.json missing required section: {exc}", file=sys.stderr)
+        print(f"❌ api.json5 missing required section: {exc}", file=sys.stderr)
         return 1
 
     if not all(isinstance(section, dict) for section in (operators, functions, types)):
         print(
-            "❌ api.json sections operators/functions/types must all be objects.",
+            "❌ api.json5 sections operators/functions/types must all be objects.",
             file=sys.stderr,
         )
         return 1
@@ -201,14 +201,16 @@ def main() -> int:
 
     issues: list[str] = []
     if missing_pdb_symbols:
-        issues.append("api.json pdb.* symbols not referenced by SQLAlchemy wrappers: " + ", ".join(missing_pdb_symbols))
+        issues.append(
+            "api.json5 pdb.* symbols not referenced by SQLAlchemy wrappers: " + ", ".join(missing_pdb_symbols)
+        )
     if missing_operator_symbols:
         issues.append(
-            "api.json operators not referenced by SQLAlchemy wrappers: " + ", ".join(missing_operator_symbols)
+            "api.json5 operators not referenced by SQLAlchemy wrappers: " + ", ".join(missing_operator_symbols)
         )
     if untracked_symbols:
         issues.append(
-            "pdb.* symbols used in package source but missing from api.json/apiignore.json: "
+            "pdb.* symbols used in package source but missing from api.json5/apiignore.json5: "
             + ", ".join(untracked_symbols)
         )
 
@@ -217,7 +219,7 @@ def main() -> int:
         for issue in issues:
             print(f"   - {issue}", file=sys.stderr)
         print(
-            "\nUpdate api.json, apiignore.json, or the SQLAlchemy wrappers so they stay in sync.",
+            "\nUpdate api.json5, apiignore.json5, or the SQLAlchemy wrappers so they stay in sync.",
             file=sys.stderr,
         )
         return 1
