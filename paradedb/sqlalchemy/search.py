@@ -10,6 +10,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, array
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
+from paradedb.sqlalchemy.tokenizer import Tokenizer
+
 from ._functions import PDBFunctionWithNamedArgs
 from ._pdb_cast import PDBCast
 from .errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
@@ -98,6 +100,18 @@ def _apply_tokenizer(
     return PDBCast(expr, tokenizer_name, tokenizer_params)
 
 
+def _apply_tokenizer_new(
+    expr: ClauseElement,
+    tokenizer: Tokenizer | None,
+) -> ClauseElement:
+    if tokenizer is None:
+        return expr
+    args = tokenizer.positional_args + tokenizer.named_args
+    if tokenizer.alias:
+        args += (tokenizer.alias,)
+    return PDBCast(expr, tokenizer.name, args)
+
+
 def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElement:
     if isinstance(value, str):
         return _text_literal(value)
@@ -151,12 +165,11 @@ def match_all(
     distance: int | None = None,
     prefix: bool = False,
     transpose_cost_one: bool = False,
-    tokenizer: str | None = None,
-    tokenizer_params: _TOKENIZER_PARAMS = (),
+    tokenizer: Tokenizer | None = None,
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
     payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer, tokenizer_params)
+    payload = _apply_tokenizer_new(payload, tokenizer)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ALL, payload)
 

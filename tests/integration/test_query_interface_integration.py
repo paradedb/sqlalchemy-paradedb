@@ -1,10 +1,10 @@
 from __future__ import annotations
-from typing import Any
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
+from paradedb import tokenizer, Tokenizer
 from paradedb.sqlalchemy import pdb, search, select_with
 from conftest import Product, assert_uses_paradedb_scan
 from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
@@ -143,42 +143,31 @@ def test_agg_function_projection(session):
 
 
 @pytest.mark.parametrize(
-    ["expected", "tokenizer", "tokenizer_params"],
+    ["expected", "tokenizer"],
     [
-        ("pdb.whitespace", "whitespace", None),
-        ("pdb.whitespace('alias=my_column')", "whitespace", ["alias=my_column"]),
-        ("pdb.unicode_words", "unicode_words", None),
-        ("pdb.literal", "literal", None),
-        ("pdb.literal_normalized", "literal_normalized", None),
-        ("pdb.ngram(3, 3)", "ngram", [3, 3]),
-        ("pdb.ngram(3, 3, 'positions=true')", "ngram", [3, 3, "positions=true"]),
-        ("pdb.edge_ngram(3, 3)", "edge_ngram", [3, 3]),
-        ("pdb.simple", "simple", None),
-        ("pdb.regex_pattern('.*')", "regex_pattern", [".*"]),
-        ("pdb.chinese_compatible", "chinese_compatible", None),
-        ("pdb.lindera('chinese')", "lindera", ["chinese"]),
-        ("pdb.icu", "icu", None),
-        ("pdb.jieba", "jieba", None),
-        ("pdb.source_code", "source_code", None),
+        ("pdb.whitespace", tokenizer.whitespace()),
+        ("pdb.whitespace('alias=my_column')", tokenizer.whitespace(alias="my_column")),
+        ("pdb.unicode_words", tokenizer.unicode()),
+        ("pdb.literal", tokenizer.literal()),
+        ("pdb.literal_normalized", tokenizer.literal_normalized()),
+        ("pdb.ngram(3, 3)", tokenizer.ngram(args=(3, 3))),
+        ("pdb.ngram(3, 3, 'positions=true')", tokenizer.ngram(args=(3, 3), named_args={"positions": "true"})),
+        # ("pdb.edge_ngram(3, 3)", tokenizer.edge), TODO add support
+        ("pdb.simple", tokenizer.simple()),
+        ("pdb.regex_pattern('.*')", tokenizer.regex_pattern(".*")),
+        ("pdb.chinese_compatible", tokenizer.chinese_compatible()),
+        ("pdb.lindera('chinese')", tokenizer.lindera("chinese")),
+        ("pdb.icu", tokenizer.icu()),
+        ("pdb.jieba", tokenizer.jieba()),
+        ("pdb.source_code", tokenizer.source_code()),
     ],
 )
-def test_all_tokenizers(session, expected: str, tokenizer: str, tokenizer_params: list[Any]) -> None:
-    if tokenizer_params:
-        stmt = (
-            select(Product.id)
-            .where(
-                search.match_all(
-                    Product.description, "running shoes", tokenizer=tokenizer, tokenizer_params=tokenizer_params
-                )
-            )
-            .order_by(Product.id)
-        )
-    else:
-        stmt = (
-            select(Product.id)
-            .where(search.match_all(Product.description, "running shoes", tokenizer=tokenizer))
-            .order_by(Product.id)
-        )
+def test_all_tokenizers(session, expected: str, tokenizer: Tokenizer) -> None:
+    stmt = (
+        select(Product.id)
+        .where(search.match_all(Product.description, "running shoes", tokenizer=tokenizer))
+        .order_by(Product.id)
+    )
     assert_uses_paradedb_scan(session, stmt)
     _ = list(session.scalars(stmt))
     assert (

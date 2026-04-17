@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from paradedb import tokenizer
+
 try:
     from enum import StrEnum
 except ImportError:
@@ -246,8 +248,7 @@ def test_search_helpers_accept_tokenizer_parameters():
             products.c.description,
             func.trim("  running  "),
             func.lower("SHOES"),
-            tokenizer="regex_pattern",
-            tokenizer_params=(r"[^\.]+",),
+            tokenizer=tokenizer.regex_pattern(r"[^\.]+"),
         )
     )
     term_stmt = select(products.c.id).where(
@@ -309,7 +310,7 @@ WHERE products.description ||| 'running shoes'::pdb.whitespace"""
 
 def test_match_all_with_str_enum_and_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.match_all(products.c.description, SearchTerm.phrase, tokenizer="whitespace")
+        search.match_all(products.c.description, SearchTerm.phrase, tokenizer=tokenizer.whitespace())
     )
     sql = _sql(stmt)
     assert (
