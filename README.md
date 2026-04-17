@@ -68,4 +68,4 @@ If you need commercial support, please [contact the ParadeDB team](mailto:sales@
 
 ## License
 
-sqlalchemy-paradedb is licensed under the [MIT License](https://github.com/paradedb/sqlalchemy-paradedb?tab=MIT-1-ov-file#readme).
+ParadeDB for SQLAlchemy is licensed under the [MIT License](https://github.com/paradedb/sqlalchemy-paradedb?tab=MIT-1-ov-file#readme).
