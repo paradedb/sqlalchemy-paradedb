@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from conftest import MockItem, assert_uses_paradedb_scan
+from paradedb import tokenizer
 from paradedb.sqlalchemy import pdb, search
 from paradedb.sqlalchemy.errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
 
@@ -46,7 +47,7 @@ def test_match_any_custom_tokenizer(mock_session):
     """match_any(..., tokenizer=) uses explicit query tokenization."""
     stmt_default = select(MockItem.id).where(search.match_any(MockItem.description, "running shoes"))
     stmt_custom = select(MockItem.id).where(
-        search.match_any(MockItem.description, "running shoes", tokenizer="whitespace")
+        search.match_any(MockItem.description, "running shoes", tokenizer=tokenizer.whitespace())
     )
     assert_uses_paradedb_scan(mock_session, stmt_custom, index_name="mock_items_bm25_idx")
     ids_default = _ids(mock_session, stmt_default)
@@ -110,7 +111,7 @@ def test_phrase_custom_tokenizer(mock_session):
     """phrase(..., tokenizer=) uses explicit query tokenization."""
     stmt_default = select(MockItem.id).where(search.phrase(MockItem.description, "running shoes"))
     stmt_custom = select(MockItem.id).where(
-        search.phrase(MockItem.description, "running shoes", tokenizer="whitespace")
+        search.phrase(MockItem.description, "running shoes", tokenizer=tokenizer.whitespace())
     )
     assert_uses_paradedb_scan(mock_session, stmt_custom, index_name="mock_items_bm25_idx")
     ids_default = _ids(mock_session, stmt_default)

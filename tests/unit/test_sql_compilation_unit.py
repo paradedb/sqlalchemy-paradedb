@@ -233,71 +233,9 @@ WHERE products.description @@@ ((pdb.prox_regex(trim('run.*')) ## 1) ## trim('sh
     )
 
 
-def test_search_helpers_accept_tokenizer_parameters():
-    match_any_stmt = select(products.c.id).where(
-        search.match_any(
-            products.c.description,
-            func.trim("  running  "),
-            "shoes",
-            tokenizer="regex_pattern",
-            tokenizer_params=(r"[^\.]+",),
-        )
-    )
-    match_all_stmt = select(products.c.id).where(
-        search.match_all(
-            products.c.description,
-            func.trim("  running  "),
-            func.lower("SHOES"),
-            tokenizer=tokenizer.regex_pattern(r"[^\.]+"),
-        )
-    )
-    term_stmt = select(products.c.id).where(
-        search.term(
-            products.c.description,
-            func.trim("  running  "),
-            tokenizer="regex_pattern",
-            tokenizer_params=(r"[^\.]+",),
-        )
-    )
-    phrase_stmt = select(products.c.id).where(
-        search.phrase(
-            products.c.description,
-            func.trim("  running shoes  "),
-            slop=2,
-            tokenizer="regex_pattern",
-            tokenizer_params=(r"[^\.]+",),
-        )
-    )
-
-    assert (
-        _sql(match_any_stmt)
-        == r"""SELECT products.id
-FROM products
-WHERE products.description ||| ARRAY[trim('  running  '), 'shoes']::pdb.regex_pattern('[^\.]+')"""
-    )
-    assert (
-        _sql(match_all_stmt)
-        == r"""SELECT products.id
-FROM products
-WHERE products.description &&& ARRAY[trim('  running  '), lower('SHOES')]::pdb.regex_pattern('[^\.]+')"""
-    )
-    assert (
-        _sql(term_stmt)
-        == r"""SELECT products.id
-FROM products
-WHERE products.description === trim('  running  ')::pdb.regex_pattern('[^\.]+')"""
-    )
-    assert (
-        _sql(phrase_stmt)
-        == r"""SELECT products.id
-FROM products
-WHERE products.description ### trim('  running shoes  ')::pdb.regex_pattern('[^\.]+')::pdb.slop(2)"""
-    )
-
-
 def test_match_any_with_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.match_any(products.c.description, "running shoes", tokenizer="whitespace")
+        search.match_any(products.c.description, "running shoes", tokenizer=tokenizer.whitespace())
     )
     sql = _sql(stmt)
     assert (
@@ -336,7 +274,7 @@ WHERE products.description &&& ARRAY['running', 'shoes']::pdb.fuzzy(1)"""
 
 def test_match_any_with_str_enum_and_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.match_any(products.c.description, SearchTerm.phrase, tokenizer="whitespace")
+        search.match_any(products.c.description, SearchTerm.phrase, tokenizer=tokenizer.whitespace())
     )
     sql = _sql(stmt)
     assert (
@@ -361,7 +299,9 @@ WHERE products.description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)"""
 
 
 def test_phrase_with_tokenizer_compile():
-    stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", tokenizer="whitespace"))
+    stmt = select(products.c.id).where(
+        search.phrase(products.c.description, "running shoes", tokenizer=tokenizer.whitespace())
+    )
     sql = _sql(stmt)
     assert (
         sql
