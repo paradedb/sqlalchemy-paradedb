@@ -152,7 +152,7 @@ def test_agg_function_projection(session):
         ("pdb.literal_normalized", tokenizer.literal_normalized()),
         ("pdb.ngram(3,3)", tokenizer.ngram(args=(3, 3))),
         ("pdb.ngram(3,3,'positions=true')", tokenizer.ngram(args=(3, 3), named_args={"positions": "true"})),
-        # ("pdb.edge_ngram(3, 3)", tokenizer.edge), TODO add support
+        ("pdb.edge_ngram(2,5)", tokenizer.edge_ngram(args=(2, 5))),
         ("pdb.simple", tokenizer.simple()),
         ("pdb.regex_pattern('.*')", tokenizer.regex_pattern(".*")),
         ("pdb.chinese_compatible", tokenizer.chinese_compatible()),

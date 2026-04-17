@@ -265,6 +265,38 @@ def ngram(
     )
 
 
+def edge_ngram(
+    *,
+    alias: str | None = None,
+    min_gram: int | None = None,
+    max_gram: int | None = None,
+    args: Sequence[Any] | None = None,
+    named_args: Mapping[str, Any] | None = None,
+    filters: Sequence[str] | None = None,
+    stemmer: str | None = None,
+) -> Tokenizer:
+    positional_args: list[Any] = list(args or ())
+    use_positional_bounds = min_gram is not None and max_gram is not None and not positional_args
+    if use_positional_bounds:
+        positional_args.extend([min_gram, max_gram])
+
+    all_named_args: dict[str, Any] = {}
+    if named_args is not None:
+        all_named_args.update({str(key): value for key, value in named_args.items()})
+    if min_gram is not None and not use_positional_bounds:
+        all_named_args["min_gram"] = min_gram
+    if max_gram is not None and not use_positional_bounds:
+        all_named_args["max_gram"] = max_gram
+    return _build_spec(
+        "edge_ngram",
+        alias=alias,
+        args=positional_args,
+        named_args=all_named_args,
+        filters=filters,
+        stemmer=stemmer,
+    )
+
+
 def lindera(
     dictionary: str | None = None,
     *,
