@@ -11,7 +11,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 
-from paradedb.sqlalchemy.tokenizer import TokenizerSpec
+from paradedb.sqlalchemy.tokenizer import Tokenizer
 
 from ._select_introspection import has_limit, has_order_by
 from ._pdb_cast import PDBCast
@@ -34,7 +34,7 @@ class BM25Field(ColumnElement[Any]):
         ("tokenizer", InternalTraversal.dp_plain_obj),
     ]
 
-    def __init__(self, expr: ClauseElement, *, tokenizer: TokenizerSpec | None = None) -> None:
+    def __init__(self, expr: ClauseElement, *, tokenizer: Tokenizer | None = None) -> None:
         self.expr = expr
         self.tokenizer = tokenizer
 

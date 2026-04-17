@@ -9,7 +9,7 @@ _VALID_TOKENIZER_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass(frozen=True)
-class TokenizerSpec:
+class Tokenizer:
     name: str | None = None
     positional_args: tuple[Any, ...] = ()
     named_args: tuple[tuple[str, Any], ...] = ()
@@ -71,7 +71,7 @@ def _build_spec(
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
     **kwargs: Any,
-) -> TokenizerSpec:
+) -> Tokenizer:
     if not _VALID_TOKENIZER_NAME_RE.match(name):
         raise InvalidArgumentError(
             "tokenizer name must be a bare identifier (letters, digits, underscore); pass arguments via args/named_args"
@@ -111,7 +111,7 @@ def _build_spec(
     elif stemmer is not None:
         normalized.setdefault("stemmer", stemmer)
 
-    return TokenizerSpec(
+    return Tokenizer(
         name=name,
         positional_args=positional,
         named_args=tuple(normalized.items()),
@@ -119,7 +119,7 @@ def _build_spec(
     )
 
 
-def unicode(*, alias: str | None = None, lowercase: bool | None = None, stemmer: str | None = None) -> TokenizerSpec:
+def unicode(*, alias: str | None = None, lowercase: bool | None = None, stemmer: str | None = None) -> Tokenizer:
     # ParadeDB currently exposes this tokenizer as `unicode_words`.
     return _build_spec(
         "unicode_words",
@@ -135,7 +135,7 @@ def simple(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         "simple",
         alias=alias,
@@ -153,7 +153,7 @@ def whitespace(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         "whitespace",
         alias=alias,
@@ -171,7 +171,7 @@ def icu(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         "icu",
         alias=alias,
@@ -189,7 +189,7 @@ def chinese_compatible(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         "chinese_compatible",
         alias=alias,
@@ -207,7 +207,7 @@ def jieba(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         "jieba",
         alias=alias,
@@ -218,11 +218,11 @@ def jieba(
     )
 
 
-def literal(*, alias: str | None = None) -> TokenizerSpec:
+def literal(*, alias: str | None = None) -> Tokenizer:
     return _build_spec("literal", alias=alias)
 
 
-def literal_normalized(*, alias: str | None = None) -> TokenizerSpec:
+def literal_normalized(*, alias: str | None = None) -> Tokenizer:
     return _build_spec("literal_normalized", alias=alias)
 
 
@@ -236,7 +236,7 @@ def ngram(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     positional_args: list[Any] = list(args or ())
     use_positional_bounds = min_gram is not None and max_gram is not None and not positional_args
     if use_positional_bounds:
@@ -270,7 +270,7 @@ def lindera(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     positional_args: list[Any] = list(args or ())
     if dictionary is not None and not positional_args:
         positional_args.append(dictionary)
@@ -292,7 +292,7 @@ def regex_pattern(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     positional_args: list[Any] = list(args or ())
     if pattern is not None and not positional_args:
         positional_args.append(pattern)
@@ -313,7 +313,7 @@ def source_code(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         "source_code",
         alias=alias,
@@ -324,8 +324,8 @@ def source_code(
     )
 
 
-def raw(sql: str, *, alias: str | None = None) -> TokenizerSpec:
-    return TokenizerSpec(raw_sql=sql, alias=alias)
+def raw(sql: str, *, alias: str | None = None) -> Tokenizer:
+    return Tokenizer(raw_sql=sql, alias=alias)
 
 
 def custom(
@@ -336,7 +336,7 @@ def custom(
     named_args: Mapping[str, Any] | None = None,
     filters: Sequence[str] | None = None,
     stemmer: str | None = None,
-) -> TokenizerSpec:
+) -> Tokenizer:
     return _build_spec(
         tokenizer,
         alias=alias,
@@ -347,7 +347,7 @@ def custom(
     )
 
 
-def from_config(config: Mapping[str, Any]) -> TokenizerSpec:
+def from_config(config: Mapping[str, Any]) -> Tokenizer:
     if not isinstance(config, Mapping):
         raise InvalidArgumentError("tokenizer config must be a mapping")
 
