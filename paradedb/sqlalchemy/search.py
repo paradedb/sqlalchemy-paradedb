@@ -109,7 +109,7 @@ def _apply_tokenizer_new(
     args = tokenizer.positional_args + tokenizer.named_args
     if tokenizer.alias:
         args += (tokenizer.alias,)
-    return PDBCast(expr, tokenizer.name, args)
+    return PDBCast(expr, tokenizer.name or "", args)
 
 
 def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElement:
