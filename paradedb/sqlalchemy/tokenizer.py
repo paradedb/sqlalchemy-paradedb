@@ -14,7 +14,6 @@ class Tokenizer:
     positional_args: tuple[Any, ...] = ()
     named_args: tuple[tuple[str, Any], ...] = ()
     raw_sql: str | None = None
-    alias: str | None = None
 
     def render(self) -> str:
         if self.name is None:
@@ -26,7 +25,7 @@ class Tokenizer:
         if self.name is None:
             raise InvalidArgumentError("tokenizer name is required unless raw_sql is provided")
 
-        if not self.positional_args and not self.named_args and not self.alias:
+        if not self.positional_args and not self.named_args:
             return f"pdb.{self.name}"
 
         args_sql = [_render_sql_arg(value) for value in self.positional_args]
@@ -34,6 +33,12 @@ class Tokenizer:
             rendered_options = ",".join(f"{key}={_render_config_value(value)}" for key, value in self.named_args)
             args_sql.append(_quote_term(rendered_options))
         return f"pdb.{self.name}({','.join(args_sql)})"
+
+    def extract_alias(self) -> str | None:
+        for key, val in self.named_args:
+            if key == "alias":
+                return val
+        return None
 
 
 def _quote_term(value: str) -> str:
@@ -118,7 +123,6 @@ def _build_spec(
         name=name,
         positional_args=positional,
         named_args=tuple(normalized.items()),
-        alias=alias,
     )
 
 
@@ -359,8 +363,8 @@ def source_code(
     )
 
 
-def raw(sql: str, *, alias: str | None = None) -> Tokenizer:
-    return Tokenizer(raw_sql=sql, alias=alias)
+def raw(sql: str) -> Tokenizer:
+    return Tokenizer(raw_sql=sql)
 
 
 def custom(

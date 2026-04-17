@@ -82,11 +82,16 @@ def validate_bm25_index(index: Index) -> None:
         if not isinstance(expr, BM25Field):
             continue
         tokenizer = expr.tokenizer
-        if tokenizer is None or tokenizer.alias is None:
+        if tokenizer is None:
             continue
-        if tokenizer.alias in aliases:
-            raise DuplicateTokenizerAliasError(f"Duplicate tokenizer alias '{tokenizer.alias}' in BM25 index")
-        aliases.add(tokenizer.alias)
+
+        alias = tokenizer.extract_alias()
+        if alias is None:
+            continue
+
+        if alias in aliases:
+            raise DuplicateTokenizerAliasError(f"Duplicate tokenizer alias '{alias}' in BM25 index")
+        aliases.add(alias)
 
     with_options = index.dialect_options["postgresql"].get("with") or {}
     key_field = with_options.get("key_field")
