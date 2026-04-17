@@ -13,13 +13,9 @@ class Tokenizer:
     name: str | None = None
     positional_args: tuple[Any, ...] = ()
     named_args: tuple[tuple[str, Any], ...] = ()
-    raw_sql: str | None = None
     alias: str | None = None
 
     def render(self) -> str:
-        if self.raw_sql is not None:
-            return self.raw_sql
-
         if self.name is None:
             raise InvalidArgumentError("tokenizer name is required unless raw_sql is provided")
 
@@ -322,10 +318,6 @@ def source_code(
         filters=filters,
         stemmer=stemmer,
     )
-
-
-def raw(sql: str, *, alias: str | None = None) -> Tokenizer:
-    return Tokenizer(raw_sql=sql, alias=alias)
 
 
 def custom(
