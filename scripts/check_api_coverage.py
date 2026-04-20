@@ -1,4 +1,4 @@
-"""Validate that api.json5 matches the SQLAlchemy wrapper surface."""
+"""Validate that api.json5 matches the ORM wrapper surface."""
 
 from __future__ import annotations
 
@@ -201,13 +201,9 @@ def main() -> int:
 
     issues: list[str] = []
     if missing_pdb_symbols:
-        issues.append(
-            "api.json5 pdb.* symbols not referenced by SQLAlchemy wrappers: " + ", ".join(missing_pdb_symbols)
-        )
+        issues.append("api.json5 pdb.* symbols not referenced by ORM wrappers: " + ", ".join(missing_pdb_symbols))
     if missing_operator_symbols:
-        issues.append(
-            "api.json5 operators not referenced by SQLAlchemy wrappers: " + ", ".join(missing_operator_symbols)
-        )
+        issues.append("api.json5 operators not referenced by ORM wrappers: " + ", ".join(missing_operator_symbols))
     if untracked_symbols:
         issues.append(
             "pdb.* symbols used in package source but missing from api.json5/apiignore.json5: "
@@ -219,7 +215,7 @@ def main() -> int:
         for issue in issues:
             print(f"   - {issue}", file=sys.stderr)
         print(
-            "\nUpdate api.json5, apiignore.json5, or the SQLAlchemy wrappers so they stay in sync.",
+            "\nUpdate api.json5, apiignore.json5, or the ORM wrappers so they stay in sync.",
             file=sys.stderr,
         )
         return 1

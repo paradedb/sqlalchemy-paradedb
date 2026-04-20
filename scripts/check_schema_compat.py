@@ -1,5 +1,5 @@
 """
-Check compatibility between sqlalchemy-paradedb's api.json5 and a released pg_search schema.
+Check compatibility between the ORM's api.json5 and a released pg_search schema.
 
 The schema is downloaded from the corresponding ParadeDB GitHub release and
 checked in both directions:
@@ -194,7 +194,7 @@ def run_checks(schema_path: Path, api_path: Path) -> int:
             print(f"   {kind}: {name}")
         print(
             "\nThese symbols were removed or renamed in this version of pg_search.\n"
-            "Update sqlalchemy-paradedb to handle the API change, then update api.json5."
+            "Update the ORM to handle the API change, then update api.json5."
         )
         rc = 1
     else:
@@ -219,8 +219,7 @@ def run_checks(schema_path: Path, api_path: Path) -> int:
         for kind, name in uncovered:
             print(f"   {kind}: {name}")
         print(
-            "\nThese are paradedb APIs not yet wrapped by sqlalchemy-paradedb.\n"
-            "Either add them to api.json5 or add them to apiignore.json5."
+            "\nThese are paradedb APIs not yet wrapped.\nEither add them to api.json5 or add them to apiignore.json5."
         )
         rc = 1
     else:
