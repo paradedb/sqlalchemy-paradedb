@@ -10,18 +10,11 @@ _VALID_TOKENIZER_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 @dataclass(frozen=True)
 class Tokenizer:
-    name: str | None = None
+    name: str
     positional_args: tuple[Any, ...] | None = None
     options: Mapping[str, Any] | None = None
-    raw_sql: str | None = None
 
     def render(self) -> str:
-        if self.raw_sql is not None:
-            return self.raw_sql
-
-        if self.name is None:
-            raise InvalidArgumentError("tokenizer name is required unless raw_sql is provided")
-
         if not self.positional_args and not self.options:
             return f"pdb.{self.name}"
 
@@ -141,7 +134,3 @@ def source_code(
     options: Mapping[str, Any] | None = None,
 ) -> Tokenizer:
     return Tokenizer("source_code", options=options)
-
-
-def raw(sql: str) -> Tokenizer:
-    return Tokenizer(raw_sql=sql)

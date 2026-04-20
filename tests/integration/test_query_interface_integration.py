@@ -160,10 +160,6 @@ def test_agg_function_projection(session):
         ("pdb.icu", tokenizer.icu()),
         ("pdb.jieba", tokenizer.jieba()),
         ("pdb.source_code", tokenizer.source_code()),
-        (
-            "pdb.edge_ngram(3, 7, 'ascii_folding=true', 'alias=myaliascolumn')",
-            tokenizer.raw("pdb.edge_ngram(3, 7, 'ascii_folding=true', 'alias=myaliascolumn')"),
-        ),
     ],
 )
 def test_all_tokenizers(session, expected: str, tokenizer: Tokenizer) -> None:

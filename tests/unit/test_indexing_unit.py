@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import CompileError
 from sqlalchemy.schema import CreateIndex
 
+from paradedb import Tokenizer
 from paradedb.sqlalchemy.indexing import (
     BM25Field,
     IndexMeta,
@@ -65,6 +66,9 @@ def test_tokenizer_renderers_cover_public_wrappers():
     assert tokenizer.ngram(3, 8, options={"alias": "description_ngram", "prefix_only": True}).render() == (
         "pdb.ngram(3,8,'alias=description_ngram','prefix_only=true')"
     )
+    assert tokenizer.edge_ngram(3, 8, options={"alias": "description_ngram"}).render() == (
+        "pdb.edge_ngram(3,8,'alias=description_ngram')"
+    )
     assert tokenizer.lindera("japanese", options={"alias": "description_jp"}).render() == (
         "pdb.lindera('japanese','alias=description_jp')"
     )
@@ -72,6 +76,9 @@ def test_tokenizer_renderers_cover_public_wrappers():
         "pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex')"
     )
     assert tokenizer.source_code(options={"alias": "description_source_code", "ascii_folding": True}).render() == (
+        "pdb.source_code('alias=description_source_code','ascii_folding=true')"
+    )
+    assert Tokenizer("source_code", options={"alias": "description_source_code", "ascii_folding": True}).render() == (
         "pdb.source_code('alias=description_source_code','ascii_folding=true')"
     )
 
