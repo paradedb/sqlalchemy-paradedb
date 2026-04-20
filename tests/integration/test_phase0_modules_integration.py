@@ -60,8 +60,8 @@ def test_custom_errors_raised_for_validation(engine):
     idx = Index(
         index_name,
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(alias="dup")),
-        BM25Field(products.c.description, tokenizer=tokenizer.literal(alias="dup")),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"alias": "dup"})),
+        BM25Field(products.c.description, tokenizer=tokenizer.literal(options={"alias": "dup"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )

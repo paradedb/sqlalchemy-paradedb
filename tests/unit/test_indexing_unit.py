@@ -40,38 +40,38 @@ def _sql(sql) -> str:
 
 
 def test_tokenizer_renderers_cover_public_wrappers():
-    assert tokenizer.unicode(alias="description_unicode", lowercase=True, stemmer="english").render() == (
-        "pdb.unicode_words('alias=description_unicode,lowercase=true,stemmer=english')"
-    )
+    assert tokenizer.unicode_words(
+        options={"alias": "description_unicode", "lowercase": True, "stemmer": "english"}
+    ).render() == ("pdb.unicode_words('alias=description_unicode,lowercase=true,stemmer=english')")
     assert tokenizer.simple(
-        alias="description_simple", filters=["lowercase", "stemmer"], stemmer="english"
+        options={"alias": "description_simple", "lowercase": True, "stemmer": "english"}
     ).render() == ("pdb.simple('alias=description_simple,lowercase=true,stemmer=english')")
-    assert tokenizer.whitespace(alias="description_whitespace", named_args={"positions": True}).render() == (
+    assert tokenizer.whitespace(options={"alias": "description_whitespace", "positions": True}).render() == (
         "pdb.whitespace('alias=description_whitespace,positions=true')"
     )
-    assert tokenizer.icu(alias="description_icu", filters=["lowercase"]).render() == (
+    assert tokenizer.icu(options={"alias": "description_icu", "lowercase": True}).render() == (
         "pdb.icu('alias=description_icu,lowercase=true')"
     )
-    assert tokenizer.chinese_compatible(alias="description_cjk").render() == (
+    assert tokenizer.chinese_compatible(options={"alias": "description_cjk"}).render() == (
         "pdb.chinese_compatible('alias=description_cjk')"
     )
-    assert tokenizer.jieba(alias="description_jieba", filters=["lowercase"]).render() == (
+    assert tokenizer.jieba(options={"alias": "description_jieba", "lowercase": True}).render() == (
         "pdb.jieba('alias=description_jieba,lowercase=true')"
     )
-    assert tokenizer.literal(alias="category_literal").render() == "pdb.literal('alias=category_literal')"
-    assert tokenizer.literal_normalized(alias="category_exact").render() == (
+    assert tokenizer.literal(options={"alias": "category_literal"}).render() == "pdb.literal('alias=category_literal')"
+    assert tokenizer.literal_normalized(options={"alias": "category_exact"}).render() == (
         "pdb.literal_normalized('alias=category_exact')"
     )
-    assert tokenizer.ngram(alias="description_ngram", min_gram=3, max_gram=8, prefix_only=True).render() == (
+    assert tokenizer.ngram(3, 8, options={"alias": "description_ngram", "prefix_only": True}).render() == (
         "pdb.ngram(3,8,'alias=description_ngram,prefix_only=true')"
     )
-    assert tokenizer.lindera("japanese", alias="description_jp").render() == (
+    assert tokenizer.lindera("japanese", options={"alias": "description_jp"}).render() == (
         "pdb.lindera('japanese','alias=description_jp')"
     )
-    assert tokenizer.regex_pattern(r"(?i)\\bh\\w*", alias="description_regex").render() == (
+    assert tokenizer.regex_pattern(r"(?i)\\bh\\w*", options={"alias": "description_regex"}).render() == (
         "pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex')"
     )
-    assert tokenizer.source_code(alias="description_source_code", named_args={"ascii_folding": True}).render() == (
+    assert tokenizer.source_code(options={"alias": "description_source_code", "ascii_folding": True}).render() == (
         "pdb.source_code('alias=description_source_code,ascii_folding=true')"
     )
 
@@ -80,8 +80,11 @@ def test_bm25_index_compile_with_tokenizers():
     idx = Index(
         "products_bm25_idx",
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(lowercase=True, stemmer="english")),
-        BM25Field(products.c.category, tokenizer=tokenizer.literal_normalized(alias="category_exact")),
+        BM25Field(
+            products.c.description,
+            tokenizer=tokenizer.unicode_words(options={"lowercase": True, "stemmer": "english"}),
+        ),
+        BM25Field(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -97,7 +100,7 @@ def test_bm25_index_compile_unicode_omits_none_options():
     idx = Index(
         "products_bm25_idx",
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(lowercase=True)),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -115,7 +118,9 @@ def test_bm25_index_compile_with_structured_tokenizer_config():
         BM25Field(products.c.id),
         BM25Field(
             products.c.description,
-            tokenizer=tokenizer.simple(filters=["lowercase", "stemmer"], stemmer="english", alias="description_simple"),
+            tokenizer=tokenizer.simple(
+                options={"alias": "description_simple", "lowercase": True, "stemmer": "english"}
+            ),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -134,7 +139,7 @@ def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
         BM25Field(
             products.c.description,
             tokenizer=tokenizer.ngram(
-                min_gram=3, max_gram=8, named_args={"prefix_only": True, "positions": True}, alias="description_ngram"
+                3, 8, options={"alias": "description_ngram", "prefix_only": True, "positions": True}
             ),
         ),
         postgresql_using="bm25",
@@ -151,7 +156,7 @@ def test_bm25_index_compile_lindera_wrapper():
     idx = Index(
         "products_bm25_lindera_idx",
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.lindera("japanese", alias="description_jp")),
+        BM25Field(products.c.description, tokenizer=tokenizer.lindera("japanese", options={"alias": "description_jp"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -167,7 +172,8 @@ def test_bm25_index_compile_regex_pattern_wrapper():
         "products_bm25_regex_idx",
         BM25Field(products.c.id),
         BM25Field(
-            products.c.description, tokenizer=tokenizer.regex_pattern(r"(?i)\\bh\\w*", alias="description_regex")
+            products.c.description,
+            tokenizer=tokenizer.regex_pattern(r"(?i)\\bh\\w*", options={"alias": "description_regex"}),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -185,7 +191,7 @@ def test_bm25_index_compile_json_key_with_tokenizer():
         BM25Field(products.c.id),
         BM25Field(
             json_text(products.c.metadata, "color"),
-            tokenizer=tokenizer.literal(alias="metadata_color"),
+            tokenizer=tokenizer.literal(options={"alias": "metadata_color"}),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -203,11 +209,11 @@ def test_bm25_index_compile_multiple_json_keys():
         BM25Field(products.c.id),
         BM25Field(
             json_text(products.c.metadata, "color"),
-            tokenizer=tokenizer.literal(alias="metadata_color"),
+            tokenizer=tokenizer.literal(options={"alias": "metadata_color"}),
         ),
         BM25Field(
             json_text(products.c.metadata, "location"),
-            tokenizer=tokenizer.literal(alias="metadata_location"),
+            tokenizer=tokenizer.literal(options={"alias": "metadata_location"}),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -245,8 +251,8 @@ def test_duplicate_alias_validation_raises():
     idx = Index(
         "products_bm25_alias_idx",
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(alias="description_alias")),
-        BM25Field(products.c.category, tokenizer=tokenizer.literal(alias="description_alias")),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"alias": "description_alias"})),
+        BM25Field(products.c.category, tokenizer=tokenizer.literal(options={"alias": "description_alias"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -296,7 +302,7 @@ def test_key_field_must_be_first_field():
 def test_key_field_must_be_untokenized():
     idx = Index(
         "products_bm25_key_tokenized_idx",
-        BM25Field(products.c.id, tokenizer=tokenizer.literal(alias="id_alias")),
+        BM25Field(products.c.id, tokenizer=tokenizer.literal(options={"alias": "id_alias"})),
         BM25Field(products.c.description),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -314,14 +320,14 @@ def test_extract_key_field_handles_normalized_indexdef():
 def test_extract_bm25_field_list_parses_tokenizer_casts():
     indexdef = (
         "CREATE INDEX idx ON public.products USING bm25 "
-        "(id, ((description)::pdb.unicode_words(lowercase=true)), "
-        "((category)::pdb.literal_normalized(alias=category_exact))) WITH (key_field=id)"
+        "(id, ((description)::pdb.unicode_words('lowercase=true')), "
+        "((category)::pdb.literal_normalized('alias=category_exact'))) WITH (key_field=id)"
     )
     parts = _extract_bm25_field_list(indexdef)
     assert parts == [
         "id",
-        "((description)::pdb.unicode_words(lowercase=true))",
-        "((category)::pdb.literal_normalized(alias=category_exact))",
+        "((description)::pdb.unicode_words('lowercase=true'))",
+        "((category)::pdb.literal_normalized('alias=category_exact'))",
     ]
     assert _extract_field_name(parts[0]) == "id"
     assert _extract_field_name(parts[1]) == "description"

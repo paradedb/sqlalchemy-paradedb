@@ -112,8 +112,8 @@ def test_bm25_index_with_tokenizers_when_supported(engine):
     idx = Index(
         index_name,
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(lowercase=True)),
-        BM25Field(products.c.category, tokenizer=tokenizer.literal_normalized(alias="category_exact")),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
+        BM25Field(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -161,11 +161,11 @@ def test_bm25_index_json_keys_when_supported(engine):
         BM25Field(products.c.id),
         BM25Field(
             json_text(products.c.metadata, "color"),
-            tokenizer=tokenizer.literal(alias="metadata_color"),
+            tokenizer=tokenizer.literal(options={"alias": "metadata_color"}),
         ),
         BM25Field(
             json_text(products.c.metadata, "location"),
-            tokenizer=tokenizer.literal(alias="metadata_location"),
+            tokenizer=tokenizer.literal(options={"alias": "metadata_location"}),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -293,8 +293,11 @@ def test_duplicate_tokenizer_alias_is_rejected(engine):
     idx = Index(
         index_name,
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(alias="desc_alias", lowercase=True)),
-        BM25Field(products.c.description, tokenizer=tokenizer.literal(alias="desc_alias")),
+        BM25Field(
+            products.c.description,
+            tokenizer=tokenizer.unicode_words(options={"alias": "desc_alias", "lowercase": True}),
+        ),
+        BM25Field(products.c.description, tokenizer=tokenizer.literal(options={"alias": "desc_alias"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -350,8 +353,8 @@ def test_describe_returns_fields_and_aliases(engine):
     idx = Index(
         index_name,
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(lowercase=True)),
-        BM25Field(products.c.category, tokenizer=tokenizer.literal_normalized(alias="category_exact")),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
+        BM25Field(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )
@@ -389,7 +392,7 @@ def test_describe_includes_tokenizers(engine):
     idx = Index(
         index_name,
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode(lowercase=True)),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
         BM25Field(products.c.category, tokenizer=tokenizer.literal()),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -430,7 +433,7 @@ def test_describe_and_assert_indexed_for_json_expression_tokenizer(engine):
         BM25Field(products.c.id),
         BM25Field(
             json_text(products.c.metadata, "color"),
-            tokenizer=tokenizer.literal(alias="metadata_color"),
+            tokenizer=tokenizer.literal(options={"alias": "metadata_color"}),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},

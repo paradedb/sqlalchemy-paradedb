@@ -6,8 +6,8 @@ from sqlalchemy import Index, Integer, String, Text, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from paradedb import tokenizer
 from paradedb.sqlalchemy import indexing
-from paradedb.sqlalchemy.tokenizer import literal, unicode
 
 
 PRODUCT_ROWS = [
@@ -35,8 +35,8 @@ class Product(Base):
 Index(
     "products_hybrid_rrf_bm25_idx",
     indexing.BM25Field(Product.id),
-    indexing.BM25Field(Product.description, tokenizer=unicode(lowercase=True)),
-    indexing.BM25Field(Product.category, tokenizer=literal()),
+    indexing.BM25Field(Product.description),
+    indexing.BM25Field(Product.category, tokenizer=tokenizer.literal()),
     indexing.BM25Field(Product.rating),
     postgresql_using="bm25",
     postgresql_with={"key_field": "id"},
