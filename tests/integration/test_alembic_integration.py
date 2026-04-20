@@ -10,7 +10,8 @@ from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
 from conftest import PARADEDB_SCAN_PROVIDERS
-from paradedb.sqlalchemy.indexing import BM25Field, tokenize
+from paradedb.sqlalchemy.indexing import BM25Field
+from paradedb.sqlalchemy import tokenizer
 
 
 pytestmark = pytest.mark.integration
@@ -292,7 +293,9 @@ def _metadata_with_tokenized_bm25() -> MetaData:
     Index(
         _AG_IDX,
         BM25Field(t.c.id),
-        BM25Field(t.c.description, tokenizer=tokenize.simple(alias="description_simple", filters=["lowercase"])),
+        BM25Field(
+            t.c.description, tokenizer=tokenizer.simple(options={"alias": "description_simple", "lowercase": True})
+        ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )

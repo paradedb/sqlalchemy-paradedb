@@ -17,11 +17,20 @@ class PDBCast(ColumnElement[Any]):
         ("expr", InternalTraversal.dp_clauseelement),
         ("type_name", InternalTraversal.dp_string),
         ("args", InternalTraversal.dp_plain_obj),
+        ("raw_cast", InternalTraversal.dp_string),
     ]
 
-    def __init__(self, expr: ClauseElement, type_name: str, args: Sequence[Any] = ()) -> None:
+    def __init__(
+        self,
+        expr: ClauseElement,
+        type_name: str | None,
+        args: Sequence[Any] = (),
+        *,
+        raw_cast: str | None = None,
+    ) -> None:
         self.expr = expr
         self.type_name = type_name
+        self.raw_cast = raw_cast
         self.args = tuple(args)
 
 
@@ -40,6 +49,8 @@ def _render_cast_arg(arg: Any, compiler, **kw: Any) -> str:
 @compiles(PDBCast, "postgresql")
 def _compile_pdb_cast(element: PDBCast, compiler, **kw: Any) -> str:
     expr_sql = compiler.process(element.expr, **kw)
+    if element.raw_cast:
+        return f"{expr_sql}::{element.raw_cast}"
     if element.args:
         args_sql = ", ".join(_render_cast_arg(arg, compiler, **kw) for arg in element.args)
         return f"{expr_sql}::pdb.{element.type_name}({args_sql})"

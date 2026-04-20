@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
+from paradedb import tokenizer, Tokenizer
 from paradedb.sqlalchemy import pdb, search, select_with
 from conftest import Product, assert_uses_paradedb_scan
 from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
@@ -11,6 +13,16 @@ from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
 pytestmark = pytest.mark.integration
 RUNNING_PRODUCT_IDS = [1, 2]
 WIRELESS_PRODUCT_IDS = [3]
+
+
+def _sql(stmt) -> str:
+    sql = str(
+        stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
 
 
 def test_match_all_returns_expected_rows(session):
@@ -128,3 +140,39 @@ def test_agg_function_projection(session):
 
     value = session.execute(stmt).scalar_one()
     assert value == {"value": 5.0}
+
+
+@pytest.mark.parametrize(
+    ["expected", "tokenizer"],
+    [
+        ("pdb.whitespace", tokenizer.whitespace()),
+        ("pdb.whitespace('alias=my_column')", tokenizer.whitespace(options={"alias": "my_column"})),
+        ("pdb.unicode_words", tokenizer.unicode_words()),
+        ("pdb.literal", tokenizer.literal()),
+        ("pdb.literal_normalized", tokenizer.literal_normalized()),
+        ("pdb.ngram(3,3)", tokenizer.ngram(3, 3)),
+        ("pdb.ngram(3,3,'positions=true')", tokenizer.ngram(3, 3, options={"positions": True})),
+        ("pdb.edge_ngram(2,5)", tokenizer.edge_ngram(2, 5)),
+        ("pdb.simple", tokenizer.simple()),
+        ("pdb.regex_pattern('.*')", tokenizer.regex_pattern(".*")),
+        ("pdb.chinese_compatible", tokenizer.chinese_compatible()),
+        ("pdb.lindera('chinese')", tokenizer.lindera("chinese")),
+        ("pdb.icu", tokenizer.icu()),
+        ("pdb.jieba", tokenizer.jieba()),
+        ("pdb.source_code", tokenizer.source_code()),
+    ],
+)
+def test_all_tokenizers(session, expected: str, tokenizer: Tokenizer) -> None:
+    stmt = (
+        select(Product.id)
+        .where(search.match_all(Product.description, "running shoes", tokenizer=tokenizer))
+        .order_by(Product.id)
+    )
+    assert_uses_paradedb_scan(session, stmt)
+    _ = list(session.scalars(stmt))
+    assert (
+        _sql(stmt)
+        == f"""SELECT products.id
+FROM products
+WHERE products.description &&& 'running shoes'::{expected} ORDER BY products.id"""
+    )

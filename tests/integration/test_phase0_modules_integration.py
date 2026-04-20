@@ -10,7 +10,8 @@ from paradedb.sqlalchemy import expr as pdb_expr
 from paradedb.sqlalchemy import inspect as pdb_inspect
 from paradedb.sqlalchemy import search
 from paradedb.sqlalchemy.errors import DuplicateTokenizerAliasError, InvalidArgumentError
-from paradedb.sqlalchemy.indexing import BM25Field, tokenize
+from paradedb.sqlalchemy.indexing import BM25Field
+from paradedb.sqlalchemy import tokenizer
 import paradedb.sqlalchemy.alembic  # noqa: F401  Ensures Alembic ops registration
 
 
@@ -59,8 +60,8 @@ def test_custom_errors_raised_for_validation(engine):
     idx = Index(
         index_name,
         BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenize.unicode(alias="dup")),
-        BM25Field(products.c.description, tokenizer=tokenize.literal(alias="dup")),
+        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"alias": "dup"})),
+        BM25Field(products.c.description, tokenizer=tokenizer.literal(options={"alias": "dup"})),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
     )

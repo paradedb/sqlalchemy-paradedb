@@ -30,7 +30,7 @@ class Document(Base):
 Index(
     "documents_bm25_idx",
     indexing.BM25Field(Document.id),
-    indexing.BM25Field(Document.content, tokenizer=indexing.tokenize.unicode(lowercase=True)),
+    indexing.BM25Field(Document.content),
     postgresql_using="bm25",
     postgresql_with={"key_field": "id"},
 )

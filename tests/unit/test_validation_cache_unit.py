@@ -49,9 +49,6 @@ def test_search_argument_validation_errors():
     with pytest.raises(InvalidArgumentError, match="max_expansions must be >= 0"):
         search.prox_regex("sho.*", max_expansions=-1)
 
-    with pytest.raises(InvalidArgumentError, match="tokenizer must be a bare identifier"):
-        search.match_any(products.c.description, "running shoes", tokenizer="whitespace;drop")
-
     with pytest.raises(InvalidArgumentError, match="value must contain at least one token"):
         search.phrase(products.c.description, [])
 

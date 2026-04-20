@@ -6,6 +6,7 @@ from sqlalchemy import Index, Integer, String, Text, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from paradedb import tokenizer
 from paradedb.sqlalchemy import indexing
 
 
@@ -34,12 +35,12 @@ class Product(Base):
 Index(
     "products_autocomplete_bm25_idx",
     indexing.BM25Field(Product.id),
-    indexing.BM25Field(Product.description, tokenizer=indexing.tokenize.unicode(lowercase=True)),
+    indexing.BM25Field(Product.description),
     indexing.BM25Field(
         Product.description,
-        tokenizer=indexing.tokenize.ngram(min_gram=3, max_gram=8, prefix_only=True, alias="description_ngram"),
+        tokenizer=tokenizer.ngram(3, 8, options={"prefix_only": True, "alias": "description_ngram"}),
     ),
-    indexing.BM25Field(Product.category, tokenizer=indexing.tokenize.literal()),
+    indexing.BM25Field(Product.category, tokenizer=tokenizer.literal()),
     indexing.BM25Field(Product.rating),
     postgresql_using="bm25",
     postgresql_with={"key_field": "id"},
