@@ -44,8 +44,6 @@ def _render_sql_arg(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, int | float):
         return str(value)
-    if value is None:
-        return "null"
     if isinstance(value, str):
         return _quote_term(value)
     raise InvalidArgumentError(f"Unsupported tokenizer arg type: {type(value).__name__}")
@@ -56,8 +54,6 @@ def _render_config_value(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, int | float):
         return str(value)
-    if value is None:
-        return "null"
     if isinstance(value, str):
         return value
     raise InvalidArgumentError(f"Unsupported tokenizer named arg type: {type(value).__name__}")

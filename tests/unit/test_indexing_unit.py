@@ -83,6 +83,13 @@ def test_tokenizer_renderers_cover_public_wrappers():
     )
 
 
+def test_tokenizer_invalid_argument_types():
+    with pytest.raises(InvalidArgumentError):
+        tokenizer.whitespace(options={"invalid_type": None}).render()
+    with pytest.raises(InvalidArgumentError):
+        Tokenizer("ngram", positional_args=(None,)).render()
+
+
 def test_bm25_index_compile_with_tokenizers():
     idx = Index(
         "products_bm25_idx",
