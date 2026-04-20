@@ -115,14 +115,7 @@ def test_bm25_index_compile_with_structured_tokenizer_config():
         BM25Field(products.c.id),
         BM25Field(
             products.c.description,
-            tokenizer=tokenizer.from_config(
-                {
-                    "tokenizer": "simple",
-                    "filters": ["lowercase", "stemmer"],
-                    "stemmer": "english",
-                    "alias": "description_simple",
-                }
-            ),
+            tokenizer=tokenizer.simple(filters=["lowercase", "stemmer"], stemmer="english", alias="description_simple"),
         ),
         postgresql_using="bm25",
         postgresql_with={"key_field": "id"},
@@ -140,13 +133,8 @@ def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
         BM25Field(products.c.id),
         BM25Field(
             products.c.description,
-            tokenizer=tokenizer.from_config(
-                {
-                    "tokenizer": "ngram",
-                    "args": [3, 8],
-                    "named_args": {"prefix_only": True, "positions": True},
-                    "alias": "description_ngram",
-                }
+            tokenizer=tokenizer.ngram(
+                min_gram=3, max_gram=8, named_args={"prefix_only": True, "positions": True}, alias="description_ngram"
             ),
         ),
         postgresql_using="bm25",
@@ -157,16 +145,6 @@ def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
         == """\
 CREATE INDEX products_bm25_ngram_idx ON products USING bm25 (id, ((description)::pdb.ngram(3,8,'alias=description_ngram,prefix_only=true,positions=true'))) WITH (key_field = id)"""
     )
-
-
-def test_tokenizer_from_config_rejects_non_identifier_tokenizer_name():
-    with pytest.raises(InvalidArgumentError, match="bare identifier"):
-        tokenizer.from_config(
-            {
-                "tokenizer": "ngram(3,8)",
-                "named_args": {"prefix_only": True},
-            }
-        )
 
 
 def test_bm25_index_compile_lindera_wrapper():
@@ -326,21 +304,6 @@ def test_key_field_must_be_untokenized():
 
     with pytest.raises(ValueError, match="must be untokenized"):
         validate_bm25_index(idx)
-
-
-def test_tokenizer_from_config_unknown_key_raises():
-    with pytest.raises(InvalidArgumentError, match="Unknown tokenizer config keys"):
-        tokenizer.from_config({"tokenizer": "simple", "unknown": True})
-
-
-def test_tokenizer_from_config_options_key_raises_as_unknown():
-    with pytest.raises(InvalidArgumentError, match="Unknown tokenizer config keys"):
-        tokenizer.from_config({"tokenizer": "simple", "options": {"lowercase": True}})
-
-
-def test_tokenizer_from_config_rejects_non_string_tokenizer():
-    with pytest.raises(InvalidArgumentError, match="must be a string"):
-        tokenizer.from_config({"tokenizer": 123})
 
 
 def test_extract_key_field_handles_normalized_indexdef():
