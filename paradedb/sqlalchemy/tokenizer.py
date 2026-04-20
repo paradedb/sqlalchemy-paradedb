@@ -29,8 +29,7 @@ class Tokenizer:
         if self.positional_args is not None:
             args = [_render_sql_arg(value) for value in self.positional_args]
         if self.options:
-            rendered_options = ",".join(f"{key}={_render_config_value(value)}" for key, value in self.options.items())
-            args.append(_quote_term(rendered_options))
+            args.extend([_quote_term(f"{key}={_render_config_value(value)}") for key, value in self.options.items()])
         return f"pdb.{self.name}({','.join(args)})"
 
     def extract_alias(self) -> str | None:

@@ -42,28 +42,28 @@ def _sql(sql) -> str:
 def test_tokenizer_renderers_cover_public_wrappers():
     assert tokenizer.unicode_words(
         options={"alias": "description_unicode", "lowercase": True, "stemmer": "english"}
-    ).render() == ("pdb.unicode_words('alias=description_unicode,lowercase=true,stemmer=english')")
+    ).render() == ("pdb.unicode_words('alias=description_unicode','lowercase=true','stemmer=english')")
     assert tokenizer.simple(
         options={"alias": "description_simple", "lowercase": True, "stemmer": "english"}
-    ).render() == ("pdb.simple('alias=description_simple,lowercase=true,stemmer=english')")
+    ).render() == ("pdb.simple('alias=description_simple','lowercase=true','stemmer=english')")
     assert tokenizer.whitespace(options={"alias": "description_whitespace", "positions": True}).render() == (
-        "pdb.whitespace('alias=description_whitespace,positions=true')"
+        "pdb.whitespace('alias=description_whitespace','positions=true')"
     )
     assert tokenizer.icu(options={"alias": "description_icu", "lowercase": True}).render() == (
-        "pdb.icu('alias=description_icu,lowercase=true')"
+        "pdb.icu('alias=description_icu','lowercase=true')"
     )
     assert tokenizer.chinese_compatible(options={"alias": "description_cjk"}).render() == (
         "pdb.chinese_compatible('alias=description_cjk')"
     )
     assert tokenizer.jieba(options={"alias": "description_jieba", "lowercase": True}).render() == (
-        "pdb.jieba('alias=description_jieba,lowercase=true')"
+        "pdb.jieba('alias=description_jieba','lowercase=true')"
     )
     assert tokenizer.literal(options={"alias": "category_literal"}).render() == "pdb.literal('alias=category_literal')"
     assert tokenizer.literal_normalized(options={"alias": "category_exact"}).render() == (
         "pdb.literal_normalized('alias=category_exact')"
     )
     assert tokenizer.ngram(3, 8, options={"alias": "description_ngram", "prefix_only": True}).render() == (
-        "pdb.ngram(3,8,'alias=description_ngram,prefix_only=true')"
+        "pdb.ngram(3,8,'alias=description_ngram','prefix_only=true')"
     )
     assert tokenizer.lindera("japanese", options={"alias": "description_jp"}).render() == (
         "pdb.lindera('japanese','alias=description_jp')"
@@ -72,7 +72,7 @@ def test_tokenizer_renderers_cover_public_wrappers():
         "pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex')"
     )
     assert tokenizer.source_code(options={"alias": "description_source_code", "ascii_folding": True}).render() == (
-        "pdb.source_code('alias=description_source_code,ascii_folding=true')"
+        "pdb.source_code('alias=description_source_code','ascii_folding=true')"
     )
 
 
@@ -92,7 +92,7 @@ def test_bm25_index_compile_with_tokenizers():
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_bm25_idx ON products USING bm25 (id, ((description)::pdb.unicode_words('lowercase=true,stemmer=english')), ((category)::pdb.literal_normalized('alias=category_exact'))) WITH (key_field = id)"""
+CREATE INDEX products_bm25_idx ON products USING bm25 (id, ((description)::pdb.unicode_words('lowercase=true','stemmer=english')), ((category)::pdb.literal_normalized('alias=category_exact'))) WITH (key_field = id)"""
     )
 
 
@@ -128,7 +128,7 @@ def test_bm25_index_compile_with_structured_tokenizer_config():
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_bm25_structured_idx ON products USING bm25 (id, ((description)::pdb.simple('alias=description_simple,lowercase=true,stemmer=english'))) WITH (key_field = id)"""
+CREATE INDEX products_bm25_structured_idx ON products USING bm25 (id, ((description)::pdb.simple('alias=description_simple','lowercase=true','stemmer=english'))) WITH (key_field = id)"""
     )
 
 
@@ -148,7 +148,7 @@ def test_bm25_index_compile_with_tokenizer_positional_and_named_args():
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_bm25_ngram_idx ON products USING bm25 (id, ((description)::pdb.ngram(3,8,'alias=description_ngram,prefix_only=true,positions=true'))) WITH (key_field = id)"""
+CREATE INDEX products_bm25_ngram_idx ON products USING bm25 (id, ((description)::pdb.ngram(3,8,'alias=description_ngram','prefix_only=true','positions=true'))) WITH (key_field = id)"""
     )
 
 
