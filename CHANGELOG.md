@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+## [0.6.0] - 2026-04-21
+
+### Changed
+
+- **BREAKING**: Streamlined the index creation tokenizer API and introduced it to the query interface.
+
 ## [0.5.0] - 2026-04-16
 
 ### Added
@@ -40,6 +46,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.6.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.6.0
 [0.5.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.5.0
 [0.4.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.4.0
 [0.3.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.3.0
