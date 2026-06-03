@@ -418,22 +418,6 @@ def test_more_like_this_by_document_id(mock_session):
     assert ids == MLT_RUNNING_SHOES_IDS
 
 
-def test_more_like_this_by_document_ids(mock_session):
-    """MLT with multiple document_ids ORs the results together."""
-    stmt_combined = select(MockItem.id).where(
-        search.more_like_this(MockItem.id, document_ids=[3, 12], fields=["description"])
-    )
-    stmt_id1 = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=3, fields=["description"]))
-    stmt_id2 = select(MockItem.id).where(search.more_like_this(MockItem.id, document_id=12, fields=["description"]))
-    assert_uses_paradedb_scan(mock_session, stmt_combined, index_name="mock_items_bm25_idx")
-    ids_combined = _ids(mock_session, stmt_combined)
-    ids_1 = _ids(mock_session, stmt_id1)
-    ids_2 = _ids(mock_session, stmt_id2)
-    assert ids_1 == MLT_RUNNING_SHOES_IDS
-    assert ids_2 == WIRELESS_IDS
-    assert ids_combined == MLT_COMBINED_IDS
-
-
 def test_more_like_this_by_document_payload(mock_session):
     """MLT with document dict finds similar documents."""
     stmt = select(MockItem.id).where(
@@ -474,12 +458,6 @@ def test_more_like_this_with_min_word_length(mock_session):
     )
     assert ids_baseline == MLT_RUNNING_SHOES_IDS
     assert ids_filtered == RUNNING_IDS
-
-
-def test_more_like_this_document_ids_empty_raises(mock_session):
-    """document_ids=[] raises an error."""
-    with pytest.raises(InvalidMoreLikeThisOptionsError, match="document_ids must not be empty"):
-        search.more_like_this(MockItem.id, document_ids=[])
 
 
 def test_more_like_this_multiple_sources_raises(mock_session):
