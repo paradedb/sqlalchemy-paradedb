@@ -78,32 +78,6 @@ def test_more_like_this_rejects_invalid_numeric_options():
         search.more_like_this(Product.id, document_id=1, boost_factor=-1.0)
 
 
-def test_more_like_this_by_document_ids(session):
-    """document_ids ORs results from multiple individual MLT queries."""
-    stmt_combined = (
-        select(Product.id)
-        .where(search.more_like_this(Product.id, document_ids=[1, 3], fields=["description"]))
-        .order_by(Product.id)
-    )
-    stmt_id1 = (
-        select(Product.id)
-        .where(search.more_like_this(Product.id, document_id=1, fields=["description"]))
-        .order_by(Product.id)
-    )
-    stmt_id3 = (
-        select(Product.id)
-        .where(search.more_like_this(Product.id, document_id=3, fields=["description"]))
-        .order_by(Product.id)
-    )
-    assert_uses_paradedb_scan(session, stmt_combined)
-    ids_combined = set(session.scalars(stmt_combined))
-    ids_1 = set(session.scalars(stmt_id1))
-    ids_3 = set(session.scalars(stmt_id3))
-    # Combined should be union of individual results
-    assert ids_1.issubset(ids_combined)
-    assert ids_3.issubset(ids_combined)
-
-
 def test_proximity(session):
     prox = search.prox_str("sleek").within(3, "shoes")
     stmt = select(Product.id).where(search.proximity(Product.description, prox)).order_by(Product.id)

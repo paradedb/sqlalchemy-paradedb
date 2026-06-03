@@ -5,7 +5,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Text, cast, func, literal, literal_column, or_
+from sqlalchemy import Text, cast, func, literal, literal_column
 from sqlalchemy.dialects.postgresql import ARRAY, array
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
@@ -386,7 +386,6 @@ def more_like_this(
     field: ColumnElement,
     *,
     document_id: Any | None = None,
-    document_ids: list[Any] | None = None,
     document: dict[str, Any] | str | None = None,
     fields: list[str] | None = None,
     min_term_frequency: int | None = None,
@@ -400,17 +399,13 @@ def more_like_this(
 ) -> ColumnElement[bool]:
     error_cls = InvalidMoreLikeThisOptionsError
 
-    sources_provided = sum(x is not None for x in (document_id, document_ids, document))
+    sources_provided = sum(x is not None for x in (document_id, document))
     if sources_provided != 1:
-        raise error_cls("exactly one of document_id, document_ids, or document must be provided")
-    if document_ids is not None and len(document_ids) == 0:
-        raise error_cls("document_ids must not be empty")
+        raise error_cls("exactly one of document_id, or document must be provided")
     if document is not None and fields is not None:
-        raise error_cls("fields can only be used with document_id or document_ids")
+        raise error_cls("fields can only be used with document_id")
     if fields is not None:
         require_non_empty_sequence(fields, field_name="fields", error_cls=error_cls)
-    if document_ids is not None and any(doc_id is None for doc_id in document_ids):
-        raise error_cls("document_ids entries cannot be null")
     if isinstance(document, dict) and not document:
         raise error_cls("document must not be empty")
 
@@ -468,12 +463,6 @@ def more_like_this(
         if include_fields and fields is not None:
             positional_args.append(_text_array(fields))
         return PDBFunctionWithNamedArgs("more_like_this", positional_args, named_options)
-
-    if document_ids is not None:
-        clauses = [
-            field.operate(_QUERY, _build_mlt_call(literal(doc_id), include_fields=True)) for doc_id in document_ids
-        ]
-        return or_(*clauses)
 
     if document_id is not None:
         return field.operate(_QUERY, _build_mlt_call(literal(document_id), include_fields=True))
