@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+## [0.7.0] - 2026-06-12
+
+### Removed
+
+- **BREAKING**: The `document_ids` parameter from `more_like_this` was removed. To replicate the same behavior, combine multiple single-id more like this queries with `or`.
+
 ## [0.6.0] - 2026-04-21
 
 ### Changed
@@ -46,6 +52,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.7.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.7.0
 [0.6.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.6.0
 [0.5.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.5.0
 [0.4.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.4.0
