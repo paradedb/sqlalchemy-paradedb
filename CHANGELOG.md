@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+## [0.8.0] - 2026-07-14
+
+### Changed
+
+- Documentation and copy.
+
 ## [0.7.0] - 2026-06-12
 
 ### Removed
