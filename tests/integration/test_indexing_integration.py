@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, text
+from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
 from paradedb.sqlalchemy import pdb
 from paradedb.sqlalchemy.expr import json_text
-from paradedb.sqlalchemy.indexing import ParadeDBField, assert_indexed, describe
+from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField, assert_indexed, describe
+from paradedb.sqlalchemy.vector import Vector
 from paradedb.sqlalchemy import tokenizer
 
 from paradedb.sqlalchemy.errors import FieldNotIndexedError
@@ -248,11 +249,13 @@ def test_create_all_with_attached_paradedb_index(engine):
         metadata,
         Column("id", Integer, primary_key=True),
         Column("description", Text, nullable=False),
+        Column("embedding", Vector(3)),
     )
     Index(
         index_name,
         ParadeDBField(items.c.id),
         ParadeDBField(items.c.description),
+        VectorField(items.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
@@ -270,8 +273,29 @@ def test_create_all_with_attached_paradedb_index(engine):
             ),
             {"table_name": table_name, "index_name": index_name},
         ).scalar_one()
+        column_type = conn.execute(
+            text(
+                "SELECT format_type(atttypid, atttypmod) FROM pg_attribute "
+                "WHERE attrelid = CAST(:t AS regclass) AND attname = 'embedding'"
+            ),
+            {"t": table_name},
+        ).scalar_one()
+        indexdef = conn.execute(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :i"), {"i": index_name}
+        ).scalar_one()
 
     assert count == 1
+    assert column_type == "vector(3)"
+    assert "embedding vector_cosine_ops" in indexdef
+
+    value = [0.5, -1.25, 3.0]
+    with engine.begin() as conn:
+        conn.execute(items.insert(), [{"id": 1, "description": "vector row", "embedding": value}])
+        stored = conn.execute(select(items.c.embedding).where(items.c.id == 1)).scalar_one()
+    assert stored == value
+
+    with pytest.raises(SQLAlchemyError, match="expected 3 dimensions"), engine.begin() as conn:
+        conn.execute(items.insert(), [{"id": 2, "description": "bad vector row", "embedding": [1.0, 2.0]}])
 
     _drop_table_and_index(engine, table_name, index_name)
 
@@ -347,6 +371,7 @@ def test_describe_returns_fields_and_aliases(engine):
         Column("id", Integer, primary_key=True),
         Column("description", Text, nullable=False),
         Column("category", String(120), nullable=False),
+        Column("embedding", Vector(3)),
     )
     metadata.create_all(engine)
 
@@ -355,6 +380,7 @@ def test_describe_returns_fields_and_aliases(engine):
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
         ParadeDBField(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
+        VectorField(products.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
@@ -364,7 +390,7 @@ def test_describe_returns_fields_and_aliases(engine):
     meta = next(m for m in metas if m.index_name == index_name)
 
     assert meta.key_field == "id"
-    assert meta.fields == ("id", "description", "category")
+    assert meta.fields == ("id", "description", "category", "embedding")
     assert meta.aliases == {"category_exact": "category"}
 
     _drop_table_and_index(engine, table_name, index_name)

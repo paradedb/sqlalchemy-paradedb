@@ -14,6 +14,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from paradedb.sqlalchemy.vector import Vector
+
 
 class Base(DeclarativeBase):
     pass
@@ -40,6 +42,7 @@ class MockItem(Base):
     in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False)
     created_at: Mapped[Any] = mapped_column(DateTime, nullable=False)
     metadata_: Mapped[Any] = mapped_column("metadata", JSONB, nullable=True)
+    embedding: Mapped[Any] = mapped_column(Vector(8), nullable=True)
 
 
 PARADEDB_SCAN_PROVIDERS = {"ParadeDB Base Scan", "ParadeDB Aggregate Scan", "ParadeDB Join Scan"}
@@ -64,6 +67,7 @@ def db_url() -> str:
 def engine(db_url: str) -> Iterator[Engine]:
     engine = create_engine(db_url, future=True)
     with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
         conn.execute(text("DROP INDEX IF EXISTS products_search_idx"))
     Base.metadata.drop_all(engine, checkfirst=True)
@@ -158,7 +162,7 @@ def paradedb_ready(engine: Engine) -> None:
         conn.execute(
             text(
                 "CREATE INDEX mock_items_search_idx ON mock_items USING paradedb ("
-                "id, description, category, rating, in_stock"
+                "id, description, category, rating, in_stock, embedding vector_l2_ops"
                 ") WITH (key_field='id')"
             )
         )

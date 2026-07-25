@@ -232,6 +232,8 @@ def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tupl
     """Return {(schema, index_name): {table_name, expressions, key_field, where}} from pg_indexes."""
     from .indexing import (
         _extract_key_field,
+        _extract_paradedb_field_list,
+        _extract_trailing_opclass,
         _extract_where_clause,
         _introspect_paradedb_index_rows,
         _normalize_reloption_value,
@@ -251,7 +253,16 @@ def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tupl
                     "where": _extract_where_clause(str(row["indexdef"])),
                 },
             )
-            index_entry["expressions"].append(str(row["keydef"]))
+            # pg_get_indexdef(oid, colno, true) omits opclasses, so recover any
+            # vector opclass from the full index definition's field list.
+            expression = str(row["keydef"])
+            field_list = _extract_paradedb_field_list(str(row["indexdef"]))
+            position = len(index_entry["expressions"])
+            if position < len(field_list) and _extract_trailing_opclass(expression) is None:
+                opclass = _extract_trailing_opclass(field_list[position])
+                if opclass is not None:
+                    expression = f"{expression} {opclass}"
+            index_entry["expressions"].append(expression)
             if not index_entry["key_field"]:
                 index_entry["key_field"] = _extract_key_field(str(row["indexdef"])) or ""
     return result
@@ -285,9 +296,14 @@ def _strip_relation_qualifiers(expr: str, table_name: str, schema_name: str | No
     return qualifier_re.sub(_strip_match, expr)
 
 
+_DEFAULT_VECTOR_OPCLASS_RE = re.compile(r"\s+vector_l2_ops\s*$")
+
+
 def _normalize_paradedb_expression(expr: str) -> str:
     """Normalize ParadeDB expression text to reduce false-positive autogen churn."""
-    normalized = "".join(expr.split())
+    # vector_l2_ops is the default opclass, so Postgres omits it from indexdef.
+    normalized = _DEFAULT_VECTOR_OPCLASS_RE.sub("", expr)
+    normalized = "".join(normalized.split())
     normalized = normalized.replace('"', "")
     normalized = normalized.replace("::text", "")
     return _strip_non_pdb_qualifiers(normalized)

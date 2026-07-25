@@ -11,15 +11,18 @@ from paradedb import Tokenizer
 from paradedb.sqlalchemy.indexing import (
     ParadeDBField,
     IndexMeta,
+    VectorField,
     _extract_alias,
     _extract_paradedb_field_list,
     _extract_field_name,
     _extract_key_field,
     _extract_tokenizer_name,
+    _extract_trailing_opclass,
     _is_paradedb_index,
     assert_indexed,
     validate_paradedb_index,
 )
+from paradedb.sqlalchemy.vector import Vector
 from paradedb.sqlalchemy import tokenizer
 from paradedb.sqlalchemy.errors import FieldNotIndexedError, InvalidArgumentError
 from paradedb.sqlalchemy import pdb
@@ -34,6 +37,7 @@ products = Table(
     Column("description", Text),
     Column("category", String),
     Column("metadata", JSONB),
+    Column("embedding", Vector(3)),
 )
 
 
@@ -369,6 +373,25 @@ def test_extract_paradedb_field_list_parses_tokenizer_casts():
     assert _extract_alias(parts[2]) == "category_exact"
 
 
+def test_extract_paradedb_field_list_parses_vector_opclass():
+    indexdef = (
+        "CREATE INDEX idx ON public.items USING paradedb "
+        "(id, ((description)::pdb.unicode_words('lowercase=true')), embedding vector_cosine_ops) "
+        "WITH (key_field=id)"
+    )
+    parts = _extract_paradedb_field_list(indexdef)
+    assert parts[2] == "embedding vector_cosine_ops"
+    assert _extract_trailing_opclass(parts[2]) == "vector_cosine_ops"
+
+
+def test_extract_trailing_opclass():
+    assert _extract_trailing_opclass("embedding vector_l2_ops") == "vector_l2_ops"
+    assert _extract_trailing_opclass("embedding vector_cosine_ops") == "vector_cosine_ops"
+    assert _extract_trailing_opclass("embedding vector_ip_ops") == "vector_ip_ops"
+    assert _extract_trailing_opclass("embedding") is None
+    assert _extract_trailing_opclass("id") is None
+
+
 def test_extract_paradedb_field_list_parses_legacy_bm25_indexdef():
     indexdef = "CREATE INDEX idx ON public.products USING bm25 (id, description) WITH (key_field=id)"
     assert _extract_paradedb_field_list(indexdef) == ["id", "description"]
@@ -542,3 +565,72 @@ def test_assert_indexed_passes_schema_override_to_describe(monkeypatch):
     monkeypatch.setattr(idx_module, "describe", _describe)
     assert_indexed(None, products.c.category, schema="analytics")
     assert captured["schema"] == "analytics"
+
+
+def test_vector_index_default_metric_compile():
+    idx = Index(
+        "products_vector_idx",
+        ParadeDBField(products.c.id),
+        ParadeDBField(products.c.description),
+        VectorField(products.c.embedding),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id"},
+    )
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_vector_idx ON products USING paradedb (id, description, embedding vector_l2_ops) WITH (key_field = id)"""
+    )
+    validate_paradedb_index(idx)
+
+
+def test_vector_index_cosine_metric_compile():
+    idx = Index(
+        "products_vector_cosine_idx",
+        ParadeDBField(products.c.id),
+        VectorField(products.c.embedding, metric="cosine"),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id"},
+    )
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_vector_cosine_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (key_field = id)"""
+    )
+
+
+def test_vector_index_ip_metric_compile():
+    idx = Index(
+        "products_vector_ip_idx",
+        ParadeDBField(products.c.id),
+        VectorField(products.c.embedding, metric="ip"),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id"},
+    )
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_vector_ip_idx ON products USING paradedb (id, embedding vector_ip_ops) WITH (key_field = id)"""
+    )
+
+
+def test_vector_field_invalid_metric_raises():
+    with pytest.raises(InvalidArgumentError, match="metric must be one of: cosine, ip, l2"):
+        VectorField(products.c.embedding, metric="euclidean")
+
+
+def test_vector_field_cannot_be_key_field():
+    idx = Index(
+        "products_vector_bad_key_idx",
+        VectorField(products.c.embedding),
+        ParadeDBField(products.c.id),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "embedding"},
+    )
+    with pytest.raises(ValueError, match="cannot be a VectorField"):
+        validate_paradedb_index(idx)
+
+
+def test_vector_field_non_postgres_compile_raises():
+    with pytest.raises(CompileError, match="VectorField is only supported"):
+        str(VectorField(products.c.embedding).compile(dialect=sqlite.dialect()))

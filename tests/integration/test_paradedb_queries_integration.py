@@ -6,13 +6,16 @@ using the mock_items dataset from paradedb.create_bm25_test_table.
 
 from __future__ import annotations
 
+import math
+
 import pytest
-from sqlalchemy import select
+from sqlalchemy import cast, literal, select
 
 from conftest import MockItem, assert_uses_paradedb_scan
 from paradedb import tokenizer
-from paradedb.sqlalchemy import pdb, search
+from paradedb.sqlalchemy import pdb, search, vector
 from paradedb.sqlalchemy.errors import InvalidArgumentError, InvalidMoreLikeThisOptionsError
+from paradedb.sqlalchemy.vector import Vector
 
 pytestmark = pytest.mark.integration
 
@@ -672,3 +675,55 @@ def test_exists_query_matches_non_null(mock_session):
         with engine.begin() as conn:
             conn.execute(text("DROP INDEX IF EXISTS exists_items_pq_search_idx"))
             conn.execute(text("DROP TABLE IF EXISTS exists_items_pq"))
+
+
+def _mock_embeddings(session) -> dict[int, list[float]]:
+    return dict(session.execute(select(MockItem.id, MockItem.embedding)).all())
+
+
+def _l2_distance(a: list[float], b: list[float]) -> float:
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=True)))
+
+
+def test_vector_values_round_trip(mock_session):
+    """Seeded embeddings deserialize to float lists and re-serialize through the server.
+
+    Read-only on purpose: writes to mock_items (even rolled back) perturb the
+    shared index's BM25 statistics and the score assertions of other tests.
+    """
+    embeddings = _mock_embeddings(mock_session)
+    assert len(embeddings) == ALL_MOCK_ITEM_COUNT
+    assert all(len(embedding) == 8 for embedding in embeddings.values())
+
+    seed = embeddings[1]
+    echoed = mock_session.scalar(select(cast(literal(seed, Vector(8)), Vector(8))))
+    assert echoed == seed
+
+
+def test_l2_top_k_with_match_all_predicate(mock_session):
+    embeddings = _mock_embeddings(mock_session)
+    seed = embeddings[1]
+    expected = sorted(embeddings, key=lambda item_id: _l2_distance(embeddings[item_id], seed))[:3]
+
+    stmt = (
+        select(MockItem.id)
+        .where(search.all(MockItem.id))
+        .order_by(vector.l2_distance(MockItem.embedding, seed))
+        .limit(3)
+    )
+    ids = list(mock_session.scalars(stmt))
+    assert ids == expected
+    assert ids[0] == 1
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
+
+
+def test_l2_top_k_with_bound_parameter_vector(mock_session):
+    embeddings = _mock_embeddings(mock_session)
+    target_id = max(embeddings)
+    stmt = (
+        select(MockItem.id)
+        .where(search.all(MockItem.id))
+        .order_by(vector.l2_distance(MockItem.embedding, embeddings[target_id]))
+        .limit(1)
+    )
+    assert list(mock_session.scalars(stmt)) == [target_id]

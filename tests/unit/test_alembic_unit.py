@@ -8,7 +8,8 @@ from alembic.operations.ops import CreateIndexOp, DowngradeOps, DropIndexOp, Mod
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 import paradedb.sqlalchemy.alembic as pdb_alembic
-from paradedb.sqlalchemy.indexing import ParadeDBField
+from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField
+from paradedb.sqlalchemy.vector import Vector
 
 
 class DummyOps:
@@ -494,3 +495,20 @@ def test_extract_where_clause():
         "CREATE INDEX products_search_idx ON public.products USING paradedb (id, description) WITH (key_field='id')"
     )
     assert _extract_where_clause(indexdef_no_where) is None
+
+
+def test_render_vector_field_expression():
+    items = Table(
+        "items",
+        MetaData(),
+        Column("id", Integer, primary_key=True),
+        Column("embedding", Vector(3)),
+    )
+    rendered = pdb_alembic._render_paradedb_expression(VectorField(items.c.embedding, metric="cosine"))
+    assert pdb_alembic._strip_relation_qualifiers(rendered, "items", None) == "embedding vector_cosine_ops"
+
+
+def test_normalize_paradedb_expression_strips_default_vector_opclass():
+    assert pdb_alembic._normalize_paradedb_expression("embedding vector_l2_ops") == "embedding"
+    assert pdb_alembic._normalize_paradedb_expression("embedding") == "embedding"
+    assert pdb_alembic._normalize_paradedb_expression("embedding vector_cosine_ops") == "embeddingvector_cosine_ops"
