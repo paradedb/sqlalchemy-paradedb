@@ -23,7 +23,7 @@ class Base(DeclarativeBase):
 
 
 class Product(Base):
-    __tablename__ = "vector_products"
+    __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -31,7 +31,7 @@ class Product(Base):
 
 
 Index(
-    "vector_products_bm25_idx",
+    "search_idx",
     indexing.ParadeDBField(Product.id),
     indexing.ParadeDBField(Product.description),
     indexing.VectorField(Product.embedding, metric="l2"),

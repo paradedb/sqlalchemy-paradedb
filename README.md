@@ -36,68 +36,27 @@
 
 ## ParadeDB for SQLAlchemy
 
-The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) (powered by the [`pg_search`](https://github.com/paradedb/paradedb) Postgres extension), including first-class support for managing ParadeDB indexes with Alembic and running queries using the full ParadeDB API. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
+The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) (powered by the [`pg_search`](https://github.com/paradedb/paradedb) Postgres extension), including first-class support for managing ParadeDB indexes with Alembic and running queries using the full ParadeDB API. The integration covers both full-text search and [vector search](https://docs.paradedb.com/documentation/vector/overview) over pgvector `vector` types. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
 
 ## Requirements & Compatibility
 
-| Component  | Supported                     |
-| ---------- | ----------------------------- |
-| Python     | 3.10+                         |
-| SQLAlchemy | 2.0.32+                       |
-| ParadeDB   | 0.25.0+                       |
-| PostgreSQL | 15+ (with ParadeDB extension) |
-
-## Vector Search
-
-pg_search indexes pgvector `vector` columns directly inside ParadeDB indexes, so no pgvector ORM library is needed. Declare a `vector(n)` column with the built-in `Vector` type, add it to the ParadeDB index with `VectorField` and a distance metric, and order by the matching distance function:
-
-```python
-from sqlalchemy import Index, select
-from paradedb.sqlalchemy import search, vector
-from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField
-from paradedb.sqlalchemy.vector import Vector
-
-
-class Product(Base):
-    __tablename__ = "products"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(3), nullable=False)
-
-
-Index(
-    "products_bm25_idx",
-    ParadeDBField(Product.id),
-    ParadeDBField(Product.description),
-    VectorField(Product.embedding, metric="l2"),  # metric: "l2" (default), "cosine", or "ip"
-    postgresql_using="paradedb",
-    postgresql_with={"key_field": "id"},
-)
-
-# Top-K query: a @@@ predicate (e.g. search.all) and a LIMIT are required
-# for index pushdown. A pure vector query uses the match-all predicate.
-stmt = (
-    select(Product.id)
-    .where(search.all(Product.id))
-    .order_by(vector.l2_distance(Product.embedding, [1.0, 0.0, 0.0]))
-    .limit(10)
-)
-```
-
-The ORDER BY distance function must match the index metric: `vector.l2_distance` (`<->`) with `metric="l2"`, `vector.cosine_distance` (`<=>`) with `metric="cosine"`, and `vector.inner_product` (`<#>`) with `metric="ip"`. A mismatched pair still returns correct results but silently loses Top-K index pushdown.
-
-Vector search requires a ParadeDB build with vector-in-index support and the `vector` (pgvector) extension installed.
+| Component  | Supported                                                         |
+| ---------- | ----------------------------------------------------------------- |
+| Python     | 3.10+                                                             |
+| SQLAlchemy | 2.0.32+                                                           |
+| ParadeDB   | 0.25.0+                                                           |
+| PostgreSQL | 15+ (with ParadeDB extension)                                     |
+| pgvector   | Required for vector search; included in the ParadeDB Docker image |
 
 ## Examples
 
 - [Quick Start](examples/quickstart/quickstart.py)
+- [Vector Search](examples/vector_search/vector_search.py)
 - [Faceted Search](examples/faceted_search/faceted_search.py)
 - [Autocomplete](examples/autocomplete/autocomplete.py)
 - [More Like This](examples/more_like_this/more_like_this.py)
 - [Hybrid Search (RRF)](examples/hybrid_rrf/hybrid_rrf.py)
 - [RAG](examples/rag/rag.py)
-- [Vector Search](examples/vector_search/vector_search.py)
 
 ## Contributing
 

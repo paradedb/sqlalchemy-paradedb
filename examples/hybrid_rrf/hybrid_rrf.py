@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import Float, func, literal, select, union_all
 from sqlalchemy.orm import Session
 
-from paradedb.sqlalchemy import pdb, search
+from paradedb.sqlalchemy import pdb, search, vector
 from setup import Product, engine_from_env, setup_database
 
 
@@ -12,6 +12,7 @@ def main() -> None:
     setup_database(engine)
 
     query = "running shoes"
+    query_embedding = [1.0, 0.0, 0.0]
 
     fulltext = (
         select(
@@ -24,11 +25,14 @@ def main() -> None:
         .cte("fulltext")
     )
 
+    distance = vector.l2_distance(Product.embedding, query_embedding)
     semantic = (
         select(
             Product.id.label("id"),
-            func.row_number().over(order_by=Product.id).label("rank"),
+            func.row_number().over(order_by=distance).label("rank"),
         )
+        .where(search.all(Product.id))
+        .order_by(distance)
         .limit(20)
         .cte("semantic")
     )

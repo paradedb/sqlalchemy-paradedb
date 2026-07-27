@@ -1,8 +1,8 @@
 """Top-K vector search over a ParadeDB index.
 
-Requires a ParadeDB build with vector-in-index support. The ORDER BY metric
-must match the index opclass metric, the ``@@@`` predicate (here
-``search.all``) is mandatory, and a LIMIT is required for Top-K index
+Requires pg_search 0.25.0+ and the `vector` (pgvector) extension.
+The ORDER BY metric must match the index opclass metric, the ``@@@`` predicate
+(here ``search.all``) is mandatory, and a LIMIT is required for Top-K index
 pushdown.
 """
 
