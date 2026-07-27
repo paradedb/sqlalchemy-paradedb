@@ -19,14 +19,14 @@ from .errors import (
     DuplicateTokenizerAliasError,
     FieldNotIndexedError,
     InvalidArgumentError,
-    InvalidBM25FieldError,
     InvalidKeyFieldError,
+    InvalidParadeDBFieldError,
     MissingKeyFieldError,
 )
 
 
-class BM25Field(ColumnElement[Any]):
-    """Represents a ParadeDB BM25 index field expression."""
+class ParadeDBField(ColumnElement[Any]):
+    """Represents a ParadeDB index field expression."""
 
     inherit_cache = True
     _traverse_internals = [
@@ -43,43 +43,43 @@ class BM25Field(ColumnElement[Any]):
         return getattr(self.expr, "table", None)
 
 
-@compiles(BM25Field, "postgresql")
-def _compile_bm25_field(element: BM25Field, compiler, **kw: Any) -> str:
+@compiles(ParadeDBField, "postgresql")
+def _compile_paradedb_field(element: ParadeDBField, compiler, **kw: Any) -> str:
     expr_sql = compiler.process(element.expr, **kw)
     if element.tokenizer is None:
-        if isinstance(element.expr, PDBCast) or _bm25_field_name(element) is None:
+        if isinstance(element.expr, PDBCast) or _paradedb_field_name(element) is None:
             return f"({expr_sql})"
         return expr_sql
     return f"(({expr_sql})::{element.tokenizer.render()})"
 
 
-@compiles(BM25Field)
-def _compile_bm25_field_default(element: BM25Field, compiler, **kw: Any) -> str:
-    raise CompileError("BM25Field is only supported for PostgreSQL dialects")
+@compiles(ParadeDBField)
+def _compile_paradedb_field_default(element: ParadeDBField, compiler, **kw: Any) -> str:
+    raise CompileError("ParadeDBField is only supported for PostgreSQL dialects")
 
 
-def _is_bm25_index(index: Index) -> bool:
+def _is_paradedb_index(index: Index) -> bool:
     using = index.dialect_options["postgresql"].get("using")
-    return bool(using and str(using).lower() == "bm25")
+    return bool(using) and str(using).lower() in ("bm25", "paradedb")
 
 
-def _bm25_field_name(field: BM25Field) -> str | None:
+def _paradedb_field_name(field: ParadeDBField) -> str | None:
     return getattr(getattr(field, "expr", None), "name", None)
 
 
-def validate_bm25_index(index: Index) -> None:
-    if not _is_bm25_index(index):
+def validate_paradedb_index(index: Index) -> None:
+    if not _is_paradedb_index(index):
         return
 
     if not index.expressions:
-        raise InvalidBM25FieldError("BM25 indexes must include at least one BM25Field")
+        raise InvalidParadeDBFieldError("ParadeDB indexes must include at least one ParadeDBField")
 
-    if not all(isinstance(expr, BM25Field) for expr in index.expressions):
-        raise InvalidBM25FieldError("BM25 indexes must use BM25Field for every indexed field")
+    if not all(isinstance(expr, ParadeDBField) for expr in index.expressions):
+        raise InvalidParadeDBFieldError("ParadeDB indexes must use ParadeDBField for every indexed field")
 
     aliases: set[str] = set()
     for expr in index.expressions:
-        if not isinstance(expr, BM25Field):
+        if not isinstance(expr, ParadeDBField):
             continue
         tokenizer = expr.tokenizer
         if tokenizer is None:
@@ -90,31 +90,31 @@ def validate_bm25_index(index: Index) -> None:
             continue
 
         if alias in aliases:
-            raise DuplicateTokenizerAliasError(f"Duplicate tokenizer alias '{alias}' in BM25 index")
+            raise DuplicateTokenizerAliasError(f"Duplicate tokenizer alias '{alias}' in ParadeDB index")
         aliases.add(alias)
 
     with_options = index.dialect_options["postgresql"].get("with") or {}
     key_field = with_options.get("key_field")
     if not key_field:
-        raise MissingKeyFieldError("BM25 indexes require postgresql_with={'key_field': '<column>'}")
+        raise MissingKeyFieldError("ParadeDB indexes require postgresql_with={'key_field': '<column>'}")
 
-    field_names = {_bm25_field_name(expr) for expr in index.expressions if isinstance(expr, BM25Field)}
+    field_names = {_paradedb_field_name(expr) for expr in index.expressions if isinstance(expr, ParadeDBField)}
     if key_field not in field_names:
-        raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must match one of the indexed BM25Field columns")
+        raise InvalidKeyFieldError(f"key_field '{key_field}' must match one of the indexed ParadeDBField columns")
 
     first_field = index.expressions[0]
-    if not isinstance(first_field, BM25Field):
-        raise InvalidBM25FieldError("BM25 indexes must use BM25Field for every indexed field")
-    first_field_name = _bm25_field_name(first_field)
+    if not isinstance(first_field, ParadeDBField):
+        raise InvalidParadeDBFieldError("ParadeDB indexes must use ParadeDBField for every indexed field")
+    first_field_name = _paradedb_field_name(first_field)
     if first_field_name != key_field:
-        raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must be the first indexed BM25Field")
+        raise InvalidKeyFieldError(f"key_field '{key_field}' must be the first indexed ParadeDBField")
     if first_field.tokenizer is not None:
-        raise InvalidKeyFieldError(f"BM25 key_field '{key_field}' must be untokenized")
+        raise InvalidKeyFieldError(f"key_field '{key_field}' must be untokenized")
 
 
 @event.listens_for(Index, "before_create")
-def _validate_bm25_before_create(index: Index, connection, **kw: Any) -> None:
-    validate_bm25_index(index)
+def _validate_paradedb_before_create(index: Index, connection, **kw: Any) -> None:
+    validate_paradedb_index(index)
 
 
 @dataclass(frozen=True)
@@ -168,8 +168,8 @@ def _split_top_level_csv(expr: str) -> list[str]:
     return parts
 
 
-def _extract_bm25_field_list(indexdef: str) -> list[str]:
-    marker = re.search(r"USING\s+bm25\s*\(", indexdef, re.IGNORECASE)
+def _extract_paradedb_field_list(indexdef: str) -> list[str]:
+    marker = re.search(r"USING\s+(?:bm25|paradedb)\s*\(", indexdef, re.IGNORECASE)
     if marker is None:
         return []
 
@@ -299,7 +299,7 @@ def _normalize_reloption_value(value: str | None) -> str | None:
     return v
 
 
-def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | None = None):
+def _introspect_paradedb_index_rows(conn, *, schema_name: str, table_name: str | None = None):
     return (
         conn.execute(
             text(
@@ -308,6 +308,7 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
               ns.nspname AS schemaname,
               tbl.relname AS tablename,
               idx.relname AS indexname,
+              am.amname AS amname,
               pg_get_indexdef(idx.oid) AS indexdef,
               split_part(opt.opt, '=', 2) AS key_field,
               key_ord.ord::int AS ordinality,
@@ -317,6 +318,7 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
             JOIN pg_namespace AS ns ON ns.oid = idx.relnamespace
             JOIN pg_index AS i ON i.indexrelid = idx.oid
             JOIN pg_class AS tbl ON tbl.oid = i.indrelid
+            JOIN pg_am AS am ON am.oid = idx.relam
             LEFT JOIN LATERAL (
               SELECT opt
               FROM unnest(COALESCE(idx.reloptions, ARRAY[]::text[])) AS opt
@@ -329,7 +331,7 @@ def _introspect_bm25_index_rows(conn, *, schema_name: str, table_name: str | Non
              AND attr.attnum = key_ord.attnum
             WHERE ns.nspname = :schema_name
               AND (CAST(:table_name AS text) IS NULL OR tbl.relname = CAST(:table_name AS text))
-              AND pg_get_indexdef(idx.oid) ILIKE '%USING bm25%'
+              AND am.amname IN ('bm25', 'paradedb')
             ORDER BY idx.relname, key_ord.ord
             """
             ),
@@ -344,7 +346,7 @@ def describe(engine: Engine, table, *, schema: str | None = None) -> list[IndexM
     table_schema = schema if schema is not None else getattr(table, "schema", None)
     with engine.connect() as conn:
         effective_schema = table_schema if table_schema is not None else _current_schema_name(conn)
-        rows = _introspect_bm25_index_rows(
+        rows = _introspect_paradedb_index_rows(
             conn,
             schema_name=effective_schema,
             table_name=table.name,
@@ -411,7 +413,7 @@ def assert_indexed(
     tokenizer: str | None = None,
     schema: str | None = None,
 ) -> None:
-    """Raise :exc:`FieldNotIndexedError` if *column* is not covered by any BM25 index.
+    """Raise :exc:`FieldNotIndexedError` if *column* is not covered by any ParadeDB index.
 
     Args:
         engine: SQLAlchemy engine connected to the ParadeDB database.
@@ -441,7 +443,7 @@ def assert_indexed(
         if tokenizer in idx_meta.tokenizers.get(col_name, ()):
             return  # field is indexed with the requested tokenizer
 
-    msg = f"'{col_name}' is not indexed in any BM25 index on '{table.name}'"
+    msg = f"'{col_name}' is not indexed in any ParadeDB index on '{table.name}'"
     if tokenizer:
         msg += f" with tokenizer '{tokenizer}'"
     raise FieldNotIndexedError(msg)
@@ -467,7 +469,7 @@ def validate_pushdown(stmt: Any) -> list[str]:
     if whereclause is None:
         warnings.append("No WHERE clause found; query will perform a full table scan without ParadeDB")
     elif not _inspect.has_paradedb_predicate(whereclause):
-        warnings.append("No ParadeDB predicate found in WHERE clause; query will not use a BM25 index")
+        warnings.append("No ParadeDB predicate found in WHERE clause; query will not use a ParadeDB index")
 
     if has_order_by(stmt) and not has_limit(stmt):
         warnings.append("ORDER BY is present without LIMIT; Top K pushdown to ParadeDB requires both")

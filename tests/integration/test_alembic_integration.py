@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
 from conftest import PARADEDB_SCAN_PROVIDERS
-from paradedb.sqlalchemy.indexing import BM25Field
+from paradedb.sqlalchemy.indexing import ParadeDBField
 from paradedb.sqlalchemy import tokenizer
 
 
@@ -18,12 +18,12 @@ pytestmark = pytest.mark.integration
 
 
 # ---------------------------------------------------------------------------
-# Helper: run the BM25 autogenerate comparator against a real DB connection
+# Helper: run the ParadeDB autogenerate comparator against a real DB connection
 # ---------------------------------------------------------------------------
 
 
 def _run_comparator(engine, metadata, schemas=None):
-    """Return the UpgradeOps produced by the BM25 autogenerate comparator."""
+    """Return the UpgradeOps produced by the ParadeDB autogenerate comparator."""
     if schemas is None:
         schemas = {None}
     with engine.connect() as conn:
@@ -31,7 +31,7 @@ def _run_comparator(engine, metadata, schemas=None):
         ctx.connection = conn
         ctx.metadata = metadata
         upgrade_ops = UpgradeOps([])
-        pdb_alembic._compare_bm25_indexes(ctx, upgrade_ops, schemas)
+        pdb_alembic._compare_paradedb_indexes(ctx, upgrade_ops, schemas)
     return upgrade_ops
 
 
@@ -48,7 +48,7 @@ def test_alembic_create_reindex_drop_with_quoted_identifiers(engine):
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
 
-        op.create_bm25_index(index_name, table_name, ["id", "description"], key_field="id")
+        op.create_paradedb_index(index_name, table_name, ["id", "description"], key_field="id")
 
         exists = conn.execute(
             text(
@@ -63,8 +63,8 @@ def test_alembic_create_reindex_drop_with_quoted_identifiers(engine):
         ).scalar_one()
         assert exists == 1
 
-        op.reindex_bm25(index_name)
-        op.drop_bm25_index(index_name, if_exists=True)
+        op.reindex_paradedb(index_name)
+        op.drop_paradedb_index(index_name, if_exists=True)
 
         exists_after = conn.execute(
             text(
@@ -100,7 +100,7 @@ def test_alembic_create_reindex_drop_with_schema(engine):
         op = Operations(ctx)
         conn.execute(text("SET LOCAL search_path TO public"))
 
-        op.create_bm25_index(
+        op.create_paradedb_index(
             index_name,
             table_name,
             ["id", "description"],
@@ -122,8 +122,8 @@ def test_alembic_create_reindex_drop_with_schema(engine):
         ).scalar_one()
         assert exists == 1
 
-        op.reindex_bm25(index_name, schema=schema)
-        op.drop_bm25_index(index_name, schema=schema, if_exists=True)
+        op.reindex_paradedb(index_name, schema=schema)
+        op.drop_paradedb_index(index_name, schema=schema, if_exists=True)
 
         exists_after = conn.execute(
             text(
@@ -148,18 +148,20 @@ def test_alembic_create_reindex_drop_with_schema(engine):
 # ---------------------------------------------------------------------------
 
 _AG_TABLE = "autogen_test"
-_AG_IDX = "autogen_test_bm25_idx"
+_AG_IDX = "autogen_test_search_idx"
 
 
 def _setup_autogen_table(engine, *, with_index: bool = False):
-    """Create a clean autogen_test table (and optionally a BM25 index) in the DB."""
+    """Create a clean autogen_test table (and optionally a ParadeDB index) in the DB."""
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_AG_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_AG_TABLE}" CASCADE'))
         conn.execute(text(f'CREATE TABLE "{_AG_TABLE}" (id int primary key, description text not null)'))
         if with_index:
             conn.execute(
-                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id, description) WITH (key_field=\'id\')')
+                text(
+                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WITH (key_field=\'id\')'
+                )
             )
 
 
@@ -169,36 +171,36 @@ def _teardown_autogen_table(engine):
         conn.execute(text(f'DROP TABLE IF EXISTS "{_AG_TABLE}" CASCADE'))
 
 
-def _metadata_with_bm25() -> MetaData:
-    """MetaData that defines autogen_test with a BM25 index."""
+def _metadata_with_paradedb_index() -> MetaData:
+    """MetaData that defines autogen_test with a ParadeDB index."""
     m = MetaData()
     t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
     from sqlalchemy.schema import Index
 
     Index(
         _AG_IDX,
-        BM25Field(t.c.id),
-        BM25Field(t.c.description),
-        postgresql_using="bm25",
+        ParadeDBField(t.c.id),
+        ParadeDBField(t.c.description),
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
     return m
 
 
-def _metadata_without_bm25() -> MetaData:
-    """MetaData that defines autogen_test WITHOUT any BM25 index."""
+def _metadata_without_paradedb_index() -> MetaData:
+    """MetaData that defines autogen_test WITHOUT any ParadeDB index."""
     m = MetaData()
     Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
     return m
 
 
 def test_autogenerate_detects_missing_index(engine):
-    """MetaData has BM25 index but DB does not → CreateBM25IndexOp emitted."""
+    """MetaData has ParadeDB index but DB does not → CreateParadeDBIndexOp emitted."""
     _setup_autogen_table(engine, with_index=False)
     try:
-        upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
+        upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
 
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp)]
+        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)]
         assert len(create_ops) == 1
         op = create_ops[0]
         assert op.index_name == _AG_IDX
@@ -211,30 +213,32 @@ def test_autogenerate_detects_missing_index(engine):
 
 
 def test_autogenerate_detects_extra_index(engine):
-    """DB has BM25 index but MetaData does not → DropBM25IndexOp emitted."""
+    """DB has ParadeDB index but MetaData does not → DropParadeDBIndexOp emitted."""
     _setup_autogen_table(engine, with_index=True)
     try:
-        upgrade_ops = _run_comparator(engine, _metadata_without_bm25())
+        upgrade_ops = _run_comparator(engine, _metadata_without_paradedb_index())
 
-        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp)]
+        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp)]
         assert any(op.index_name == _AG_IDX for op in drop_ops)
     finally:
         _teardown_autogen_table(engine)
 
 
 def test_autogenerate_no_op_when_indexes_match(engine):
-    """DB and MetaData have identical BM25 index → no create/drop ops for that index."""
+    """DB and MetaData have identical ParadeDB index → no create/drop ops for that index."""
     _setup_autogen_table(engine, with_index=True)
     try:
-        upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
+        upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
 
         # Filter to only ops for our specific test index; the shared engine fixture's
-        # products_bm25_idx may appear as "extra" since our MetaData only knows autogen_test.
+        # products_search_idx may appear as "extra" since our MetaData only knows autogen_test.
         create_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+            op
+            for op in upgrade_ops.ops
+            if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
         drop_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
         assert not create_ops
         assert not drop_ops
@@ -243,20 +247,20 @@ def test_autogenerate_no_op_when_indexes_match(engine):
 
 
 def test_autogenerate_detects_changed_fields(engine):
-    """BM25 index in DB has different fields vs MetaData → Drop + Create emitted."""
+    """ParadeDB index in DB has different fields vs MetaData → Drop + Create emitted."""
     _setup_autogen_table(engine, with_index=False)
     try:
         # DB index only covers 'id'
         with engine.begin() as conn:
-            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id) WITH (key_field=\'id\')'))
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id) WITH (key_field=\'id\')'))
 
         # MetaData index covers 'id' and 'description'
-        upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
+        upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
 
-        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp)]
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp)]
-        assert any(op.index_name == _AG_IDX for op in drop_ops), "Expected DropBM25IndexOp"
-        assert any(op.index_name == _AG_IDX for op in create_ops), "Expected CreateBM25IndexOp"
+        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp)]
+        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)]
+        assert any(op.index_name == _AG_IDX for op in drop_ops), "Expected DropParadeDBIndexOp"
+        assert any(op.index_name == _AG_IDX for op in create_ops), "Expected CreateParadeDBIndexOp"
     finally:
         _teardown_autogen_table(engine)
 
@@ -272,7 +276,7 @@ def _tokenizer_cast_supported(engine) -> bool:
             conn.execute(
                 text(
                     f'CREATE INDEX "{index_name}" ON "{table_name}" '
-                    "USING bm25 (id, (description::pdb.unicode_words('lowercase=true'))) "
+                    "USING paradedb (id, (description::pdb.unicode_words('lowercase=true'))) "
                     "WITH (key_field='id')"
                 )
             )
@@ -285,18 +289,18 @@ def _tokenizer_cast_supported(engine) -> bool:
             conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
 
 
-def _metadata_with_tokenized_bm25() -> MetaData:
+def _metadata_with_tokenized_paradedb_index() -> MetaData:
     m = MetaData()
     t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
     from sqlalchemy.schema import Index
 
     Index(
         _AG_IDX,
-        BM25Field(t.c.id),
-        BM25Field(
+        ParadeDBField(t.c.id),
+        ParadeDBField(
             t.c.description, tokenizer=tokenizer.simple(options={"alias": "description_simple", "lowercase": True})
         ),
-        postgresql_using="bm25",
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
     return m
@@ -310,14 +314,16 @@ def test_autogenerate_detects_changed_tokenizer_expression(engine):
     try:
         with engine.begin() as conn:
             conn.execute(
-                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id, description) WITH (key_field=\'id\')')
+                text(
+                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WITH (key_field=\'id\')'
+                )
             )
 
-        upgrade_ops = _run_comparator(engine, _metadata_with_tokenized_bm25())
+        upgrade_ops = _run_comparator(engine, _metadata_with_tokenized_paradedb_index())
 
-        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp)]
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp)]
-        assert any(op.index_name == _AG_IDX for op in drop_ops), "Expected DropBM25IndexOp"
+        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp)]
+        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)]
+        assert any(op.index_name == _AG_IDX for op in drop_ops), "Expected DropParadeDBIndexOp"
         create = next(op for op in create_ops if op.index_name == _AG_IDX)
         assert any("pdb.simple" in expr for expr in create.expressions)
         assert any("alias=description_simple" in expr for expr in create.expressions)
@@ -327,7 +333,7 @@ def test_autogenerate_detects_changed_tokenizer_expression(engine):
 
 _AG_SCHEMA = "autogen_schema"
 _AG_SCHEMA_TABLE = "autogen_schema_test"
-_AG_SCHEMA_IDX = "autogen_schema_test_bm25_idx"
+_AG_SCHEMA_IDX = "autogen_schema_test_search_idx"
 
 
 def _setup_autogen_schema_table(engine, *, with_index: bool = False):
@@ -341,12 +347,12 @@ def _setup_autogen_schema_table(engine, *, with_index: bool = False):
             conn.execute(
                 text(
                     f'CREATE INDEX "{_AG_SCHEMA_IDX}" ON "{_AG_SCHEMA}"."{_AG_SCHEMA_TABLE}" '
-                    "USING bm25 (id, description) WITH (key_field='id')"
+                    "USING paradedb (id, description) WITH (key_field='id')"
                 )
             )
 
 
-def _metadata_with_bm25_in_schema() -> MetaData:
+def _metadata_with_paradedb_index_in_schema() -> MetaData:
     m = MetaData()
     t = Table(
         _AG_SCHEMA_TABLE,
@@ -359,9 +365,9 @@ def _metadata_with_bm25_in_schema() -> MetaData:
 
     Index(
         _AG_SCHEMA_IDX,
-        BM25Field(t.c.id),
-        BM25Field(t.c.description),
-        postgresql_using="bm25",
+        ParadeDBField(t.c.id),
+        ParadeDBField(t.c.description),
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
     return m
@@ -370,8 +376,8 @@ def _metadata_with_bm25_in_schema() -> MetaData:
 def test_autogenerate_emits_schema_on_create_for_non_default_schema(engine):
     _setup_autogen_schema_table(engine, with_index=False)
     try:
-        upgrade_ops = _run_comparator(engine, _metadata_with_bm25_in_schema(), schemas={_AG_SCHEMA})
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp)]
+        upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index_in_schema(), schemas={_AG_SCHEMA})
+        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)]
         op = next(o for o in create_ops if o.index_name == _AG_SCHEMA_IDX)
         assert op.table_schema == _AG_SCHEMA
     finally:
@@ -384,7 +390,7 @@ def test_autogenerate_emits_schema_on_drop_for_non_default_schema(engine):
     try:
         metadata = MetaData()
         upgrade_ops = _run_comparator(engine, metadata, schemas={_AG_SCHEMA})
-        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp)]
+        drop_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp)]
         op = next(o for o in drop_ops if o.index_name == _AG_SCHEMA_IDX)
         assert op.schema == _AG_SCHEMA
     finally:
@@ -393,12 +399,12 @@ def test_autogenerate_emits_schema_on_drop_for_non_default_schema(engine):
 
 
 # ---------------------------------------------------------------------------
-# Helper: assert BM25 queryable via raw SQL EXPLAIN
+# Helper: assert ParadeDB queryable via raw SQL EXPLAIN
 # ---------------------------------------------------------------------------
 
 
-def _assert_bm25_queryable(conn, table_name, index_name, search_column, search_term):
-    """Run EXPLAIN (FORMAT TEXT) on a BM25 query and assert ParadeDB Base Scan is used."""
+def _assert_paradedb_queryable(conn, table_name, index_name, search_column, search_term):
+    """Run EXPLAIN (FORMAT TEXT) on a ParadeDB query and assert ParadeDB Base Scan is used."""
     sql = f'EXPLAIN (FORMAT TEXT) SELECT * FROM "{table_name}" WHERE "{search_column}" @@@ \'{search_term}\''
     rows = conn.execute(text(sql)).fetchall()
     plan_text = "\n".join(str(row[0]) for row in rows)
@@ -413,7 +419,7 @@ def _assert_bm25_queryable(conn, table_name, index_name, search_column, search_t
 # ---------------------------------------------------------------------------
 
 _PARTIAL_TABLE = "alembic_partial_test"
-_PARTIAL_IDX = "alembic_partial_bm25_idx"
+_PARTIAL_IDX = "alembic_partial_search_idx"
 
 
 def test_alembic_create_partial_index_with_where_clause(engine):
@@ -430,7 +436,7 @@ def test_alembic_create_partial_index_with_where_clause(engine):
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
-        op.create_bm25_index(
+        op.create_paradedb_index(
             _PARTIAL_IDX,
             _PARTIAL_TABLE,
             ["id", "description", "rating"],
@@ -454,7 +460,7 @@ def test_alembic_create_partial_index_with_where_clause(engine):
             )
         )
 
-        # BM25 query should only return rows matching the predicate
+        # The search query should only return rows matching the predicate
         result = conn.execute(
             text(f"SELECT id FROM \"{_PARTIAL_TABLE}\" WHERE description @@@ 'running' AND rating > 3 ORDER BY id")
         ).fetchall()
@@ -482,15 +488,15 @@ def test_autogenerate_detects_missing_partial_index(engine):
 
         Index(
             _AG_IDX,
-            BM25Field(t.c.id),
-            BM25Field(t.c.description),
-            postgresql_using="bm25",
+            ParadeDBField(t.c.id),
+            ParadeDBField(t.c.description),
+            postgresql_using="paradedb",
             postgresql_with={"key_field": "id"},
             postgresql_where=t.c.id > 2,
         )
 
         upgrade_ops = _run_comparator(engine, m)
-        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp)]
+        create_ops = [op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)]
         assert len(create_ops) == 1
         op = create_ops[0]
         assert op.index_name == _AG_IDX
@@ -513,7 +519,7 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
             conn.execute(
                 text(
                     f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
+                    f"USING paradedb (id, description) WITH (key_field='id') WHERE (id > 2)"
                 )
             )
 
@@ -524,22 +530,24 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
 
         Index(
             _AG_IDX,
-            BM25Field(t.c.id),
-            BM25Field(t.c.description),
-            postgresql_using="bm25",
+            ParadeDBField(t.c.id),
+            ParadeDBField(t.c.description),
+            postgresql_using="paradedb",
             postgresql_with={"key_field": "id"},
             postgresql_where=t.c.id > 5,
         )
 
         upgrade_ops = _run_comparator(engine, m)
         drop_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
         create_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+            op
+            for op in upgrade_ops.ops
+            if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
-        assert len(drop_ops) == 1, "Expected DropBM25IndexOp for predicate change"
-        assert len(create_ops) == 1, "Expected CreateBM25IndexOp for predicate change"
+        assert len(drop_ops) == 1, "Expected DropParadeDBIndexOp for predicate change"
+        assert len(create_ops) == 1, "Expected CreateParadeDBIndexOp for predicate change"
         assert "5" in create_ops[0].where
     finally:
         _teardown_autogen_table(engine)
@@ -557,7 +565,7 @@ def test_autogenerate_no_op_when_partial_indexes_match(engine):
             conn.execute(
                 text(
                     f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING bm25 (id, description) WITH (key_field='id') WHERE (id > 2)"
+                    f"USING paradedb (id, description) WITH (key_field='id') WHERE (id > 2)"
                 )
             )
 
@@ -567,9 +575,9 @@ def test_autogenerate_no_op_when_partial_indexes_match(engine):
 
         Index(
             _AG_IDX,
-            BM25Field(t.c.id),
-            BM25Field(t.c.description),
-            postgresql_using="bm25",
+            ParadeDBField(t.c.id),
+            ParadeDBField(t.c.description),
+            postgresql_using="paradedb",
             postgresql_with={"key_field": "id"},
             postgresql_where=t.c.id > 2,
         )
@@ -593,7 +601,7 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
             conn.execute(
                 text(
                     f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING bm25 (id, description) WITH (key_field='id') "
+                    f"USING paradedb (id, description) WITH (key_field='id') "
                     f"WHERE (description = 'ACTIVE')"
                 )
             )
@@ -604,22 +612,24 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
 
         Index(
             _AG_IDX,
-            BM25Field(t.c.id),
-            BM25Field(t.c.description),
-            postgresql_using="bm25",
+            ParadeDBField(t.c.id),
+            ParadeDBField(t.c.description),
+            postgresql_using="paradedb",
             postgresql_with={"key_field": "id"},
             postgresql_where="description = 'active'::text",
         )
 
         upgrade_ops = _run_comparator(engine, m)
         drop_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
         create_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+            op
+            for op in upgrade_ops.ops
+            if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
-        assert len(drop_ops) == 1, "Expected DropBM25IndexOp for string-literal case change"
-        assert len(create_ops) == 1, "Expected CreateBM25IndexOp for string-literal case change"
+        assert len(drop_ops) == 1, "Expected DropParadeDBIndexOp for string-literal case change"
+        assert len(create_ops) == 1, "Expected CreateParadeDBIndexOp for string-literal case change"
     finally:
         _teardown_autogen_table(engine)
 
@@ -633,14 +643,14 @@ def test_autogenerate_round_trip_converges(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         with engine.begin() as conn:
-            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id) WITH (key_field=\'id\')'))
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id) WITH (key_field=\'id\')'))
 
-        upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
+        upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
         our_ops = tuple(
             op
             for op in upgrade_ops.ops
-            if (isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX)
-            or (isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX)
+            if (isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX)
+            or (isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX)
         )
         assert len(our_ops) == 2, f"Expected drop + create ops for drift recovery, got: {our_ops}"
 
@@ -650,12 +660,12 @@ def test_autogenerate_round_trip_converges(engine):
             for op in our_ops:
                 operations.invoke(op)
 
-        next_upgrade_ops = _run_comparator(engine, _metadata_with_bm25())
+        next_upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
         remaining_ops = [
             op
             for op in next_upgrade_ops.ops
-            if (isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX)
-            or (isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX)
+            if (isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX)
+            or (isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX)
         ]
         assert not remaining_ops, f"Expected zero ops after applying drift-recovery ops, got: {remaining_ops}"
     finally:
@@ -667,7 +677,7 @@ def test_autogenerate_round_trip_converges(engine):
 # ---------------------------------------------------------------------------
 
 _LIFECYCLE_TABLE = "alembic_lifecycle_test"
-_LIFECYCLE_IDX = "alembic_lifecycle_bm25_idx"
+_LIFECYCLE_IDX = "alembic_lifecycle_search_idx"
 
 
 def test_alembic_create_reindex_drop_is_queryable(engine):
@@ -687,15 +697,15 @@ def test_alembic_create_reindex_drop_is_queryable(engine):
         op = Operations(ctx)
 
         # Create
-        op.create_bm25_index(_LIFECYCLE_IDX, _LIFECYCLE_TABLE, ["id", "description"], key_field="id")
-        _assert_bm25_queryable(conn, _LIFECYCLE_TABLE, _LIFECYCLE_IDX, "description", "running")
+        op.create_paradedb_index(_LIFECYCLE_IDX, _LIFECYCLE_TABLE, ["id", "description"], key_field="id")
+        _assert_paradedb_queryable(conn, _LIFECYCLE_TABLE, _LIFECYCLE_IDX, "description", "running")
 
         # Reindex
-        op.reindex_bm25(_LIFECYCLE_IDX)
-        _assert_bm25_queryable(conn, _LIFECYCLE_TABLE, _LIFECYCLE_IDX, "description", "running")
+        op.reindex_paradedb(_LIFECYCLE_IDX)
+        _assert_paradedb_queryable(conn, _LIFECYCLE_TABLE, _LIFECYCLE_IDX, "description", "running")
 
         # Drop
-        op.drop_bm25_index(_LIFECYCLE_IDX, if_exists=True)
+        op.drop_paradedb_index(_LIFECYCLE_IDX, if_exists=True)
         exists = conn.execute(
             text("SELECT COUNT(*) FROM pg_indexes WHERE indexname = :idx"), {"idx": _LIFECYCLE_IDX}
         ).scalar_one()
@@ -710,7 +720,7 @@ def test_alembic_create_reindex_drop_is_queryable(engine):
 # ---------------------------------------------------------------------------
 
 _CONC_TABLE = "alembic_conc_test"
-_CONC_IDX = "alembic_conc_bm25_idx"
+_CONC_IDX = "alembic_conc_search_idx"
 
 
 def test_alembic_reindex_concurrently_autocommit(engine):
@@ -724,18 +734,18 @@ def test_alembic_reindex_concurrently_autocommit(engine):
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
-        op.create_bm25_index(_CONC_IDX, _CONC_TABLE, ["id", "description"], key_field="id")
+        op.create_paradedb_index(_CONC_IDX, _CONC_TABLE, ["id", "description"], key_field="id")
 
     # Reindex concurrently requires AUTOCOMMIT
     autocommit_engine = engine.execution_options(isolation_level="AUTOCOMMIT")
     with autocommit_engine.connect() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
-        op.reindex_bm25(_CONC_IDX, concurrently=True)
+        op.reindex_paradedb(_CONC_IDX, concurrently=True)
 
     # Verify index still works
     with engine.connect() as conn:
-        _assert_bm25_queryable(conn, _CONC_TABLE, _CONC_IDX, "description", "running")
+        _assert_paradedb_queryable(conn, _CONC_TABLE, _CONC_IDX, "description", "running")
 
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_CONC_IDX}"'))
@@ -753,7 +763,9 @@ def test_autogenerate_detects_changed_key_field(engine):
         # DB has key_field='id'
         with engine.begin() as conn:
             conn.execute(
-                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING bm25 (id, description) WITH (key_field=\'id\')')
+                text(
+                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WITH (key_field=\'id\')'
+                )
             )
 
         # MetaData declares key_field='description' (different) but keeps the
@@ -764,21 +776,23 @@ def test_autogenerate_detects_changed_key_field(engine):
 
         Index(
             _AG_IDX,
-            BM25Field(t.c.id),
-            BM25Field(t.c.description),
-            postgresql_using="bm25",
+            ParadeDBField(t.c.id),
+            ParadeDBField(t.c.description),
+            postgresql_using="paradedb",
             postgresql_with={"key_field": "description"},
         )
 
         upgrade_ops = _run_comparator(engine, m)
         drop_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropBM25IndexOp) and op.index_name == _AG_IDX
+            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
         create_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateBM25IndexOp) and op.index_name == _AG_IDX
+            op
+            for op in upgrade_ops.ops
+            if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX
         ]
-        assert len(drop_ops) == 1, "Expected DropBM25IndexOp for key_field change"
-        assert len(create_ops) == 1, "Expected CreateBM25IndexOp for key_field change"
+        assert len(drop_ops) == 1, "Expected DropParadeDBIndexOp for key_field change"
+        assert len(create_ops) == 1, "Expected CreateParadeDBIndexOp for key_field change"
         assert create_ops[0].key_field == "description"
     finally:
         _teardown_autogen_table(engine)
@@ -789,7 +803,7 @@ def test_autogenerate_detects_changed_key_field(engine):
 # ---------------------------------------------------------------------------
 
 _EXPR_TABLE = "alembic_expr_test"
-_EXPR_IDX = "alembic_expr_bm25_idx"
+_EXPR_IDX = "alembic_expr_search_idx"
 
 
 def test_alembic_expression_index_lifecycle(engine):
@@ -804,7 +818,7 @@ def test_alembic_expression_index_lifecycle(engine):
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
-        op.create_bm25_index(
+        op.create_paradedb_index(
             _EXPR_IDX,
             _EXPR_TABLE,
             ["id", "((description)::pdb.simple('alias=desc_simple,lowercase=true'))"],
@@ -818,7 +832,7 @@ def test_alembic_expression_index_lifecycle(engine):
         assert "pdb.simple" in indexdef
         assert "desc_simple" in indexdef
 
-        op.drop_bm25_index(_EXPR_IDX, if_exists=True)
+        op.drop_paradedb_index(_EXPR_IDX, if_exists=True)
         exists = conn.execute(
             text("SELECT COUNT(*) FROM pg_indexes WHERE indexname = :idx"), {"idx": _EXPR_IDX}
         ).scalar_one()
@@ -833,7 +847,7 @@ def test_alembic_expression_index_lifecycle(engine):
 # ---------------------------------------------------------------------------
 
 _MULTI_TABLE = "alembic_multi_tok_test"
-_MULTI_IDX = "alembic_multi_tok_bm25_idx"
+_MULTI_IDX = "alembic_multi_tok_search_idx"
 
 
 def test_alembic_multi_tokenizer_expression_lifecycle(engine):
@@ -850,7 +864,7 @@ def test_alembic_multi_tokenizer_expression_lifecycle(engine):
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
-        op.create_bm25_index(
+        op.create_paradedb_index(
             _MULTI_IDX,
             _MULTI_TABLE,
             [

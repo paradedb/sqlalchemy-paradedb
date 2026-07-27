@@ -15,7 +15,7 @@ from paradedb.sqlalchemy.diagnostics import (
 pytestmark = pytest.mark.integration
 
 # The index set up in conftest.py that these tests rely on.
-_INDEX_NAME = "products_bm25_idx"
+_INDEX_NAME = "products_search_idx"
 
 _REQUIRED_FUNCTIONS = {"indexes", "index_segments", "verify_index", "verify_all_indexes"}
 
@@ -59,7 +59,7 @@ def test_paradedb_indexes_includes_products_index(engine: Engine) -> None:
 
 def test_paradedb_indexes_rows_are_dicts(engine: Engine) -> None:
     rows = paradedb_indexes(engine)
-    assert rows, "Expected at least one BM25 index"
+    assert rows, "Expected at least one ParadeDB index"
     assert isinstance(rows[0], dict)
 
 

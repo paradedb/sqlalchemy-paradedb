@@ -14,13 +14,13 @@ def _exec_and_collect(conn, sql: str, params: list[Any]) -> list[dict[str, Any]]
 
 
 def paradedb_indexes(engine: Engine) -> list[dict[str, Any]]:
-    """Return metadata for all BM25 indexes from ``pdb.indexes()``."""
+    """Return metadata for all ParadeDB indexes from ``pdb.indexes()``."""
     with engine.connect() as conn:
         return _exec_and_collect(conn, "SELECT * FROM pdb.indexes()", [])
 
 
 def paradedb_index_segments(engine: Engine, index: str) -> list[dict[str, Any]]:
-    """Return segment metadata for a BM25 index from ``pdb.index_segments()``."""
+    """Return segment metadata for a ParadeDB index from ``pdb.index_segments()``."""
     with engine.connect() as conn:
         return _exec_and_collect(conn, "SELECT * FROM pdb.index_segments(%s::regclass)", [index])
 
@@ -36,7 +36,7 @@ def paradedb_verify_index(
     on_error_stop: bool = False,
     segment_ids: Sequence[int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run ``pdb.verify_index()`` for one BM25 index."""
+    """Run ``pdb.verify_index()`` for one ParadeDB index."""
     sql_parts = ["SELECT * FROM pdb.verify_index(%s::regclass"]
     params: list[Any] = [index]
     if heapallindexed:
@@ -72,7 +72,7 @@ def paradedb_verify_all_indexes(
     report_progress: bool = False,
     on_error_stop: bool = False,
 ) -> list[dict[str, Any]]:
-    """Run ``pdb.verify_all_indexes()`` across BM25 indexes."""
+    """Run ``pdb.verify_all_indexes()`` across ParadeDB indexes."""
     named_params: list[tuple[str, str, Any]] = []
     if schema_pattern is not None:
         named_params.append(("schema_pattern", "text", schema_pattern))

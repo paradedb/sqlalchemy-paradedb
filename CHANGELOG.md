@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** the bm25-named API has been renamed to paradedb, and indexes always use the `paradedb` index access method (requires pg_search 0.25.0+). `BM25Field` is now `ParadeDBField`, `validate_bm25_index` is now `validate_paradedb_index`, the Alembic operations `op.create_bm25_index`/`op.drop_bm25_index`/`op.reindex_bm25` are now `op.create_paradedb_index`/`op.drop_paradedb_index`/`op.reindex_paradedb` (with operation classes `CreateParadeDBIndexOp`/`DropParadeDBIndexOp`/`ReindexParadeDBOp`), and the errors `BM25ValidationError`/`InvalidBM25FieldError` are now `ParadeDBValidationError`/`InvalidParadeDBFieldError`. `Index(postgresql_using="paradedb")` is the only recognized access method; index DDL always emits `USING paradedb`. Existing migrations that call the bm25-named operations must be updated to the paradedb names.
+
 ## [0.8.0] - 2026-07-14
 
 ### Changed

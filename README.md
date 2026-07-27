@@ -36,7 +36,7 @@
 
 ## ParadeDB for SQLAlchemy
 
-The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) (powered by the [`pg_search`](https://github.com/paradedb/paradedb) Postgres extension), including first-class support for managing BM25 indexes with Alembic and running queries using the full ParadeDB API. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
+The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) (powered by the [`pg_search`](https://github.com/paradedb/paradedb) Postgres extension), including first-class support for managing ParadeDB indexes with Alembic and running queries using the full ParadeDB API. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
 
 ## Requirements & Compatibility
 
@@ -44,7 +44,7 @@ The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB
 | ---------- | ----------------------------- |
 | Python     | 3.10+                         |
 | SQLAlchemy | 2.0.32+                       |
-| ParadeDB   | 0.22.0+                       |
+| ParadeDB   | 0.25.0+                       |
 | PostgreSQL | 15+ (with ParadeDB extension) |
 
 ## Examples

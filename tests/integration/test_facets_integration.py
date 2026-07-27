@@ -113,7 +113,7 @@ def test_window_agg_with_raw_query_operators(mock_session):
 
     stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=MockItem.id)
 
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     assert (
         _sql(stmt)
         == """\

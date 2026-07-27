@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from paradedb.sqlalchemy import pdb, search, select_with
-from setup import Document, engine_from_env, setup_database
+from setup import Product, engine_from_env, setup_database
 
 
 def retrieve(query: str, limit: int = 5) -> None:
@@ -12,12 +12,12 @@ def retrieve(query: str, limit: int = 5) -> None:
     setup_database(engine)
 
     base = (
-        select(Document.id, Document.content)
-        .where(search.match_any(Document.content, *query.split()))
-        .order_by(pdb.score(Document.id).desc())
+        select(Product.id, Product.description)
+        .where(search.match_any(Product.description, *query.split()))
+        .order_by(pdb.score(Product.id).desc())
         .limit(limit)
     )
-    stmt = select_with.score(base, Document.id, label="score")
+    stmt = select_with.score(base, Product.id, label="score")
 
     with Session(engine) as session:
         for row in session.execute(stmt):
@@ -25,4 +25,4 @@ def retrieve(query: str, limit: int = 5) -> None:
 
 
 if __name__ == "__main__":
-    retrieve("postgres full text search")
+    retrieve("running shoes for training")

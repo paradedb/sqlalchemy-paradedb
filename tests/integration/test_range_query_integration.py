@@ -23,14 +23,14 @@ def test_range_query_with_op_and_all_predicate(engine):
     )
 
     with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS range_items_bm25_idx"))
+        conn.execute(text("DROP INDEX IF EXISTS range_items_search_idx"))
         conn.execute(text("DROP TABLE IF EXISTS range_items"))
     metadata.create_all(engine)
 
     with engine.begin() as conn:
         conn.execute(
             text(
-                "CREATE INDEX range_items_bm25_idx ON range_items USING bm25 (id, description, weight_range) WITH (key_field='id')"
+                "CREATE INDEX range_items_search_idx ON range_items USING paradedb (id, description, weight_range) WITH (key_field='id')"
             )
         )
         conn.execute(
@@ -53,7 +53,7 @@ def test_range_query_with_op_and_all_predicate(engine):
                 .where(search.all(items.c.id))
                 .order_by(items.c.id)
             )
-            assert_uses_paradedb_scan(session, stmt, index_name="range_items_bm25_idx")
+            assert_uses_paradedb_scan(session, stmt, index_name="range_items_search_idx")
             ids = list(session.scalars(stmt))
             assert ids == [1, 3]
 
@@ -63,10 +63,10 @@ def test_range_query_with_op_and_all_predicate(engine):
                 .where(search.match_any(items.c.description, "running", "camera"))
                 .order_by(items.c.id)
             )
-            assert_uses_paradedb_scan(session, stmt_with_text, index_name="range_items_bm25_idx")
+            assert_uses_paradedb_scan(session, stmt_with_text, index_name="range_items_search_idx")
             ids_with_text = list(session.scalars(stmt_with_text))
             assert ids_with_text == [1, 3]
     finally:
         with engine.begin() as conn:
-            conn.execute(text("DROP INDEX IF EXISTS range_items_bm25_idx"))
+            conn.execute(text("DROP INDEX IF EXISTS range_items_search_idx"))
             conn.execute(text("DROP TABLE IF EXISTS range_items"))
