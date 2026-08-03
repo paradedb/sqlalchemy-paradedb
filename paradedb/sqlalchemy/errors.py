@@ -13,24 +13,24 @@ class InvalidMoreLikeThisOptionsError(InvalidArgumentError):
     """Raised when more_like_this options are missing/conflicting/out-of-range."""
 
 
-class BM25ValidationError(ParadeDBError, ValueError):
-    """Base class for BM25 index validation errors."""
+class ParadeDBValidationError(ParadeDBError, ValueError):
+    """Base class for ParadeDB index validation errors."""
 
 
-class MissingKeyFieldError(BM25ValidationError):
-    """Raised when a BM25 index is missing key_field option."""
+class MissingKeyFieldError(ParadeDBValidationError):
+    """Raised when a ParadeDB index is missing key_field option."""
 
 
-class InvalidKeyFieldError(BM25ValidationError):
-    """Raised when BM25 key_field is not part of index fields."""
+class InvalidKeyFieldError(ParadeDBValidationError):
+    """Raised when ParadeDB key_field is not part of index fields."""
 
 
-class DuplicateTokenizerAliasError(BM25ValidationError):
-    """Raised when tokenizer aliases are duplicated in one BM25 index."""
+class DuplicateTokenizerAliasError(ParadeDBValidationError):
+    """Raised when tokenizer aliases are duplicated in one ParadeDB index."""
 
 
-class InvalidBM25FieldError(BM25ValidationError):
-    """Raised when non-BM25Field expressions are used in a BM25 index."""
+class InvalidParadeDBFieldError(ParadeDBValidationError):
+    """Raised when non-ParadeDBField expressions are used in a ParadeDB index."""
 
 
 class RuntimeGuardError(ParadeDBError, ValueError):
@@ -58,4 +58,4 @@ class FacetRequiresParadeDBPredicateError(FacetRuntimeError):
 
 
 class FieldNotIndexedError(ParadeDBError):
-    """Raised when a column is not covered by any BM25 index on its table."""
+    """Raised when a column is not covered by any ParadeDB index on its table."""

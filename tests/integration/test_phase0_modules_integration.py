@@ -10,7 +10,7 @@ from paradedb.sqlalchemy import expr as pdb_expr
 from paradedb.sqlalchemy import inspect as pdb_inspect
 from paradedb.sqlalchemy import search
 from paradedb.sqlalchemy.errors import DuplicateTokenizerAliasError, InvalidArgumentError
-from paradedb.sqlalchemy.indexing import BM25Field
+from paradedb.sqlalchemy.indexing import ParadeDBField
 from paradedb.sqlalchemy import tokenizer
 import paradedb.sqlalchemy.alembic  # noqa: F401  Ensures Alembic ops registration
 
@@ -41,7 +41,7 @@ def test_inspect_detects_paradedb_predicates():
 def test_custom_errors_raised_for_validation(engine):
     metadata = MetaData()
     table_name = "phase0_error_products"
-    index_name = "phase0_error_products_bm25_idx"
+    index_name = "phase0_error_products_search_idx"
 
     with engine.begin() as conn:
         conn.execute(text(f"DROP INDEX IF EXISTS {index_name}"))
@@ -59,10 +59,10 @@ def test_custom_errors_raised_for_validation(engine):
 
     idx = Index(
         index_name,
-        BM25Field(products.c.id),
-        BM25Field(products.c.description, tokenizer=tokenizer.unicode_words(options={"alias": "dup"})),
-        BM25Field(products.c.description, tokenizer=tokenizer.literal(options={"alias": "dup"})),
-        postgresql_using="bm25",
+        ParadeDBField(products.c.id),
+        ParadeDBField(products.c.description, tokenizer=tokenizer.unicode_words(options={"alias": "dup"})),
+        ParadeDBField(products.c.description, tokenizer=tokenizer.literal(options={"alias": "dup"})),
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
 
@@ -79,7 +79,7 @@ def test_custom_errors_raised_for_validation(engine):
 
 def test_alembic_ops_create_reindex_drop(engine):
     table_name = "phase0_alembic_products"
-    index_name = "phase0_alembic_products_bm25_idx"
+    index_name = "phase0_alembic_products_search_idx"
 
     with engine.begin() as conn:
         conn.execute(text(f"DROP INDEX IF EXISTS {index_name}"))
@@ -90,7 +90,7 @@ def test_alembic_ops_create_reindex_drop(engine):
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
 
-        op.create_bm25_index(index_name, table_name, ["id", "description"], key_field="id")
+        op.create_paradedb_index(index_name, table_name, ["id", "description"], key_field="id")
 
         exists = conn.execute(
             text(
@@ -105,8 +105,8 @@ def test_alembic_ops_create_reindex_drop(engine):
         ).scalar_one()
         assert exists == 1
 
-        op.reindex_bm25(index_name)
-        op.drop_bm25_index(index_name, if_exists=True)
+        op.reindex_paradedb(index_name)
+        op.drop_paradedb_index(index_name, if_exists=True)
 
         exists_after_drop = conn.execute(
             text(

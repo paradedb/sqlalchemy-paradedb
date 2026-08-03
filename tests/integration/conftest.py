@@ -65,18 +65,18 @@ def engine(db_url: str) -> Iterator[Engine]:
     engine = create_engine(db_url, future=True)
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
-        conn.execute(text("DROP INDEX IF EXISTS products_bm25_idx"))
+        conn.execute(text("DROP INDEX IF EXISTS products_search_idx"))
     Base.metadata.drop_all(engine, checkfirst=True)
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(
             text(
-                "CREATE INDEX products_bm25_idx ON products USING bm25 (id, description, category, rating) WITH (key_field='id')"
+                "CREATE INDEX products_search_idx ON products USING paradedb (id, description, category, rating) WITH (key_field='id')"
             )
         )
     yield engine
     with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS products_bm25_idx"))
+        conn.execute(text("DROP INDEX IF EXISTS products_search_idx"))
     Base.metadata.drop_all(engine, checkfirst=True)
     engine.dispose()
 
@@ -143,7 +143,7 @@ def assert_plan_uses_paradedb_scan(plan: dict[str, Any], *, index_name: str | No
         )
 
 
-def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "products_bm25_idx") -> None:
+def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "products_search_idx") -> None:
     plan = explain_plan_json(session, stmt)
     assert_plan_uses_paradedb_scan(plan, index_name=index_name)
 
@@ -152,12 +152,12 @@ def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "prod
 def paradedb_ready(engine: Engine) -> None:
     """Ensure ParadeDB mock_items table exists and is indexed."""
     with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS mock_items_bm25_idx"))
+        conn.execute(text("DROP INDEX IF EXISTS mock_items_search_idx"))
         conn.execute(text("DROP TABLE IF EXISTS mock_items"))
         conn.execute(text("CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items')"))
         conn.execute(
             text(
-                "CREATE INDEX mock_items_bm25_idx ON mock_items USING bm25 ("
+                "CREATE INDEX mock_items_search_idx ON mock_items USING paradedb ("
                 "id, description, category, rating, in_stock"
                 ") WITH (key_field='id')"
             )

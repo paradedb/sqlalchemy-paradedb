@@ -33,7 +33,7 @@ def test_snippet_contains_highlight_tags(mock_session):
         .where(search.match_any(MockItem.description, "running"))
         .order_by(MockItem.id)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, RUNNING_SNIPPET)]
 
@@ -52,7 +52,7 @@ def test_snippet_custom_tags(mock_session):
         .where(search.match_any(MockItem.description, "running"))
         .order_by(MockItem.id)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, RUNNING_MARK_SNIPPET)]
 
@@ -71,7 +71,7 @@ def test_snippet_max_num_chars(mock_session):
         .order_by(MockItem.id)
         .limit(1)
     )
-    assert_uses_paradedb_scan(mock_session, stmt_short, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt_short, index_name="mock_items_search_idx")
     long_rows = mock_session.execute(stmt_long).all()
     short_rows = mock_session.execute(stmt_short).all()
     assert long_rows == [(3, RUNNING_SNIPPET)]
@@ -90,7 +90,7 @@ def test_snippets_returns_value(mock_session):
         .where(search.match_any(MockItem.description, "running"))
         .order_by(MockItem.id)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, [RUNNING_SNIPPET])]
 
@@ -103,7 +103,7 @@ def test_snippets_with_limit(mock_session):
         .order_by(MockItem.id)
         .limit(3)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, [RUNNING_SNIPPET])]
 
@@ -123,7 +123,7 @@ def test_snippets_with_custom_tags(mock_session):
         .order_by(MockItem.id)
         .limit(3)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, [RUNNING_BRACKET_SNIPPET])]
 
@@ -140,7 +140,7 @@ def test_snippet_positions_returns_ranges(mock_session):
         .where(search.match_any(MockItem.description, "running"))
         .order_by(MockItem.id)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, RUNNING_POSITIONS)]
 
@@ -154,7 +154,7 @@ def test_select_with_score_adds_column(mock_session):
     """select_with.score() appends a score column to the statement."""
     base = select(MockItem.id).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.score(base, MockItem.id, label="search_score")
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
     assert rows == [(3, 3.3322046)]
 
@@ -163,7 +163,7 @@ def test_select_with_snippet_adds_column(mock_session):
     """select_with.snippet() appends a snippet column to the statement."""
     base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippet(base, MockItem.description, label="snip")
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
     assert rows == [(3, "Sleek running shoes", RUNNING_SNIPPET)]
 
@@ -172,7 +172,7 @@ def test_select_with_snippets_adds_column(mock_session):
     """select_with.snippets() appends a snippets column to the statement."""
     base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippets(base, MockItem.description, label="snips")
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
     assert rows == [(3, "Sleek running shoes", [RUNNING_SNIPPET])]
 
@@ -181,7 +181,7 @@ def test_select_with_snippet_positions_adds_column(mock_session):
     """select_with.snippet_positions() appends positions column to the statement."""
     base = select(MockItem.id, MockItem.description).where(search.match_any(MockItem.description, "running"))
     stmt = select_with.snippet_positions(base, MockItem.description, label="positions")
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt.order_by(MockItem.id)).all()
     assert rows == [(3, "Sleek running shoes", RUNNING_POSITIONS)]
 
@@ -230,6 +230,6 @@ def test_snippet_and_score_together(mock_session):
         .order_by(pdb.score(MockItem.id).desc())
         .limit(5)
     )
-    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_bm25_idx")
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, 3.3322046, RUNNING_EM_SNIPPET)]

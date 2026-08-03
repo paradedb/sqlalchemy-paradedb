@@ -8,7 +8,7 @@ from alembic.operations.ops import CreateIndexOp, DowngradeOps, DropIndexOp, Mod
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 import paradedb.sqlalchemy.alembic as pdb_alembic
-from paradedb.sqlalchemy.indexing import BM25Field
+from paradedb.sqlalchemy.indexing import ParadeDBField
 
 
 class DummyOps:
@@ -22,72 +22,72 @@ class DummyOps:
 def test_create_drop_reindex_sql_generation():
     ops = DummyOps()
 
-    create_op = pdb_alembic.CreateBM25IndexOp(
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
         index_name='idx "quoted"',
         table_name='tbl "quoted"',
         expressions=["id", "description"],
         key_field="id",
     )
-    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert (
         ops.sql[-1]
-        == 'CREATE INDEX "idx ""quoted""" ON "tbl ""quoted""" USING bm25 (id, description) WITH (key_field=\'id\')'
+        == 'CREATE INDEX "idx ""quoted""" ON "tbl ""quoted""" USING paradedb (id, description) WITH (key_field=\'id\')'
     )
 
-    drop_op = pdb_alembic.DropBM25IndexOp(index_name='idx "quoted"', if_exists=True)
-    pdb_alembic._drop_bm25_index_impl(ops, drop_op)
+    drop_op = pdb_alembic.DropParadeDBIndexOp(index_name='idx "quoted"', if_exists=True)
+    pdb_alembic._drop_paradedb_index_impl(ops, drop_op)
     assert ops.sql[-1] == 'DROP INDEX IF EXISTS "idx ""quoted"""'
 
-    reindex_op = pdb_alembic.ReindexBM25Op(index_name='idx "quoted"', concurrently=True)
-    pdb_alembic._reindex_bm25_impl(ops, reindex_op)
+    reindex_op = pdb_alembic.ReindexParadeDBOp(index_name='idx "quoted"', concurrently=True)
+    pdb_alembic._reindex_paradedb_impl(ops, reindex_op)
     assert ops.sql[-1] == 'REINDEX INDEX CONCURRENTLY "idx ""quoted"""'
 
 
 def test_create_sql_generation_preserves_tokenizer_expression():
     ops = DummyOps()
-    create_op = pdb_alembic.CreateBM25IndexOp(
-        index_name="products_bm25_idx",
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="products_search_idx",
         table_name="products",
         expressions=["id", "((description)::pdb.simple('alias=description_simple,lowercase=true'))"],
         key_field="id",
     )
-    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        'CREATE INDEX "products_bm25_idx" ON "products" '
-        "USING bm25 (id, ((description)::pdb.simple('alias=description_simple,lowercase=true'))) "
+        'CREATE INDEX "products_search_idx" ON "products" '
+        "USING paradedb (id, ((description)::pdb.simple('alias=description_simple,lowercase=true'))) "
         "WITH (key_field='id')"
     )
 
 
 def test_create_drop_reindex_sql_generation_with_schema():
     ops = DummyOps()
-    create_op = pdb_alembic.CreateBM25IndexOp(
-        index_name="products_bm25_idx",
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
         key_field="id",
         table_schema="analytics",
     )
-    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        'CREATE INDEX "products_bm25_idx" ON "analytics"."products" '
-        "USING bm25 (id, description) WITH (key_field='id')"
+        'CREATE INDEX "products_search_idx" ON "analytics"."products" '
+        "USING paradedb (id, description) WITH (key_field='id')"
     )
 
-    drop_op = pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=True, schema="analytics")
-    pdb_alembic._drop_bm25_index_impl(ops, drop_op)
-    assert ops.sql[-1] == 'DROP INDEX IF EXISTS "analytics"."products_bm25_idx"'
+    drop_op = pdb_alembic.DropParadeDBIndexOp(index_name="products_search_idx", if_exists=True, schema="analytics")
+    pdb_alembic._drop_paradedb_index_impl(ops, drop_op)
+    assert ops.sql[-1] == 'DROP INDEX IF EXISTS "analytics"."products_search_idx"'
 
-    reindex_op = pdb_alembic.ReindexBM25Op(index_name="products_bm25_idx", concurrently=True, schema="analytics")
-    pdb_alembic._reindex_bm25_impl(ops, reindex_op)
-    assert ops.sql[-1] == 'REINDEX INDEX CONCURRENTLY "analytics"."products_bm25_idx"'
+    reindex_op = pdb_alembic.ReindexParadeDBOp(index_name="products_search_idx", concurrently=True, schema="analytics")
+    pdb_alembic._reindex_paradedb_impl(ops, reindex_op)
+    assert ops.sql[-1] == 'REINDEX INDEX CONCURRENTLY "analytics"."products_search_idx"'
 
 
-def test_create_bm25_index_rejects_removed_index_schema_kwarg():
+def test_create_paradedb_index_rejects_removed_index_schema_kwarg():
     with pytest.raises(TypeError, match="index_schema"):
-        pdb_alembic.CreateBM25IndexOp.create_bm25_index(
+        pdb_alembic.CreateParadeDBIndexOp.create_paradedb_index(
             object(),
-            "products_bm25_idx",
+            "products_search_idx",
             "products",
             ["id", "description"],
             key_field="id",
@@ -95,9 +95,9 @@ def test_create_bm25_index_rejects_removed_index_schema_kwarg():
         )
 
 
-def test_create_bm25_index_reverse_returns_drop_op():
-    create_op = pdb_alembic.CreateBM25IndexOp(
-        index_name="products_bm25_idx",
+def test_create_paradedb_index_reverse_returns_drop_op():
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
         key_field="id",
@@ -106,15 +106,15 @@ def test_create_bm25_index_reverse_returns_drop_op():
 
     reversed_op = create_op.reverse()
 
-    assert isinstance(reversed_op, pdb_alembic.DropBM25IndexOp)
-    assert reversed_op.index_name == "products_bm25_idx"
+    assert isinstance(reversed_op, pdb_alembic.DropParadeDBIndexOp)
+    assert reversed_op.index_name == "products_search_idx"
     assert reversed_op.schema == "analytics"
     assert reversed_op.if_exists is True
 
 
-def test_drop_bm25_index_reverse_returns_create_op_when_metadata_present():
-    drop_op = pdb_alembic.DropBM25IndexOp(
-        index_name="products_bm25_idx",
+def test_drop_paradedb_index_reverse_returns_create_op_when_metadata_present():
+    drop_op = pdb_alembic.DropParadeDBIndexOp(
+        index_name="products_search_idx",
         if_exists=True,
         schema="analytics",
         table_name="products",
@@ -125,8 +125,8 @@ def test_drop_bm25_index_reverse_returns_create_op_when_metadata_present():
 
     reversed_op = drop_op.reverse()
 
-    assert isinstance(reversed_op, pdb_alembic.CreateBM25IndexOp)
-    assert reversed_op.index_name == "products_bm25_idx"
+    assert isinstance(reversed_op, pdb_alembic.CreateParadeDBIndexOp)
+    assert reversed_op.index_name == "products_search_idx"
     assert reversed_op.table_name == "products"
     assert reversed_op.expressions == ["id", "description"]
     assert reversed_op.key_field == "id"
@@ -134,18 +134,18 @@ def test_drop_bm25_index_reverse_returns_create_op_when_metadata_present():
     assert reversed_op.where == "rating > 3"
 
 
-def test_drop_bm25_index_reverse_raises_without_recreate_metadata():
-    drop_op = pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=True, schema="analytics")
+def test_drop_paradedb_index_reverse_raises_without_recreate_metadata():
+    drop_op = pdb_alembic.DropParadeDBIndexOp(index_name="products_search_idx", if_exists=True, schema="analytics")
 
     with pytest.raises(NotImplementedError, match="requires recreate metadata"):
         drop_op.reverse()
 
 
-def test_upgrade_ops_reverse_into_handles_bm25_create_op():
+def test_upgrade_ops_reverse_into_handles_paradedb_create_op():
     upgrade_ops = UpgradeOps(
         [
-            pdb_alembic.CreateBM25IndexOp(
-                index_name="products_bm25_idx",
+            pdb_alembic.CreateParadeDBIndexOp(
+                index_name="products_search_idx",
                 table_name="products",
                 expressions=["id", "description"],
                 key_field="id",
@@ -158,17 +158,17 @@ def test_upgrade_ops_reverse_into_handles_bm25_create_op():
 
     assert len(downgrade_ops.ops) == 1
     reversed_op = downgrade_ops.ops[0]
-    assert isinstance(reversed_op, pdb_alembic.DropBM25IndexOp)
-    assert reversed_op.index_name == "products_bm25_idx"
+    assert isinstance(reversed_op, pdb_alembic.DropParadeDBIndexOp)
+    assert reversed_op.index_name == "products_search_idx"
     assert reversed_op.schema == "analytics"
     assert reversed_op.if_exists is True
 
 
-def test_upgrade_ops_reverse_into_handles_bm25_drop_op_with_recreate_metadata():
+def test_upgrade_ops_reverse_into_handles_paradedb_drop_op_with_recreate_metadata():
     upgrade_ops = UpgradeOps(
         [
-            pdb_alembic.DropBM25IndexOp(
-                index_name="products_bm25_idx",
+            pdb_alembic.DropParadeDBIndexOp(
+                index_name="products_search_idx",
                 if_exists=True,
                 schema="analytics",
                 table_name="products",
@@ -183,8 +183,8 @@ def test_upgrade_ops_reverse_into_handles_bm25_drop_op_with_recreate_metadata():
 
     assert len(downgrade_ops.ops) == 1
     reversed_op = downgrade_ops.ops[0]
-    assert isinstance(reversed_op, pdb_alembic.CreateBM25IndexOp)
-    assert reversed_op.index_name == "products_bm25_idx"
+    assert isinstance(reversed_op, pdb_alembic.CreateParadeDBIndexOp)
+    assert reversed_op.index_name == "products_search_idx"
     assert reversed_op.table_name == "products"
     assert reversed_op.expressions == ["id", "description"]
     assert reversed_op.key_field == "id"
@@ -198,27 +198,27 @@ def test_alembic_renderers_registered_and_emit_python():
 
     create_lines = render_op(
         autogen_ctx,
-        pdb_alembic.CreateBM25IndexOp(
-            index_name="products_bm25_idx",
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
             key_field="id",
         ),
     )
     assert create_lines == [
-        "op.create_bm25_index('products_bm25_idx', 'products', ['id', 'description'], key_field='id')"
+        "op.create_paradedb_index('products_search_idx', 'products', ['id', 'description'], key_field='id')"
     ]
 
     drop_lines = render_op(
         autogen_ctx,
-        pdb_alembic.DropBM25IndexOp(index_name="products_bm25_idx", if_exists=False),
+        pdb_alembic.DropParadeDBIndexOp(index_name="products_search_idx", if_exists=False),
     )
-    assert drop_lines == ["op.drop_bm25_index('products_bm25_idx', if_exists=False)"]
+    assert drop_lines == ["op.drop_paradedb_index('products_search_idx', if_exists=False)"]
 
     drop_lines_with_recreate = render_op(
         autogen_ctx,
-        pdb_alembic.DropBM25IndexOp(
-            index_name="products_bm25_idx",
+        pdb_alembic.DropParadeDBIndexOp(
+            index_name="products_search_idx",
             if_exists=False,
             schema="analytics",
             table_name="products",
@@ -228,19 +228,19 @@ def test_alembic_renderers_registered_and_emit_python():
         ),
     )
     assert drop_lines_with_recreate == [
-        "op.drop_bm25_index('products_bm25_idx', if_exists=False, schema='analytics', table_name='products', expressions=['id', 'description'], key_field='id', where='rating > 3')"
+        "op.drop_paradedb_index('products_search_idx', if_exists=False, schema='analytics', table_name='products', expressions=['id', 'description'], key_field='id', where='rating > 3')"
     ]
 
     reindex_lines = render_op(
         autogen_ctx,
-        pdb_alembic.ReindexBM25Op(index_name="products_bm25_idx", concurrently=True),
+        pdb_alembic.ReindexParadeDBOp(index_name="products_search_idx", concurrently=True),
     )
-    assert reindex_lines == ["op.reindex_bm25('products_bm25_idx', concurrently=True)"]
+    assert reindex_lines == ["op.reindex_paradedb('products_search_idx', concurrently=True)"]
 
     create_lines_with_schema = render_op(
         autogen_ctx,
-        pdb_alembic.CreateBM25IndexOp(
-            index_name="products_bm25_idx",
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
             key_field="id",
@@ -248,7 +248,7 @@ def test_alembic_renderers_registered_and_emit_python():
         ),
     )
     assert create_lines_with_schema == [
-        "op.create_bm25_index('products_bm25_idx', 'products', ['id', 'description'], key_field='id', table_schema='analytics')"
+        "op.create_paradedb_index('products_search_idx', 'products', ['id', 'description'], key_field='id', table_schema='analytics')"
     ]
 
 
@@ -257,29 +257,29 @@ def test_alembic_renderers_registered_and_emit_python():
 # ---------------------------------------------------------------------------
 
 
-def _make_metadata_with_bm25() -> tuple[MetaData, object]:
-    """Return (metadata, bm25_index) with a BM25 and a non-BM25 index."""
+def _make_metadata_with_paradedb_index() -> tuple[MetaData, object]:
+    """Return (metadata, paradedb_index) with a ParadeDB and a non-ParadeDB index."""
     from sqlalchemy.schema import Index
 
     m = MetaData()
     t = Table("products", m, Column("id", Integer), Column("description", Text))
-    bm25_idx = Index(
-        "products_bm25_idx",
-        BM25Field(t.c.id),
-        BM25Field(t.c.description),
-        postgresql_using="bm25",
+    paradedb_idx = Index(
+        "products_search_idx",
+        ParadeDBField(t.c.id),
+        ParadeDBField(t.c.description),
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
-    # A regular (non-BM25) index on the same table
+    # A regular (non-ParadeDB) index on the same table
     Index("products_desc_idx", t.c.description)
-    return m, bm25_idx
+    return m, paradedb_idx
 
 
-def test_autogen_meta_indexes_finds_bm25_only():
-    m, bm25_idx = _make_metadata_with_bm25()
-    result = pdb_alembic._autogen_bm25_meta_indexes(m, {"public"}, default_schema="public")
+def test_autogen_meta_indexes_finds_paradedb_only():
+    m, paradedb_idx = _make_metadata_with_paradedb_index()
+    result = pdb_alembic._autogen_paradedb_meta_indexes(m, {"public"}, default_schema="public")
 
-    assert ("public", "products_bm25_idx") in result
+    assert ("public", "products_search_idx") in result
     # Regular index must not appear
     assert ("public", "products_desc_idx") not in result
 
@@ -291,20 +291,20 @@ def test_autogen_meta_indexes_schema_filter():
     m = MetaData()
     t = Table("things", m, Column("id", Integer), Column("body", Text), schema="other")
     Index(
-        "things_bm25_idx",
-        BM25Field(t.c.id),
-        BM25Field(t.c.body),
-        postgresql_using="bm25",
+        "things_search_idx",
+        ParadeDBField(t.c.id),
+        ParadeDBField(t.c.body),
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
 
     # Only looking at schema "public" — the "other" table's index must not appear
-    result = pdb_alembic._autogen_bm25_meta_indexes(m, {"public"}, default_schema="public")
-    assert ("other", "things_bm25_idx") not in result
+    result = pdb_alembic._autogen_paradedb_meta_indexes(m, {"public"}, default_schema="public")
+    assert ("other", "things_search_idx") not in result
 
     # When we look at "other", it should appear
-    result2 = pdb_alembic._autogen_bm25_meta_indexes(m, {"other"}, default_schema="public")
-    assert ("other", "things_bm25_idx") in result2
+    result2 = pdb_alembic._autogen_paradedb_meta_indexes(m, {"other"}, default_schema="public")
+    assert ("other", "things_search_idx") in result2
 
 
 def test_autogen_meta_indexes_uses_explicit_default_schema_for_unschematized_tables():
@@ -313,33 +313,33 @@ def test_autogen_meta_indexes_uses_explicit_default_schema_for_unschematized_tab
     m = MetaData()
     t = Table("products", m, Column("id", Integer), Column("description", Text))
     Index(
-        "products_bm25_idx",
-        BM25Field(t.c.id),
-        BM25Field(t.c.description),
-        postgresql_using="bm25",
+        "products_search_idx",
+        ParadeDBField(t.c.id),
+        ParadeDBField(t.c.description),
+        postgresql_using="paradedb",
         postgresql_with={"key_field": "id"},
     )
 
-    result_public = pdb_alembic._autogen_bm25_meta_indexes(m, {"public", "other"}, default_schema="public")
-    assert ("public", "products_bm25_idx") in result_public
+    result_public = pdb_alembic._autogen_paradedb_meta_indexes(m, {"public", "other"}, default_schema="public")
+    assert ("public", "products_search_idx") in result_public
 
-    result_other = pdb_alembic._autogen_bm25_meta_indexes(m, {"public", "other"}, default_schema="other")
-    assert ("other", "products_bm25_idx") in result_other
+    result_other = pdb_alembic._autogen_paradedb_meta_indexes(m, {"public", "other"}, default_schema="other")
+    assert ("other", "products_search_idx") in result_other
 
 
-def test_suppress_standard_bm25_ops_removes_from_modify_table_ops():
-    """Ops for BM25 indexes inside ModifyTableOps are removed; non-BM25 ops survive."""
+def test_suppress_standard_paradedb_ops_removes_from_modify_table_ops():
+    """Ops for ParadeDB indexes inside ModifyTableOps are removed; non-ParadeDB ops survive."""
     m = MetaData()
     t = Table("products", m, Column("id", Integer), Column("description", Text))
 
-    bm25_idx = CreateIndexOp("products_bm25_idx", "products", [t.c.id])
+    paradedb_idx = CreateIndexOp("products_search_idx", "products", [t.c.id])
     regular_idx = CreateIndexOp("products_desc_idx", "products", [t.c.description])
-    drop_bm25 = DropIndexOp("products_bm25_idx", "products")
+    drop_paradedb = DropIndexOp("products_search_idx", "products")
 
-    modify_ops = ModifyTableOps("products", [bm25_idx, regular_idx, drop_bm25], schema=None)
+    modify_ops = ModifyTableOps("products", [paradedb_idx, regular_idx, drop_paradedb], schema=None)
     upgrade_ops = UpgradeOps([modify_ops])
 
-    pdb_alembic._suppress_standard_bm25_ops(upgrade_ops, {"products_bm25_idx"})
+    pdb_alembic._suppress_standard_paradedb_ops(upgrade_ops, {"products_search_idx"})
 
     # ModifyTableOps container is still there
     assert len(upgrade_ops.ops) == 1
@@ -349,42 +349,42 @@ def test_suppress_standard_bm25_ops_removes_from_modify_table_ops():
     assert remaining[0].index_name == "products_desc_idx"
 
 
-def test_suppress_standard_bm25_ops_removes_top_level():
-    """Top-level CreateIndexOp/DropIndexOp for BM25 indexes are also removed."""
+def test_suppress_standard_paradedb_ops_removes_top_level():
+    """Top-level CreateIndexOp/DropIndexOp for ParadeDB indexes are also removed."""
     m = MetaData()
     t = Table("products", m, Column("id", Integer))
 
-    bm25_create = CreateIndexOp("bm25_idx", "products", [t.c.id])
+    paradedb_create = CreateIndexOp("search_idx", "products", [t.c.id])
     regular_create = CreateIndexOp("regular_idx", "products", [t.c.id])
 
-    upgrade_ops = UpgradeOps([bm25_create, regular_create])
-    pdb_alembic._suppress_standard_bm25_ops(upgrade_ops, {"bm25_idx"})
+    upgrade_ops = UpgradeOps([paradedb_create, regular_create])
+    pdb_alembic._suppress_standard_paradedb_ops(upgrade_ops, {"search_idx"})
 
     assert len(upgrade_ops.ops) == 1
     assert upgrade_ops.ops[0].index_name == "regular_idx"
 
 
-def test_suppress_standard_bm25_ops_noop_when_no_bm25():
-    """When there are no BM25 indexes to suppress, ops are unchanged."""
+def test_suppress_standard_paradedb_ops_noop_when_no_paradedb_indexes():
+    """When there are no ParadeDB indexes to suppress, ops are unchanged."""
     m = MetaData()
     t = Table("products", m, Column("id", Integer))
 
     regular_create = CreateIndexOp("regular_idx", "products", [t.c.id])
     upgrade_ops = UpgradeOps([regular_create])
 
-    pdb_alembic._suppress_standard_bm25_ops(upgrade_ops, set())
+    pdb_alembic._suppress_standard_paradedb_ops(upgrade_ops, set())
     assert len(upgrade_ops.ops) == 1
 
 
-def test_normalize_bm25_expression_keeps_dotted_literal_content():
+def test_normalize_paradedb_expression_keeps_dotted_literal_content():
     expr = "(description)::pdb.regex_pattern('run.*')"
-    normalized = pdb_alembic._normalize_bm25_expression(expr)
+    normalized = pdb_alembic._normalize_paradedb_expression(expr)
     assert normalized == "(description)::pdb.regex_pattern('run.*')"
 
 
-def test_normalize_bm25_expression_strips_relation_qualifiers_only():
+def test_normalize_paradedb_expression_strips_relation_qualifiers_only():
     expr = '"public"."products"."description"::pdb.simple(\'alias=description_simple\')'
-    normalized = pdb_alembic._normalize_bm25_expression(expr)
+    normalized = pdb_alembic._normalize_paradedb_expression(expr)
     assert normalized == "description::pdb.simple('alias=description_simple')"
 
 
@@ -410,33 +410,33 @@ def test_strip_relation_qualifiers_avoids_substring_false_positive():
 
 def test_create_sql_generation_with_where_clause():
     ops = DummyOps()
-    create_op = pdb_alembic.CreateBM25IndexOp(
-        index_name="products_bm25_idx",
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
         key_field="id",
         where="rating > 3",
     )
-    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        'CREATE INDEX "products_bm25_idx" ON "products" '
-        "USING bm25 (id, description) WITH (key_field='id') WHERE rating > 3"
+        'CREATE INDEX "products_search_idx" ON "products" '
+        "USING paradedb (id, description) WITH (key_field='id') WHERE rating > 3"
     )
 
 
 def test_create_sql_generation_without_where_clause():
     """When where is None, no WHERE suffix is appended."""
     ops = DummyOps()
-    create_op = pdb_alembic.CreateBM25IndexOp(
-        index_name="products_bm25_idx",
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
         key_field="id",
     )
-    pdb_alembic._create_bm25_index_impl(ops, create_op)
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert (
         ops.sql[-1]
-        == 'CREATE INDEX "products_bm25_idx" ON "products" USING bm25 (id, description) WITH (key_field=\'id\')'
+        == 'CREATE INDEX "products_search_idx" ON "products" USING paradedb (id, description) WITH (key_field=\'id\')'
     )
 
 
@@ -446,8 +446,8 @@ def test_renderer_emits_where_kwarg():
 
     lines = render_op(
         autogen_ctx,
-        pdb_alembic.CreateBM25IndexOp(
-            index_name="products_bm25_idx",
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
             key_field="id",
@@ -464,8 +464,8 @@ def test_renderer_omits_where_when_none():
 
     lines = render_op(
         autogen_ctx,
-        pdb_alembic.CreateBM25IndexOp(
-            index_name="products_bm25_idx",
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
             key_field="id",
@@ -485,12 +485,12 @@ def test_extract_where_clause():
     from paradedb.sqlalchemy.indexing import _extract_where_clause
 
     indexdef = (
-        "CREATE INDEX products_bm25_idx ON public.products "
-        "USING bm25 (id, description) WITH (key_field='id') WHERE (rating > 3)"
+        "CREATE INDEX products_search_idx ON public.products "
+        "USING paradedb (id, description) WITH (key_field='id') WHERE (rating > 3)"
     )
     assert _extract_where_clause(indexdef) == "rating > 3"
 
     indexdef_no_where = (
-        "CREATE INDEX products_bm25_idx ON public.products USING bm25 (id, description) WITH (key_field='id')"
+        "CREATE INDEX products_search_idx ON public.products USING paradedb (id, description) WITH (key_field='id')"
     )
     assert _extract_where_clause(indexdef_no_where) is None

@@ -33,16 +33,16 @@ class Product(Base):
 
 
 Index(
-    "products_autocomplete_bm25_idx",
-    indexing.BM25Field(Product.id),
-    indexing.BM25Field(Product.description),
-    indexing.BM25Field(
+    "search_idx",
+    indexing.ParadeDBField(Product.id),
+    indexing.ParadeDBField(Product.description),
+    indexing.ParadeDBField(
         Product.description,
         tokenizer=tokenizer.ngram(3, 8, options={"prefix_only": True, "alias": "description_ngram"}),
     ),
-    indexing.BM25Field(Product.category, tokenizer=tokenizer.literal()),
-    indexing.BM25Field(Product.rating),
-    postgresql_using="bm25",
+    indexing.ParadeDBField(Product.category, tokenizer=tokenizer.literal()),
+    indexing.ParadeDBField(Product.rating),
+    postgresql_using="paradedb",
     postgresql_with={"key_field": "id"},
 )
 
