@@ -15,6 +15,7 @@ from paradedb.sqlalchemy.tokenizer import Tokenizer
 
 from ._select_introspection import has_limit, has_order_by
 from ._pdb_cast import PDBCast
+from .vector import VECTOR_OPCLASSES
 from .errors import (
     DuplicateTokenizerAliasError,
     FieldNotIndexedError,
@@ -56,6 +57,36 @@ def _compile_paradedb_field(element: ParadeDBField, compiler, **kw: Any) -> str:
 @compiles(ParadeDBField)
 def _compile_paradedb_field_default(element: ParadeDBField, compiler, **kw: Any) -> str:
     raise CompileError("ParadeDBField is only supported for PostgreSQL dialects")
+
+
+class VectorField(ParadeDBField):
+    """Represents a pgvector column in a ParadeDB index with a distance metric opclass."""
+
+    inherit_cache = True
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+        ("metric", InternalTraversal.dp_string),
+    ]
+
+    def __init__(self, expr: ClauseElement, *, metric: str = "l2") -> None:
+        if metric not in VECTOR_OPCLASSES:
+            raise InvalidArgumentError(f"metric must be one of: {', '.join(sorted(VECTOR_OPCLASSES))}")
+        super().__init__(expr)
+        self.metric = metric
+
+    @property
+    def opclass(self) -> str:
+        return VECTOR_OPCLASSES[self.metric]
+
+
+@compiles(VectorField, "postgresql")
+def _compile_vector_field(element: VectorField, compiler, **kw: Any) -> str:
+    return f"{compiler.process(element.expr, **kw)} {element.opclass}"
+
+
+@compiles(VectorField)
+def _compile_vector_field_default(element: VectorField, compiler, **kw: Any) -> str:
+    raise CompileError("VectorField is only supported for PostgreSQL dialects")
 
 
 def _is_paradedb_index(index: Index) -> bool:
@@ -110,6 +141,8 @@ def validate_paradedb_index(index: Index) -> None:
         raise InvalidKeyFieldError(f"key_field '{key_field}' must be the first indexed ParadeDBField")
     if first_field.tokenizer is not None:
         raise InvalidKeyFieldError(f"key_field '{key_field}' must be untokenized")
+    if isinstance(first_field, VectorField):
+        raise InvalidKeyFieldError(f"key_field '{key_field}' cannot be a VectorField")
 
 
 @event.listens_for(Index, "before_create")
@@ -128,6 +161,7 @@ class IndexMeta:
 
 
 _KEY_FIELD_RE = re.compile(r"key_field\s*=\s*'?\"?([^'\",)\s]+)\"?'?", re.IGNORECASE)
+_VECTOR_OPCLASS_TAIL_RE = re.compile(r"\s(vector_(?:l2|cosine|ip)_ops)\s*$")
 _ALIAS_RE = re.compile(r"alias\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
 _TOKENIZER_NAME_RE = re.compile(r"::pdb\.([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -269,6 +303,13 @@ def _extract_where_clause(indexdef: str) -> str | None:
     if match:
         return match.group(1).strip()
     return None
+
+
+def _extract_trailing_opclass(field_expr: str) -> str | None:
+    """Return the trailing vector opclass token from an index field expression, e.g.
+    ``vector_cosine_ops`` from ``vec vector_cosine_ops``. Returns ``None`` for plain fields."""
+    match = _VECTOR_OPCLASS_TAIL_RE.search(field_expr)
+    return match.group(1) if match else None
 
 
 def _extract_alias(index_expr: str) -> str | None:

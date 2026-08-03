@@ -8,26 +8,13 @@ from alembic import command
 from sqlalchemy import Boolean, Date, DateTime, Index, Integer, String, Text, Time, text
 from sqlalchemy.dialects.postgresql import INT4RANGE, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.types import UserDefinedType
 
 import paradedb.sqlalchemy.alembic  # noqa: F401  Ensure Alembic op registration
 from paradedb.sqlalchemy import indexing
+from paradedb.sqlalchemy.vector import Vector
 
 
 pytestmark = pytest.mark.integration
-
-
-class Vector(UserDefinedType):
-    """The pgvector ``vector(n)`` type of mock_items' embedding column."""
-
-    cache_ok = True
-
-    def __init__(self, dim: int) -> None:
-        self.dim = dim
-
-    def get_col_spec(self, **kw: Any) -> str:
-        return f"vector({self.dim})"
-
 
 _AUTOGEN_SCHEMA = "alembic_cmd_static"
 _CHANGED_SCHEMA = "alembic_cmd_changed_static"

@@ -6,8 +6,9 @@ from .sqlalchemy.diagnostics import (
     paradedb_verify_index,
 )
 from .sqlalchemy.facets import with_rows
-from .sqlalchemy.indexing import ParadeDBField, assert_indexed, describe
+from .sqlalchemy.indexing import ParadeDBField, VectorField, assert_indexed, describe
 from .sqlalchemy.tokenizer import Tokenizer
+from .sqlalchemy.vector import Vector, cosine_distance, inner_product, l2_distance
 from .sqlalchemy import tokenizer
 from .sqlalchemy.pdb import agg, alias, score, snippet, snippet_positions, snippets
 from .sqlalchemy.search import (
@@ -34,12 +35,17 @@ __all__ = [
     "ParadeDBField",
     "ProximityExpr",
     "Tokenizer",
+    "Vector",
+    "VectorField",
     "agg",
     "alias",
     "all",
     "assert_indexed",
+    "cosine_distance",
     "describe",
     "exists",
+    "inner_product",
+    "l2_distance",
     "match_all",
     "match_any",
     "more_like_this",

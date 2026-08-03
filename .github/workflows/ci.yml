@@ -160,6 +160,7 @@ jobs:
       - name: Run examples
         run: |
           uv run --no-sync python examples/quickstart/quickstart.py
+          uv run --no-sync python examples/vector_search/vector_search.py
           uv run --no-sync python examples/autocomplete/autocomplete.py
           uv run --no-sync python examples/more_like_this/more_like_this.py
           uv run --no-sync python examples/faceted_search/faceted_search.py

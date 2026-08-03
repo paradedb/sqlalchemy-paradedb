@@ -19,8 +19,9 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
 
-from paradedb.sqlalchemy import pdb, search, select_with
+from paradedb.sqlalchemy import pdb, search, select_with, vector
 from paradedb.sqlalchemy.errors import InvalidArgumentError
+from paradedb.sqlalchemy.vector import Vector
 
 
 products = table(
@@ -29,6 +30,7 @@ products = table(
     column("description", Text),
     column("category", String),
     column("rating", Integer),
+    column("embedding", Vector(3)),
 )
 
 
@@ -878,3 +880,72 @@ def test_validate_pushdown_clean_query_returns_empty():
     )
     warnings = validate_pushdown(stmt)
     assert warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Vector distance operators
+# ---------------------------------------------------------------------------
+
+
+def test_l2_distance_order_by_compile():
+    stmt = (
+        select(products.c.id)
+        .where(search.all(products.c.id))
+        .order_by(vector.l2_distance(products.c.embedding, [1, 0, 0]))
+        .limit(2)
+    )
+    assert (
+        _sql(stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.all() ORDER BY products.embedding <-> '[1.0,0.0,0.0]'
+ LIMIT 2"""
+    )
+
+
+def test_cosine_distance_order_by_compile():
+    stmt = (
+        select(products.c.id)
+        .where(search.all(products.c.id))
+        .order_by(vector.cosine_distance(products.c.embedding, [0.1, 0.2, 0.3]))
+        .limit(5)
+    )
+    assert (
+        _sql(stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.all() ORDER BY products.embedding <=> '[0.1,0.2,0.3]'
+ LIMIT 5"""
+    )
+
+
+def test_inner_product_order_by_compile():
+    stmt = (
+        select(products.c.id)
+        .where(search.all(products.c.id))
+        .order_by(vector.inner_product(products.c.embedding, "[1,2,3]"))
+        .limit(5)
+    )
+    assert (
+        _sql(stmt)
+        == """SELECT products.id
+FROM products
+WHERE products.id @@@ pdb.all() ORDER BY products.embedding <#> '[1,2,3]'
+ LIMIT 5"""
+    )
+
+
+def test_distance_query_vector_binds_as_parameter():
+    stmt = select(products.c.id).order_by(vector.l2_distance(products.c.embedding, [1, 0, 0])).limit(2)
+    compiled = stmt.compile(dialect=postgresql.dialect())
+    assert "products.embedding <-> %(param_1)s" in str(compiled)
+    assert compiled.params["param_1"] == [1, 0, 0]
+
+
+def test_distance_accepts_sql_expressions():
+    stmt = select(products.c.id).order_by(vector.l2_distance(products.c.embedding, products.c.embedding))
+    assert (
+        _sql(stmt)
+        == """SELECT products.id
+FROM products ORDER BY products.embedding <-> products.embedding"""
+    )

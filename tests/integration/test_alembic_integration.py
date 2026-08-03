@@ -4,13 +4,14 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.operations.ops import UpgradeOps
-from sqlalchemy import Column, Integer, MetaData, Table, Text, text
+from sqlalchemy import Boolean, Column, Index, Integer, MetaData, String, Table, Text, text
 from sqlalchemy.exc import SQLAlchemyError
 from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
 from conftest import PARADEDB_SCAN_PROVIDERS
-from paradedb.sqlalchemy.indexing import ParadeDBField
+from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField
+from paradedb.sqlalchemy.vector import Vector
 from paradedb.sqlalchemy import tokenizer
 
 
@@ -887,3 +888,33 @@ def test_alembic_multi_tokenizer_expression_lifecycle(engine):
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_MULTI_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_MULTI_TABLE}" CASCADE'))
+
+
+def test_autogen_comparator_reports_no_vector_index_churn(engine, paradedb_ready):
+    """The MetaData twin of mock_items_search_idx (embedding vector_l2_ops) produces no autogen ops."""
+    metadata = MetaData()
+    items = Table(
+        "mock_items",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("description", Text),
+        Column("category", String(255)),
+        Column("rating", Integer),
+        Column("in_stock", Boolean),
+        Column("embedding", Vector(8)),
+    )
+    Index(
+        "mock_items_search_idx",
+        ParadeDBField(items.c.id),
+        ParadeDBField(items.c.description),
+        ParadeDBField(items.c.category),
+        ParadeDBField(items.c.rating),
+        ParadeDBField(items.c.in_stock),
+        VectorField(items.c.embedding),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id"},
+    )
+
+    upgrade_ops = _run_comparator(engine, metadata)
+    vector_ops = [op for op in upgrade_ops.ops if getattr(op, "index_name", None) == "mock_items_search_idx"]
+    assert vector_ops == [], f"Expected no autogen churn for vector index, got: {vector_ops}"

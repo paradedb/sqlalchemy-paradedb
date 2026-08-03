@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import Integer, String, Text, and_, column, select, table
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, and_, column, select, table
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql.base import ischema_names
+from sqlalchemy.schema import CreateTable
 
 from paradedb.sqlalchemy import expr as pdb_expr
 from paradedb.sqlalchemy import inspect as pdb_inspect
@@ -14,6 +16,7 @@ from paradedb.sqlalchemy.errors import (
     SnippetWithFuzzyPredicateError,
 )
 from paradedb.sqlalchemy import select_with
+from paradedb.sqlalchemy.vector import Vector
 
 
 products = table(
@@ -99,3 +102,48 @@ def test_select_with_snippet_positions_guard_raises_on_fuzzy():
     )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet_positions(base, products.c.description)
+
+
+def test_vector_column_ddl_compile():
+    items = Table(
+        "items",
+        MetaData(),
+        Column("id", Integer, primary_key=True),
+        Column("embedding", Vector(3)),
+    )
+    ddl = _sql(CreateTable(items))
+    assert "embedding vector(3)" in ddl
+
+
+def test_vector_column_ddl_without_dim():
+    assert Vector().get_col_spec() == "vector"
+
+
+def test_vector_requires_positive_dim():
+    with pytest.raises(ValueError, match="dim"):
+        Vector(0)
+
+
+def test_vector_bind_processor_serializes_sequences():
+    process = Vector(3).bind_processor(postgresql.dialect())
+    assert process([1, 0, 0.5]) == "[1.0,0.0,0.5]"
+    assert process("[1,2,3]") == "[1,2,3]"
+    assert process(None) is None
+
+
+def test_vector_bind_processor_rejects_non_sequences():
+    process = Vector(3).bind_processor(postgresql.dialect())
+    with pytest.raises(InvalidArgumentError, match="sequence of numbers"):
+        process(42)
+
+
+def test_vector_result_processor_parses_text():
+    process = Vector(3).result_processor(postgresql.dialect(), None)
+    assert process("[1,2.5,3]") == [1.0, 2.5, 3.0]
+    assert process("[]") == []
+    assert process(None) is None
+    assert process([1, 2]) == [1.0, 2.0]
+
+
+def test_vector_registered_for_reflection():
+    assert ischema_names["vector"] is Vector
