@@ -6,7 +6,7 @@ from .sqlalchemy.diagnostics import (
     paradedb_verify_index,
 )
 from .sqlalchemy.facets import with_rows
-from .sqlalchemy.indexing import ParadeDBField, VectorField, assert_indexed, describe
+from .sqlalchemy.indexing import ParadeDBField, VectorField, VectorIndexOptions, assert_indexed, describe
 from .sqlalchemy.tokenizer import Tokenizer
 from .sqlalchemy.vector import Vector, cosine_distance, inner_product, l2_distance
 from .sqlalchemy import tokenizer
@@ -37,6 +37,7 @@ __all__ = [
     "Tokenizer",
     "Vector",
     "VectorField",
+    "VectorIndexOptions",
     "agg",
     "alias",
     "all",

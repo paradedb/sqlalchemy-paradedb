@@ -12,6 +12,7 @@ from paradedb.sqlalchemy.indexing import (
     ParadeDBField,
     IndexMeta,
     VectorField,
+    VectorIndexOptions,
     _extract_alias,
     _extract_paradedb_field_list,
     _extract_field_name,
@@ -24,7 +25,7 @@ from paradedb.sqlalchemy.indexing import (
 )
 from paradedb.sqlalchemy.vector import Vector
 from paradedb.sqlalchemy import tokenizer
-from paradedb.sqlalchemy.errors import FieldNotIndexedError, InvalidArgumentError
+from paradedb.sqlalchemy.errors import FieldNotIndexedError, InvalidArgumentError, InvalidIndexOptionError
 from paradedb.sqlalchemy import pdb
 from paradedb.sqlalchemy.expr import json_text
 
@@ -634,3 +635,118 @@ def test_vector_field_cannot_be_key_field():
 def test_vector_field_non_postgres_compile_raises():
     with pytest.raises(CompileError, match="VectorField is only supported"):
         str(VectorField(products.c.embedding).compile(dialect=sqlite.dialect()))
+
+
+def test_vector_index_options_compile():
+    idx = Index(
+        "products_vector_options_idx",
+        ParadeDBField(products.c.id),
+        VectorField(products.c.embedding, metric="cosine"),
+        postgresql_using="paradedb",
+        postgresql_with={
+            "key_field": "id",
+            **VectorIndexOptions(centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1),
+        },
+    )
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (key_field = id, centroid_ratio = 0.01, training_samples_per_centroid = 32, cluster_replication = 1)"""
+    )
+    validate_paradedb_index(idx)
+
+
+def test_vector_index_options_dict_passthrough_compile():
+    idx = Index(
+        "products_vector_single_option_idx",
+        ParadeDBField(products.c.id),
+        VectorField(products.c.embedding),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id", "centroid_ratio": 0.5},
+    )
+    assert (
+        _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        == """\
+CREATE INDEX products_vector_single_option_idx ON products USING paradedb (id, embedding vector_l2_ops) WITH (key_field = id, centroid_ratio = 0.5)"""
+    )
+    validate_paradedb_index(idx)
+
+
+def test_vector_index_options_allowed_without_vector_field():
+    idx = Index(
+        "products_options_no_vector_idx",
+        ParadeDBField(products.c.id),
+        ParadeDBField(products.c.description),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id", "centroid_ratio": 0.01},
+    )
+    validate_paradedb_index(idx)
+
+
+_INVALID_OPTION_VALUES = [
+    ("centroid_ratio", 0.0000001),
+    ("centroid_ratio", 1.5),
+    ("centroid_ratio", "not-a-number"),
+    ("centroid_ratio", True),
+    ("training_samples_per_centroid", 0),
+    ("training_samples_per_centroid", 100001),
+    ("training_samples_per_centroid", 32.5),
+    ("cluster_replication", 0),
+    ("cluster_replication", 2147483648),
+]
+
+_BOUNDARY_OPTION_VALUES = [
+    ("centroid_ratio", 0.000001),
+    ("centroid_ratio", 1.0),
+    ("centroid_ratio", "0.01"),
+    ("training_samples_per_centroid", 1),
+    ("training_samples_per_centroid", 100000),
+    ("cluster_replication", 2147483647),
+]
+
+
+@pytest.mark.parametrize(("name", "value"), _INVALID_OPTION_VALUES)
+def test_vector_index_option_invalid_values_raise(name, value):
+    idx = Index(
+        f"products_invalid_{name}_{str(value).replace('.', '_').replace('-', '_')}_idx",
+        ParadeDBField(products.c.id),
+        VectorField(products.c.embedding),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id", name: value},
+    )
+    with pytest.raises(InvalidIndexOptionError, match=name):
+        validate_paradedb_index(idx)
+
+
+@pytest.mark.parametrize(("name", "value"), _BOUNDARY_OPTION_VALUES)
+def test_vector_index_option_boundary_values_pass(name, value):
+    idx = Index(
+        f"products_valid_{name}_{str(value).replace('.', '_')}_idx",
+        ParadeDBField(products.c.id),
+        VectorField(products.c.embedding),
+        postgresql_using="paradedb",
+        postgresql_with={"key_field": "id", name: value},
+    )
+    validate_paradedb_index(idx)
+
+
+@pytest.mark.parametrize(("name", "value"), _INVALID_OPTION_VALUES)
+def test_vector_index_options_class_invalid_values_raise(name, value):
+    with pytest.raises(InvalidIndexOptionError, match=name):
+        VectorIndexOptions(**{name: value})
+
+
+@pytest.mark.parametrize(("name", "value"), _BOUNDARY_OPTION_VALUES)
+def test_vector_index_options_class_boundary_values_pass(name, value):
+    assert dict(VectorIndexOptions(**{name: value})) == {name: value}
+
+
+def test_vector_index_options_class_omits_unset_fields():
+    assert dict(VectorIndexOptions()) == {}
+    assert dict(VectorIndexOptions(centroid_ratio=0.01)) == {"centroid_ratio": 0.01}
+    assert dict(VectorIndexOptions(centroid_ratio=0.01, cluster_replication=2)) == {
+        "centroid_ratio": 0.01,
+        "cluster_replication": 2,
+    }
+    with pytest.raises(KeyError):
+        VectorIndexOptions(centroid_ratio=0.01)["cluster_replication"]

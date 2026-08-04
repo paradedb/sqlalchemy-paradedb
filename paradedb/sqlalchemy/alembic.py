@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 
 from alembic.autogenerate import comparators, renderers
@@ -8,6 +9,8 @@ from alembic.operations.ops import MigrateOperation
 from alembic.util import DispatchPriority, PriorityDispatchResult
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.elements import ClauseElement
+
+from .indexing import VECTOR_INDEX_OPTIONS, VectorIndexOptions
 
 
 def _quote_ident(name: str) -> str:
@@ -24,6 +27,21 @@ def _quote_qualified(schema: str | None, name: str) -> str:
     return _quote_ident(name)
 
 
+def _render_with_option_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return _quote_literal(str(value))
+
+
+def _render_with_clause(key_field: str, with_options: VectorIndexOptions | None) -> str:
+    parts = [f"key_field={_quote_literal(key_field)}"]
+    for name, value in (dict(with_options) if with_options is not None else {}).items():
+        parts.append(f"{name}={_render_with_option_value(value)}")
+    return f"WITH ({', '.join(parts)})"
+
+
 @Operations.register_operation("create_paradedb_index")
 class CreateParadeDBIndexOp(MigrateOperation):
     def __init__(
@@ -35,6 +53,7 @@ class CreateParadeDBIndexOp(MigrateOperation):
         *,
         table_schema: str | None = None,
         where: str | None = None,
+        with_options: VectorIndexOptions | None = None,
     ) -> None:
         self.index_name = index_name
         self.table_name = table_name
@@ -42,6 +61,9 @@ class CreateParadeDBIndexOp(MigrateOperation):
         self.key_field = key_field
         self.table_schema = table_schema
         self.where = where
+        if with_options is not None and not isinstance(with_options, VectorIndexOptions):
+            raise TypeError("with_options must be a VectorIndexOptions instance")
+        self.with_options = with_options
 
     @classmethod
     def create_paradedb_index(
@@ -54,6 +76,7 @@ class CreateParadeDBIndexOp(MigrateOperation):
         key_field: str,
         table_schema: str | None = None,
         where: str | None = None,
+        with_options: VectorIndexOptions | None = None,
     ) -> MigrateOperation:
         return operations.invoke(
             cls(
@@ -63,6 +86,7 @@ class CreateParadeDBIndexOp(MigrateOperation):
                 key_field,
                 table_schema=table_schema,
                 where=where,
+                with_options=with_options,
             )
         )
 
@@ -76,7 +100,7 @@ def _create_paradedb_index_impl(operations: Operations, operation: CreateParadeD
     sql = (
         f"CREATE INDEX {_quote_ident(operation.index_name)} "
         f"ON {_quote_qualified(operation.table_schema, operation.table_name)} "
-        f"USING paradedb ({expressions_sql}) WITH (key_field={_quote_literal(operation.key_field)})"
+        f"USING paradedb ({expressions_sql}) {_render_with_clause(operation.key_field, operation.with_options)}"
     )
     if operation.where is not None:
         sql += f" WHERE {operation.where}"
@@ -95,6 +119,9 @@ def _render_create_paradedb_index_op(autogen_context, op: CreateParadeDBIndexOp)
         parts.append(f"table_schema={op.table_schema!r}")
     if op.where is not None:
         parts.append(f"where={op.where!r}")
+    if op.with_options:
+        autogen_context.imports.add("from paradedb.sqlalchemy import VectorIndexOptions")
+        parts.append(f"with_options={op.with_options!r}")
     return f"op.create_paradedb_index({', '.join(parts)})"
 
 
@@ -110,6 +137,7 @@ class DropParadeDBIndexOp(MigrateOperation):
         expressions: list[str] | None = None,
         key_field: str | None = None,
         where: str | None = None,
+        with_options: VectorIndexOptions | None = None,
     ) -> None:
         self.index_name = index_name
         self.if_exists = if_exists
@@ -118,6 +146,9 @@ class DropParadeDBIndexOp(MigrateOperation):
         self.expressions = expressions
         self.key_field = key_field
         self.where = where
+        if with_options is not None and not isinstance(with_options, VectorIndexOptions):
+            raise TypeError("with_options must be a VectorIndexOptions instance")
+        self.with_options = with_options
 
     @classmethod
     def drop_paradedb_index(
@@ -131,6 +162,7 @@ class DropParadeDBIndexOp(MigrateOperation):
         expressions: list[str] | None = None,
         key_field: str | None = None,
         where: str | None = None,
+        with_options: VectorIndexOptions | None = None,
     ) -> MigrateOperation:
         return operations.invoke(
             cls(
@@ -141,6 +173,7 @@ class DropParadeDBIndexOp(MigrateOperation):
                 expressions=expressions,
                 key_field=key_field,
                 where=where,
+                with_options=with_options,
             )
         )
 
@@ -155,6 +188,7 @@ class DropParadeDBIndexOp(MigrateOperation):
             key_field=self.key_field,
             table_schema=self.schema,
             where=self.where,
+            with_options=self.with_options,
         )
 
 
@@ -177,6 +211,9 @@ def _render_drop_paradedb_index_op(autogen_context, op: DropParadeDBIndexOp) -> 
         parts.append(f"key_field={op.key_field!r}")
     if op.where is not None:
         parts.append(f"where={op.where!r}")
+    if op.with_options:
+        autogen_context.imports.add("from paradedb.sqlalchemy import VectorIndexOptions")
+        parts.append(f"with_options={op.with_options!r}")
     return f"op.drop_paradedb_index({', '.join(parts)})"
 
 
@@ -228,8 +265,30 @@ def _autogen_paradedb_meta_indexes(
     return result
 
 
+def _parse_index_reloptions(reloptions) -> dict[str, str]:
+    from .indexing import _normalize_reloption_value
+
+    options: dict[str, str] = {}
+    for opt in reloptions or []:
+        name, sep, value = str(opt).partition("=")
+        if sep and name != "key_field":
+            options[name] = _normalize_reloption_value(value) or ""
+    return options
+
+
+def _to_vector_index_options(options: dict[str, object] | None) -> VectorIndexOptions | None:
+    if not options:
+        return None
+    coerced = {
+        name: VECTOR_INDEX_OPTIONS[name][0](str(value))
+        for name, value in options.items()
+        if name in VECTOR_INDEX_OPTIONS
+    }
+    return VectorIndexOptions(**coerced) if coerced else None
+
+
 def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tuple[str, str], dict]:
-    """Return {(schema, index_name): {table_name, expressions, key_field, where}} from pg_indexes."""
+    """Return {(schema, index_name): {table_name, expressions, key_field, where, with_options}} from pg_indexes."""
     from .indexing import (
         _extract_key_field,
         _extract_paradedb_field_list,
@@ -251,6 +310,7 @@ def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tupl
                     "expressions": [],
                     "key_field": _normalize_reloption_value(row["key_field"]) or "",
                     "where": _extract_where_clause(str(row["indexdef"])),
+                    "with_options": _parse_index_reloptions(row["reloptions"]),
                 },
             )
             # pg_get_indexdef(oid, colno, true) omits opclasses, so recover any
@@ -387,6 +447,30 @@ def _normalize_where(clause: str | None) -> str | None:
     return _strip_non_pdb_qualifiers("".join(normalized_parts).strip())
 
 
+def _with_option_values_equal(db_value: object, meta_value: object) -> bool:
+    """Compare a reloption value tolerantly: Postgres normalizes reals (e.g. 0.01
+    may read back as 0.0099999998), so numeric values compare with a tolerance."""
+    from .indexing import _normalize_reloption_value
+
+    db_text = _normalize_reloption_value(str(db_value)) or ""
+    meta_text = _normalize_reloption_value(str(meta_value)) or ""
+    try:
+        return math.isclose(float(db_text), float(meta_text), rel_tol=1e-6)
+    except ValueError:
+        return db_text.strip().lower() == meta_text.strip().lower()
+
+
+def _with_options_changed(db_options: dict[str, object], meta_options: dict[str, object]) -> bool:
+    if set(db_options) != set(meta_options):
+        return True
+    return any(not _with_option_values_equal(db_options[name], value) for name, value in meta_options.items())
+
+
+def _meta_with_options(index) -> dict[str, object]:
+    with_opts = index.dialect_options["postgresql"].get("with") or {}
+    return {name: value for name, value in with_opts.items() if name != "key_field"}
+
+
 def _render_where_from_index(index) -> str | None:
     """Compile the ``postgresql_where`` clause from a SQLAlchemy Index to SQL text."""
     where_clause = index.dialect_options["postgresql"].get("where")
@@ -463,14 +547,16 @@ def _compare_paradedb_indexes(autogen_context, upgrade_ops, schemas) -> Priority
                     expressions=db["expressions"],
                     key_field=db["key_field"],
                     where=db.get("where"),
+                    with_options=_to_vector_index_options(db.get("with_options")),
                 )
             )
 
     # Emit create ops for indexes present in MetaData but absent from DB.
-    # Also re-create indexes whose expression list, key_field, or WHERE clause differs from the DB.
+    # Also re-create indexes whose expression list, key_field, WITH options, or WHERE clause differs from the DB.
     for key, index in meta_paradedb.items():
         with_opts = index.dialect_options["postgresql"].get("with") or {}
         key_field = with_opts.get("key_field", "")
+        meta_options = _meta_with_options(index)
         expressions = [
             _strip_relation_qualifiers(_render_paradedb_expression(expr), index.table.name, index.table.schema)
             for expr in index.expressions
@@ -483,6 +569,7 @@ def _compare_paradedb_indexes(autogen_context, upgrade_ops, schemas) -> Priority
             key_field=key_field,
             table_schema=key[0],
             where=meta_where,
+            with_options=_to_vector_index_options(meta_options),
         )
 
         if key not in db_paradedb:
@@ -494,7 +581,8 @@ def _compare_paradedb_indexes(autogen_context, upgrade_ops, schemas) -> Priority
             )
             key_field_changed = db["key_field"] != key_field
             where_changed = _normalize_where(db.get("where")) != _normalize_where(meta_where)
-            if expressions_changed or key_field_changed or where_changed:
+            options_changed = _with_options_changed(db.get("with_options") or {}, meta_options)
+            if expressions_changed or key_field_changed or where_changed or options_changed:
                 upgrade_ops.ops.append(
                     DropParadeDBIndexOp(
                         index_name=key[1],
@@ -504,6 +592,7 @@ def _compare_paradedb_indexes(autogen_context, upgrade_ops, schemas) -> Priority
                         expressions=db["expressions"],
                         key_field=db["key_field"],
                         where=db.get("where"),
+                        with_options=_to_vector_index_options(db.get("with_options")),
                     )
                 )
                 upgrade_ops.ops.append(create_op)

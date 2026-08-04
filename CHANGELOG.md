@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+### Added
+
+- Support for the vector index build options `centroid_ratio`, `training_samples_per_centroid`, and `cluster_replication` (pg_search 0.25.0+). Construct a validated `paradedb.VectorIndexOptions` and unpack it into `postgresql_with` alongside `key_field` (raw dict entries also work), and in Alembic pass either form to the new `with_options` parameter of `op.create_paradedb_index`/`op.drop_paradedb_index`. Autogenerate emits and round-trips the options, and reflection compares real-valued options tolerantly so existing indexes don't churn.
+
 ## [0.9.0] - 2026-08-04
 
 ### Added

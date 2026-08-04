@@ -8,7 +8,7 @@ from alembic.operations.ops import CreateIndexOp, DowngradeOps, DropIndexOp, Mod
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 import paradedb.sqlalchemy.alembic as pdb_alembic
-from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField
+from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField, VectorIndexOptions
 from paradedb.sqlalchemy.vector import Vector
 
 
@@ -512,3 +512,161 @@ def test_normalize_paradedb_expression_strips_default_vector_opclass():
     assert pdb_alembic._normalize_paradedb_expression("embedding vector_l2_ops") == "embedding"
     assert pdb_alembic._normalize_paradedb_expression("embedding") == "embedding"
     assert pdb_alembic._normalize_paradedb_expression("embedding vector_cosine_ops") == "embeddingvector_cosine_ops"
+
+
+# ---------------------------------------------------------------------------
+# Vector index WITH options support
+# ---------------------------------------------------------------------------
+
+
+def test_create_sql_generation_with_all_vector_options():
+    ops = DummyOps()
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="items_search_idx",
+        table_name="items",
+        expressions=["id", "embedding vector_cosine_ops"],
+        key_field="id",
+        with_options=VectorIndexOptions(centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1),
+    )
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
+    assert ops.sql[-1] == (
+        'CREATE INDEX "items_search_idx" ON "items" '
+        "USING paradedb (id, embedding vector_cosine_ops) "
+        "WITH (key_field='id', centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1)"
+    )
+
+
+def test_create_sql_generation_with_single_option():
+    ops = DummyOps()
+    create_op = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="items_search_idx",
+        table_name="items",
+        expressions=["id", "embedding vector_l2_ops"],
+        key_field="id",
+        with_options=VectorIndexOptions(centroid_ratio=0.5),
+    )
+    pdb_alembic._create_paradedb_index_impl(ops, create_op)
+    assert ops.sql[-1] == (
+        'CREATE INDEX "items_search_idx" ON "items" '
+        "USING paradedb (id, embedding vector_l2_ops) WITH (key_field='id', centroid_ratio=0.5)"
+    )
+
+
+def test_ops_reject_plain_dict_with_options():
+    with pytest.raises(TypeError, match="VectorIndexOptions"):
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="items_search_idx",
+            table_name="items",
+            expressions=["id"],
+            key_field="id",
+            with_options={"centroid_ratio": 0.01},
+        )
+    with pytest.raises(TypeError, match="VectorIndexOptions"):
+        pdb_alembic.DropParadeDBIndexOp(
+            index_name="items_search_idx",
+            with_options={"centroid_ratio": 0.01},
+        )
+
+
+def test_renderer_emits_with_options_kwarg():
+    ctx = MigrationContext.configure(dialect_name="postgresql")
+    autogen_ctx = AutogenContext(ctx)
+
+    lines = render_op(
+        autogen_ctx,
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="items_search_idx",
+            table_name="items",
+            expressions=["id", "embedding vector_cosine_ops"],
+            key_field="id",
+            with_options=VectorIndexOptions(
+                centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1
+            ),
+        ),
+    )
+    assert lines == [
+        "op.create_paradedb_index('items_search_idx', 'items', ['id', 'embedding vector_cosine_ops'], key_field='id', "
+        "with_options=VectorIndexOptions(centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1))"
+    ]
+    assert "from paradedb.sqlalchemy import VectorIndexOptions" in autogen_ctx.imports
+
+
+def test_renderer_omits_with_options_when_none():
+    ctx = MigrationContext.configure(dialect_name="postgresql")
+    autogen_ctx = AutogenContext(ctx)
+
+    lines = render_op(
+        autogen_ctx,
+        pdb_alembic.CreateParadeDBIndexOp(
+            index_name="items_search_idx",
+            table_name="items",
+            expressions=["id"],
+            key_field="id",
+        ),
+    )
+    assert lines == ["op.create_paradedb_index('items_search_idx', 'items', ['id'], key_field='id')"]
+
+
+def test_drop_renderer_emits_with_options_kwarg():
+    ctx = MigrationContext.configure(dialect_name="postgresql")
+    autogen_ctx = AutogenContext(ctx)
+
+    lines = render_op(
+        autogen_ctx,
+        pdb_alembic.DropParadeDBIndexOp(
+            index_name="items_search_idx",
+            if_exists=True,
+            table_name="items",
+            expressions=["id"],
+            key_field="id",
+            with_options=VectorIndexOptions(centroid_ratio=0.01),
+        ),
+    )
+    assert lines == [
+        "op.drop_paradedb_index('items_search_idx', if_exists=True, table_name='items', expressions=['id'], "
+        "key_field='id', with_options=VectorIndexOptions(centroid_ratio=0.01))"
+    ]
+    assert "from paradedb.sqlalchemy import VectorIndexOptions" in autogen_ctx.imports
+
+
+def test_drop_paradedb_index_reverse_carries_with_options():
+    drop_op = pdb_alembic.DropParadeDBIndexOp(
+        index_name="items_search_idx",
+        if_exists=True,
+        table_name="items",
+        expressions=["id", "embedding vector_cosine_ops"],
+        key_field="id",
+        with_options=VectorIndexOptions(centroid_ratio=0.01, cluster_replication=1),
+    )
+
+    reversed_op = drop_op.reverse()
+
+    assert isinstance(reversed_op, pdb_alembic.CreateParadeDBIndexOp)
+    assert reversed_op.with_options == VectorIndexOptions(centroid_ratio=0.01, cluster_replication=1)
+
+
+def test_parse_index_reloptions_excludes_key_field():
+    reloptions = ["key_field=id", "centroid_ratio=0.01", "training_samples_per_centroid=32"]
+    assert pdb_alembic._parse_index_reloptions(reloptions) == {
+        "centroid_ratio": "0.01",
+        "training_samples_per_centroid": "32",
+    }
+    assert pdb_alembic._parse_index_reloptions(None) == {}
+
+
+def test_with_option_values_equal_tolerates_real_normalization():
+    assert pdb_alembic._with_option_values_equal("0.0099999998", 0.01)
+    assert pdb_alembic._with_option_values_equal("0.01", "0.01")
+    assert pdb_alembic._with_option_values_equal("32", 32)
+    assert not pdb_alembic._with_option_values_equal("0.02", 0.01)
+
+
+def test_with_options_changed():
+    assert not pdb_alembic._with_options_changed({}, {})
+    assert not pdb_alembic._with_options_changed(
+        {"centroid_ratio": "0.0099999998", "cluster_replication": "1"},
+        {"centroid_ratio": 0.01, "cluster_replication": 1},
+    )
+    assert pdb_alembic._with_options_changed({}, {"centroid_ratio": 0.01})
+    assert pdb_alembic._with_options_changed({"centroid_ratio": "0.01"}, {})
+    assert pdb_alembic._with_options_changed({"centroid_ratio": "0.01"}, {"centroid_ratio": 0.02})

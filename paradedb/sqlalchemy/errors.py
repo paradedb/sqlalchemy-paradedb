@@ -33,6 +33,10 @@ class InvalidParadeDBFieldError(ParadeDBValidationError):
     """Raised when non-ParadeDBField expressions are used in a ParadeDB index."""
 
 
+class InvalidIndexOptionError(ParadeDBValidationError):
+    """Raised when a ParadeDB index WITH option has an invalid type or out-of-range value."""
+
+
 class RuntimeGuardError(ParadeDBError, ValueError):
     """Base class for runtime guardrail violations on statement builders."""
 
