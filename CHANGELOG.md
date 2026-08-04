@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ## Unreleased
 
+## [0.9.0] - 2026-08-04
+
 ### Added
 
 - Native vector search support: a `Vector(n)` column type, `VectorField` for declaring pgvector columns with a distance metric (`l2`, `cosine`, `ip`) inside ParadeDB indexes, and `vector.l2_distance` / `vector.cosine_distance` / `vector.inner_product` query expressions for Top-K ordering. Alembic autogenerate round-trips ParadeDB indexes containing vector opclasses without churn.
@@ -66,6 +68,8 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.9.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.9.0
+[0.8.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.8.0
 [0.7.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.7.0
 [0.6.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.6.0
 [0.5.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.5.0

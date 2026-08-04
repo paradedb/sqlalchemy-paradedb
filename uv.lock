@@ -847,7 +847,7 @@ wheels = [
 
 [[package]]
 name = "sqlalchemy-paradedb"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "sqlalchemy" },
