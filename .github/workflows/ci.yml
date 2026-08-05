@@ -158,11 +158,8 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Run examples
-        run: |
-          uv run --no-sync python examples/quickstart/quickstart.py
-          uv run --no-sync python examples/vector_search/vector_search.py
-          uv run --no-sync python examples/autocomplete/autocomplete.py
-          uv run --no-sync python examples/more_like_this/more_like_this.py
-          uv run --no-sync python examples/faceted_search/faceted_search.py
-          uv run --no-sync python examples/hybrid_rrf/hybrid_rrf.py
-          uv run --no-sync python examples/rag/rag.py
+        env:
+          # ParadeDB already runs as a service container for this job.
+          SKIP_PARADEDB_START: "1"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: scripts/run_examples.sh
