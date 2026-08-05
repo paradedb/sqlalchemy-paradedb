@@ -47,5 +47,9 @@ stmt = select(products.c.description).where(match_all(products.c.description, "s
 sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
 
 if "&&&" not in sql:
-    raise SystemExit(f"Wheel smoke test failed: expected ParadeDB SQL operator in compiled SQL: {sql}")
+    raise SystemExit(f"Package smoke test failed: expected ParadeDB SQL operator in compiled SQL: {sql}")
 PY
+
+WHEEL_NAME="$(basename "$(find "${DIST_DIR}" -name 'sqlalchemy_paradedb-*.whl' | head -1)")"
+VERSION="${WHEEL_NAME#sqlalchemy_paradedb-}"; VERSION="${VERSION%%-*}"
+echo "✅ Package smoke install passed for sqlalchemy-paradedb ${VERSION}"
