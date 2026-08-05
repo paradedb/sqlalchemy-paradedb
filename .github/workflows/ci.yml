@@ -37,7 +37,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -46,7 +46,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv venv --python "3.12"
+          uv venv --python "3.14"
           uv sync --extra test --extra dev
 
       - name: Ruff check
@@ -158,11 +158,8 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Run examples
-        run: |
-          uv run --no-sync python examples/quickstart/quickstart.py
-          uv run --no-sync python examples/vector_search/vector_search.py
-          uv run --no-sync python examples/autocomplete/autocomplete.py
-          uv run --no-sync python examples/more_like_this/more_like_this.py
-          uv run --no-sync python examples/faceted_search/faceted_search.py
-          uv run --no-sync python examples/hybrid_rrf/hybrid_rrf.py
-          uv run --no-sync python examples/rag/rag.py
+        env:
+          # ParadeDB already runs as a service container for this job.
+          SKIP_PARADEDB_START: "1"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: scripts/run_examples.sh

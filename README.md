@@ -36,27 +36,29 @@
 
 ## ParadeDB for SQLAlchemy
 
-The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) (powered by the [`pg_search`](https://github.com/paradedb/paradedb) Postgres extension), including first-class support for managing ParadeDB indexes with Alembic and running queries using the full ParadeDB API. The integration covers both full-text search and [vector search](https://docs.paradedb.com/documentation/vector/overview) over pgvector `vector` types. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
+The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB](https://paradedb.com) (powered by the [`pg_search`](https://github.com/paradedb/paradedb) Postgres extension), including first-class support for managing ParadeDB indexes with Alembic and running queries using the full ParadeDB API. The integration covers both [full-text search](https://docs.paradedb.com/documentation/full-text/overview) and [vector search](https://docs.paradedb.com/documentation/vector/overview) over pgvector `vector` types. Follow the [getting started guide](https://docs.paradedb.com/documentation/getting-started/environment#sqlalchemy) to begin.
 
 ## Requirements & Compatibility
 
-| Component  | Supported                                                         |
-| ---------- | ----------------------------------------------------------------- |
-| Python     | 3.10+                                                             |
-| SQLAlchemy | 2.0.32+                                                           |
-| ParadeDB   | 0.25.0+                                                           |
-| PostgreSQL | 15+ (with ParadeDB extension)                                     |
-| pgvector   | Required for vector search; included in the ParadeDB Docker image |
+| Component  | Supported                                                          |
+| ---------- | ------------------------------------------------------------------ |
+| Python     | 3.10+                                                              |
+| SQLAlchemy | 2.0.32+                                                            |
+| ParadeDB   | 0.25.0+                                                            |
+| PostgreSQL | 15+ (with ParadeDB extension)                                      |
+| pgvector   | Required for vector search (included in the ParadeDB Docker image) |
 
 ## Examples
 
-- [Quick Start](examples/quickstart/quickstart.py)
+- [Quickstart](examples/quickstart/quickstart.py)
 - [Vector Search](examples/vector_search/vector_search.py)
 - [Faceted Search](examples/faceted_search/faceted_search.py)
-- [Autocomplete](examples/autocomplete/autocomplete.py)
-- [More Like This](examples/more_like_this/more_like_this.py)
 - [Hybrid Search (RRF)](examples/hybrid_rrf/hybrid_rrf.py)
 - [RAG](examples/rag/rag.py)
+- [Autocomplete](examples/autocomplete/autocomplete.py)
+- [More Like This](examples/more_like_this/more_like_this.py)
+
+See [examples/README.md](examples/README.md) for setup instructions and a description of each example.
 
 ## Contributing
 
@@ -76,4 +78,4 @@ If you need commercial support, please [contact the ParadeDB team](mailto:sales@
 
 ## License
 
-ParadeDB for SQLAlchemy is licensed under the [MIT License](https://github.com/paradedb/sqlalchemy-paradedb?tab=MIT-1-ov-file#readme).
+ParadeDB for SQLAlchemy is licensed under the [MIT License](LICENSE).
