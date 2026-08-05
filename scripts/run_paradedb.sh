@@ -9,8 +9,8 @@ else
 fi
 
 IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:0.25.0-pg18}"
-CONTAINER_NAME="${PARADEDB_CONTAINER_NAME:-paradedb-sqlalchemy-integration}"
-export PARADEDB_PORT="${PARADEDB_PORT:-5443}"
+CONTAINER_NAME="${PARADEDB_CONTAINER_NAME:-sqlalchemy-paradedb}"
+export PARADEDB_PORT="${PARADEDB_PORT:-5432}"
 export PARADEDB_USER="${PARADEDB_USER:-postgres}"
 export PARADEDB_PASSWORD="${PARADEDB_PASSWORD:-postgres}"
 export PARADEDB_DB="${PARADEDB_DB:-postgres}"
