@@ -29,7 +29,7 @@ cd "${REPO_ROOT}"
 "${PYTHON_CMD[@]}" examples/quickstart/quickstart.py
 "${PYTHON_CMD[@]}" examples/vector_search/vector_search.py
 "${PYTHON_CMD[@]}" examples/faceted_search/faceted_search.py
-"${PYTHON_CMD[@]}" examples/autocomplete/autocomplete.py
-"${PYTHON_CMD[@]}" examples/more_like_this/more_like_this.py
 "${PYTHON_CMD[@]}" examples/hybrid_rrf/hybrid_rrf.py
 "${PYTHON_CMD[@]}" examples/rag/rag.py
+"${PYTHON_CMD[@]}" examples/autocomplete/autocomplete.py
+"${PYTHON_CMD[@]}" examples/more_like_this/more_like_this.py
