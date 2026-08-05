@@ -50,13 +50,15 @@ The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB
 
 ## Examples
 
-- [Quick Start](examples/quickstart/quickstart.py)
+- [Quickstart](examples/quickstart/quickstart.py)
 - [Vector Search](examples/vector_search/vector_search.py)
 - [Faceted Search](examples/faceted_search/faceted_search.py)
 - [Autocomplete](examples/autocomplete/autocomplete.py)
 - [More Like This](examples/more_like_this/more_like_this.py)
 - [Hybrid Search (RRF)](examples/hybrid_rrf/hybrid_rrf.py)
 - [RAG](examples/rag/rag.py)
+
+See [examples/README.md](examples/README.md) for setup instructions and a description of each example.
 
 ## Contributing
 
@@ -76,4 +78,4 @@ If you need commercial support, please [contact the ParadeDB team](mailto:sales@
 
 ## License
 
-ParadeDB for SQLAlchemy is licensed under the [MIT License](https://github.com/paradedb/sqlalchemy-paradedb?tab=MIT-1-ov-file#readme).
+ParadeDB for SQLAlchemy is licensed under the [MIT License](LICENSE).

@@ -1,4 +1,4 @@
-# **Contributing to sqlalchemy-paradedb**
+# Contributing to sqlalchemy-paradedb
 
 Welcome! We're excited that you're interested in contributing to sqlalchemy-paradedb and want to make the process as smooth as possible.
 
@@ -24,12 +24,11 @@ This repository has a workflow to assign issues to new contributors automaticall
 
 If you find yourself unable to make progress, don't hesitate to seek help in the issue comments or the [ParadeDB Community Slack](https://paradedb.com/slack). If you no longer wish to work on the issue(s) you self-assigned, please remove yourself from the Assignees list in the sidebar to release it.
 
-### Development Workflow
+### Development Setup
 
 sqlalchemy-paradedb is a Python package that provides SQLAlchemy ORM integration for ParadeDB. Development is done with `uv`, which keeps Python selection and dependencies aligned between local work and CI.
 
 ```bash
-# Clone the repository
 git clone https://github.com/paradedb/sqlalchemy-paradedb.git
 cd sqlalchemy-paradedb
 
@@ -40,22 +39,52 @@ uv sync --extra dev
 
 # Install prek hooks
 uvx prek install
+```
 
-# Run unit tests (no database required)
+### Running Tests
+
+Run the tests to verify every change:
+
+```bash
+# Unit tests (no database required)
 bash scripts/run_unit_tests.sh
 
-# Run integration tests (requires Docker)
+# Integration tests (requires Docker)
 bash scripts/run_integration_tests.sh
+```
 
-# Run linting
+To run a subset of tests, pass pytest selectors:
+
+```bash
+bash scripts/run_integration_tests.sh tests/integration/test_indexing_integration.py::test_paradedb_partial_index_generates_where_clause
+```
+
+The integration script sets `PARADEDB_TEST_DSN` and `DATABASE_URL` automatically. The default container name is `paradedb-sqlalchemy-integration` on port `5443`.
+
+Some integration tests require newer pg_search versions and are skipped automatically if the feature is not available (for example, diagnostics functions like `pdb.indexes()`).
+
+### Linting and Formatting
+
+```bash
+# Linting and formatting
 uv run ruff check .
 uv run ruff format .
 
-# Run type checking
+# Type checking
 uv run mypy paradedb
 
-# Run API/package consistency checks
+# Pre-commit hooks (markdownlint, codespell, etc.)
+uvx prek install
+uvx prek run --all-files
+```
+
+### API and Packaging Consistency Checks
+
+Run these before opening a PR if your change touches SQL wrappers, API constants, packaging, or release metadata:
+
+```bash
 uv run scripts/check_api_coverage.py
+bash scripts/smoke_wheel_install.sh
 ```
 
 ### Pull Request Workflow
@@ -70,7 +99,9 @@ All changes to sqlalchemy-paradedb happen through GitHub Pull Requests. Here is 
 6. Open a pull request towards the `main` branch. Ensure that all tests and checks pass. Note that the sqlalchemy-paradedb repository has pull request title linting in place and follows the [Conventional Commits spec](https://www.conventionalcommits.org/).
 7. Congratulations! Our team will review your pull request.
 
-If your change touches SQL wrappers, API constants, packaging, or release metadata, run the API/package checks above before opening the PR.
+### Changelog
+
+When you make a change that a user of this project would care about, record it in the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md). If the change is breaking, make sure to denote that.
 
 ### Documentation
 
