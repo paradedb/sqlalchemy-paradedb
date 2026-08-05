@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 from sqlalchemy import Index, event, text
@@ -20,10 +20,72 @@ from .errors import (
     DuplicateTokenizerAliasError,
     FieldNotIndexedError,
     InvalidArgumentError,
+    InvalidIndexOptionError,
     InvalidKeyFieldError,
     InvalidParadeDBFieldError,
     MissingKeyFieldError,
 )
+
+VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
+    "centroid_ratio": (float, 0.000001, 1.0),
+    "training_samples_per_centroid": (int, 1, 100000),
+    "cluster_replication": (int, 1, 2147483647),
+}
+
+
+def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
+    for name, (num_type, min_value, max_value) in VECTOR_INDEX_OPTIONS.items():
+        if name not in with_options:
+            continue
+        value = with_options[name]
+        type_label = "an integer" if num_type is int else "a number"
+        if isinstance(value, bool):
+            raise InvalidIndexOptionError(f"{name} must be {type_label}, got {value!r}")
+        try:
+            parsed = num_type(str(value))
+        except ValueError:
+            raise InvalidIndexOptionError(f"{name} must be {type_label}, got {value!r}") from None
+        if not (min_value <= parsed <= max_value):
+            raise InvalidIndexOptionError(f"{name} must be between {min_value} and {max_value}, got {value!r}")
+
+
+@dataclass(frozen=True)
+class VectorIndexOptions:
+    """Vector index build options (pg_search 0.25.0+), validated at construction.
+
+    Unpack into ``postgresql_with`` alongside ``key_field``::
+
+        Index(
+            "products_search_idx",
+            ParadeDBField(products.c.id),
+            VectorField(products.c.embedding, metric="cosine"),
+            postgresql_using="paradedb",
+            postgresql_with={"key_field": "id", **VectorIndexOptions(centroid_ratio=0.01)},
+        )
+
+    Options left as ``None`` are omitted so the server defaults apply. Raw
+    entries in ``postgresql_with`` are still accepted and validated the same way.
+    """
+
+    centroid_ratio: float | None = None
+    training_samples_per_centroid: int | None = None
+    cluster_replication: int | None = None
+
+    def __post_init__(self) -> None:
+        _validate_vector_index_options(dict(self))
+
+    def keys(self) -> list[str]:
+        return [f.name for f in fields(self) if getattr(self, f.name) is not None]
+
+    def __getitem__(self, name: str) -> float | int:
+        if name not in self.keys():
+            raise KeyError(name)
+        value: float | int = getattr(self, name)
+        return value
+
+    def __repr__(self) -> str:
+        args = ", ".join(f"{name}={self[name]!r}" for name in self.keys())
+        return f"VectorIndexOptions({args})"
 
 
 class ParadeDBField(ColumnElement[Any]):
@@ -128,6 +190,8 @@ def validate_paradedb_index(index: Index) -> None:
     key_field = with_options.get("key_field")
     if not key_field:
         raise MissingKeyFieldError("ParadeDB indexes require postgresql_with={'key_field': '<column>'}")
+
+    _validate_vector_index_options(with_options)
 
     field_names = {_paradedb_field_name(expr) for expr in index.expressions if isinstance(expr, ParadeDBField)}
     if key_field not in field_names:
@@ -351,6 +415,7 @@ def _introspect_paradedb_index_rows(conn, *, schema_name: str, table_name: str |
               idx.relname AS indexname,
               am.amname AS amname,
               pg_get_indexdef(idx.oid) AS indexdef,
+              idx.reloptions AS reloptions,
               split_part(opt.opt, '=', 2) AS key_field,
               key_ord.ord::int AS ordinality,
               pg_get_indexdef(idx.oid, key_ord.ord::int, true) AS keydef,

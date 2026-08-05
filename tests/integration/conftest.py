@@ -152,6 +152,19 @@ def assert_uses_paradedb_scan(session: Session, stmt, *, index_name: str = "prod
     assert_plan_uses_paradedb_scan(plan, index_name=index_name)
 
 
+MOCK_ITEMS_INDEX_EXPRESSIONS = ["id", "description", "category", "rating", "in_stock", "embedding vector_l2_ops"]
+
+
+def create_mock_items_index(conn, options_sql: str = "") -> None:
+    conn.execute(text("DROP INDEX IF EXISTS mock_items_search_idx"))
+    conn.execute(
+        text(
+            f"CREATE INDEX mock_items_search_idx ON mock_items USING paradedb "
+            f"({', '.join(MOCK_ITEMS_INDEX_EXPRESSIONS)}) WITH (key_field='id'{options_sql})"
+        )
+    )
+
+
 @pytest.fixture(scope="session")
 def paradedb_ready(engine: Engine) -> None:
     """Ensure ParadeDB mock_items table exists and is indexed."""
@@ -159,13 +172,7 @@ def paradedb_ready(engine: Engine) -> None:
         conn.execute(text("DROP INDEX IF EXISTS mock_items_search_idx"))
         conn.execute(text("DROP TABLE IF EXISTS mock_items"))
         conn.execute(text("CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items')"))
-        conn.execute(
-            text(
-                "CREATE INDEX mock_items_search_idx ON mock_items USING paradedb ("
-                "id, description, category, rating, in_stock, embedding vector_l2_ops"
-                ") WITH (key_field='id')"
-            )
-        )
+        create_mock_items_index(conn)
 
 
 @pytest.fixture()

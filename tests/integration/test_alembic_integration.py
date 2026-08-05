@@ -9,8 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
-from conftest import PARADEDB_SCAN_PROVIDERS
-from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField
+from conftest import MOCK_ITEMS_INDEX_EXPRESSIONS, PARADEDB_SCAN_PROVIDERS, create_mock_items_index
+from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField, VectorIndexOptions
 from paradedb.sqlalchemy.vector import Vector
 from paradedb.sqlalchemy import tokenizer
 
@@ -890,8 +890,8 @@ def test_alembic_multi_tokenizer_expression_lifecycle(engine):
         conn.execute(text(f'DROP TABLE IF EXISTS "{_MULTI_TABLE}" CASCADE'))
 
 
-def test_autogen_comparator_reports_no_vector_index_churn(engine, paradedb_ready):
-    """The MetaData twin of mock_items_search_idx (embedding vector_l2_ops) produces no autogen ops."""
+def _mock_items_metadata(**with_options) -> MetaData:
+    """The MetaData twin of mock_items_search_idx (embedding vector_l2_ops)."""
     metadata = MetaData()
     items = Table(
         "mock_items",
@@ -912,9 +912,130 @@ def test_autogen_comparator_reports_no_vector_index_churn(engine, paradedb_ready
         ParadeDBField(items.c.in_stock),
         VectorField(items.c.embedding),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
+        postgresql_with={"key_field": "id", **with_options},
     )
+    return metadata
 
-    upgrade_ops = _run_comparator(engine, metadata)
+
+def test_autogen_comparator_reports_no_vector_index_churn(engine, paradedb_ready):
+    upgrade_ops = _run_comparator(engine, _mock_items_metadata())
     vector_ops = [op for op in upgrade_ops.ops if getattr(op, "index_name", None) == "mock_items_search_idx"]
     assert vector_ops == [], f"Expected no autogen churn for vector index, got: {vector_ops}"
+
+
+# ---------------------------------------------------------------------------
+# Vector index WITH options (on the shared mock_items harness)
+# ---------------------------------------------------------------------------
+
+_MOCK_IDX = "mock_items_search_idx"
+_VIOPT_OPTIONS = {"centroid_ratio": 0.01, "training_samples_per_centroid": 32, "cluster_replication": 1}
+_VIOPT_OPTIONS_SQL = ", centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1"
+
+
+@pytest.fixture()
+def mock_items_index(engine, paradedb_ready):
+    """Restore the canonical mock_items_search_idx after tests that rebuild it with options."""
+    yield
+    with engine.begin() as conn:
+        create_mock_items_index(conn)
+
+
+def _index_reloptions(conn, index_name: str) -> list[str]:
+    return (
+        conn.execute(
+            text("SELECT reloptions FROM pg_class WHERE relname = :idx"),
+            {"idx": index_name},
+        ).scalar_one()
+        or []
+    )
+
+
+def test_alembic_create_index_with_options_sets_reloptions(engine, mock_items_index):
+    with engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        op = Operations(ctx)
+        op.drop_paradedb_index(_MOCK_IDX, if_exists=True)
+        op.create_paradedb_index(
+            _MOCK_IDX,
+            "mock_items",
+            MOCK_ITEMS_INDEX_EXPRESSIONS,
+            key_field="id",
+            with_options=VectorIndexOptions(**_VIOPT_OPTIONS),
+        )
+
+        reloptions = _index_reloptions(conn, _MOCK_IDX)
+        options = dict(opt.split("=", 1) for opt in reloptions)
+        assert float(options["centroid_ratio"]) == pytest.approx(0.01)
+        assert options["training_samples_per_centroid"] == "32"
+        assert options["cluster_replication"] == "1"
+
+
+def test_autogenerate_no_op_when_index_options_match(engine, mock_items_index):
+    with engine.begin() as conn:
+        create_mock_items_index(conn, _VIOPT_OPTIONS_SQL)
+    upgrade_ops = _run_comparator(engine, _mock_items_metadata(**_VIOPT_OPTIONS))
+    ops = [op for op in upgrade_ops.ops if getattr(op, "index_name", None) == _MOCK_IDX]
+    assert ops == [], f"Expected no autogen churn for matching index options, got: {ops}"
+
+
+def test_autogenerate_detects_missing_index_options(engine, mock_items_index):
+    """DB index has no options but MetaData declares them → drop + create with with_options."""
+    with engine.begin() as conn:
+        create_mock_items_index(conn)
+    upgrade_ops = _run_comparator(engine, _mock_items_metadata(centroid_ratio=0.02))
+
+    drop_ops = [
+        op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _MOCK_IDX
+    ]
+    create_ops = [
+        op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _MOCK_IDX
+    ]
+    assert len(drop_ops) == 1
+    assert len(create_ops) == 1
+    assert create_ops[0].with_options == VectorIndexOptions(centroid_ratio=0.02)
+
+
+def test_autogenerate_detects_changed_index_options(engine, mock_items_index):
+    with engine.begin() as conn:
+        create_mock_items_index(conn, _VIOPT_OPTIONS_SQL)
+    upgrade_ops = _run_comparator(engine, _mock_items_metadata(**{**_VIOPT_OPTIONS, "centroid_ratio": 0.5}))
+
+    drop_ops = [
+        op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _MOCK_IDX
+    ]
+    create_ops = [
+        op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _MOCK_IDX
+    ]
+    assert len(drop_ops) == 1
+    assert drop_ops[0].with_options is not None
+    assert len(create_ops) == 1
+    assert create_ops[0].with_options == VectorIndexOptions(**{**_VIOPT_OPTIONS, "centroid_ratio": 0.5})
+
+
+def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index):
+    """Apply the autogen create op with options, re-run comparator → no further ops."""
+    with engine.begin() as conn:
+        conn.execute(text(f'DROP INDEX IF EXISTS "{_MOCK_IDX}"'))
+    metadata = _mock_items_metadata(**_VIOPT_OPTIONS)
+    upgrade_ops = _run_comparator(engine, metadata)
+    create_ops = [
+        op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _MOCK_IDX
+    ]
+    assert len(create_ops) == 1
+
+    with engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        op = Operations(ctx)
+        op.create_paradedb_index(
+            create_ops[0].index_name,
+            create_ops[0].table_name,
+            create_ops[0].expressions,
+            key_field=create_ops[0].key_field,
+            table_schema=create_ops[0].table_schema,
+            where=create_ops[0].where,
+            with_options=create_ops[0].with_options,
+        )
+
+    upgrade_ops_after = _run_comparator(engine, metadata)
+    ops_after = [op for op in upgrade_ops_after.ops if getattr(op, "index_name", None) == _MOCK_IDX]
+    assert ops_after == [], f"Expected convergence after applying create op, got: {ops_after}"
