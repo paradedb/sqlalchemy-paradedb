@@ -44,6 +44,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
       - name: Validate version
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -72,49 +82,44 @@ jobs:
           echo "✅ Version validation passed"
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-
       - name: Build package
         run: |
-          pip install build twine
-          python -m build
-          twine check dist/*
+          uv tool run --from build pyproject-build
+          uv tool run --from twine twine check dist/*
           echo "✅ Package built and validated"
-
-      - name: Determine if latest
-        id: latest
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          npm install semver
-          LATEST=$(gh release list --jq '.[] | select(.isLatest == true) | .name' --json=name,isLatest | sed 's/^v//' || echo "0.0.0")
-          if npx semver -r ">${LATEST:-0.0.0}" "$VERSION"; then
-            echo "is_latest=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_latest=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ env.VERSION }}
-          target_commitish: ${{ github.ref_name }}
-          prerelease: ${{ github.event.inputs.beta }}
-          make_latest: ${{ steps.latest.outputs.is_latest }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          twine upload dist/*
+          uv tool run --from twine twine upload dist/*
           echo "✅ Published sqlalchemy-paradedb ${VERSION} to PyPI"
+
+      - name: Determine if latest
+        id: latest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh release list --jq '.[] | select(.isLatest == true) | .name' --json=name,isLatest | sed 's/^v//' || echo "0.0.0")
+          if npx --yes semver -r ">${LATEST:-0.0.0}" "${VERSION}"; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.event.inputs.beta }}
+          make_latest: ${{ steps.latest.outputs.is_latest }}
+          generate_release_notes: true
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Summary
         run: |
