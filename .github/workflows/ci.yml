@@ -61,8 +61,8 @@ jobs:
       - name: Check API coverage
         run: uv run --no-sync scripts/check_api_coverage.py
 
-      - name: Wheel install smoke test
-        run: bash scripts/smoke_wheel_install.sh
+      - name: Package install smoke test
+        run: bash scripts/smoke_package_install.sh
 
   matrix-tests:
     name: Python ${{ matrix.python-version }} / PG ${{ matrix.postgres-version }}
