@@ -15,7 +15,7 @@ if [[ "${SKIP_PARADEDB_START:-0}" != "1" ]]; then
   source "${SCRIPT_DIR}/run_paradedb.sh"
 fi
 
-PORT="${PARADEDB_PORT:-5443}"
+PORT="${PARADEDB_PORT:-5432}"
 USER="${PARADEDB_USER:-postgres}"
 PASSWORD="${PARADEDB_PASSWORD:-postgres}"
 DB="${PARADEDB_DB:-postgres}"
