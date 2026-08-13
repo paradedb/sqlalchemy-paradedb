@@ -6,6 +6,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from sqlalchemy.schema import CreateTable
 
+from paradedb import tokenizer
 from paradedb.sqlalchemy import expr as pdb_expr
 from paradedb.sqlalchemy import inspect as pdb_inspect
 from paradedb.sqlalchemy import search
@@ -81,10 +82,19 @@ def test_inspect_detects_fuzzy_predicate():
     boosted_fuzzy_stmt = select(products.c.id).where(
         search.match_any(products.c.description, "wirless", distance=1, boost=2)
     )
+    tokenized_fuzzy_stmt = select(products.c.id).where(
+        search.match_any(
+            products.c.description,
+            "wirless",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
     non_fuzzy_stmt = select(products.c.id).where(search.term(products.c.description, "wireless"))
 
     assert pdb_inspect.has_fuzzy_predicate(fuzzy_stmt)
     assert pdb_inspect.has_fuzzy_predicate(boosted_fuzzy_stmt)
+    assert pdb_inspect.has_fuzzy_predicate(tokenized_fuzzy_stmt)
     assert not pdb_inspect.has_fuzzy_predicate(non_fuzzy_stmt)
 
 

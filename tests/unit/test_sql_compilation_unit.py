@@ -248,6 +248,99 @@ WHERE products.description ||| 'running shoes'::pdb.whitespace"""
     )
 
 
+def test_match_all_fuzzy_with_tokenizer_compile():
+    stmt = select(products.c.id).where(
+        search.match_all(
+            products.c.description,
+            "running",
+            "shose",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == r"""SELECT products.id
+FROM products
+WHERE products.description &&& ARRAY['running', 'shose']::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1)"""
+    )
+
+
+def test_match_any_fuzzy_with_tokenizer_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(
+            products.c.description,
+            "runn",
+            prefix=True,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| 'runn'::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1, t)"""
+    )
+
+
+def test_term_fuzzy_with_tokenizer_compile():
+    stmt = select(products.c.id).where(
+        search.term(
+            products.c.description,
+            "shose",
+            transpose_cost_one=True,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == r"""SELECT products.id
+FROM products
+WHERE products.description === 'shose'::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1, f, t)"""
+    )
+
+
+def test_fuzzy_with_tokenizer_and_boost_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(
+            products.c.description,
+            "runnning",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+            boost=2.0,
+        )
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| 'runnning'::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1)::pdb.boost(2.0)"""
+    )
+
+
+def test_fuzzy_with_tokenizer_and_const_compile():
+    stmt = select(products.c.id).where(
+        search.match_any(
+            products.c.description,
+            "runnning",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+            const=1.0,
+        )
+    )
+    sql = _sql(stmt)
+    assert (
+        sql
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| 'runnning'::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1)::pdb.query::pdb.const(1.0)"""
+    )
+
+
 def test_match_all_with_str_enum_and_tokenizer_compile():
     stmt = select(products.c.id).where(
         search.match_all(products.c.description, SearchTerm.phrase, tokenizer=tokenizer.whitespace())

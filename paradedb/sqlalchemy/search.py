@@ -144,8 +144,8 @@ def match_all(
     tokenizer: Tokenizer | None = None,
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
-    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ALL, payload)
 
@@ -161,8 +161,8 @@ def match_any(
     tokenizer: Tokenizer | None = None,
 ) -> ColumnElement[bool]:
     payload = _to_term_payload(*terms)
-    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_MATCH_ANY, payload)
 
@@ -179,8 +179,8 @@ def term(
     tokenizer: Tokenizer | None = None,
 ) -> ColumnElement[bool]:
     payload: ClauseElement = _to_text_clause(value)
-    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_tokenizer(payload, tokenizer)
+    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
     payload = _apply_score_tuning(payload, boost=boost, const=const)
     return field.operate(_TERM, payload)
 

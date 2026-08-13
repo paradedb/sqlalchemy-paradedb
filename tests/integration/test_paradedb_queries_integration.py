@@ -182,6 +182,52 @@ def test_fuzzy_distance_2(mock_session):
     assert ids_d2 == RUNNING_IDS
 
 
+def test_match_any_fuzzy_with_tokenizer(mock_session):
+    """match_any(..., tokenizer=, distance=) tokenizes before fuzzy matching."""
+    stmt = select(MockItem.id).where(
+        search.match_any(
+            MockItem.description,
+            "runnning",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
+    ids = _ids(mock_session, stmt)
+    assert ids == RUNNING_IDS
+
+
+def test_match_all_fuzzy_with_tokenizer(mock_session):
+    """match_all(..., tokenizer=, distance=) applies fuzzy matching to every token."""
+    stmt = select(MockItem.id).where(
+        search.match_all(
+            MockItem.description,
+            "runnning",
+            "shoos",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
+    ids = _ids(mock_session, stmt)
+    assert ids == RUNNING_IDS
+
+
+def test_term_fuzzy_with_tokenizer(mock_session):
+    """term(..., tokenizer=, distance=) executes a tokenized fuzzy query."""
+    stmt = select(MockItem.id).where(
+        search.term(
+            MockItem.description,
+            "shoos",
+            distance=1,
+            tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+        )
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
+    ids = _ids(mock_session, stmt)
+    assert ids == SHOES_IDS
+
+
 def test_fuzzy_with_prefix(mock_session):
     """match_any(..., prefix=True) matches prefix expansions."""
     stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runn", distance=1, prefix=True))
@@ -210,11 +256,48 @@ def test_fuzzy_with_boost(mock_session):
     assert ids_base == ids_boost
 
 
+def test_fuzzy_with_tokenizer_and_boost(mock_session):
+    """Tokenizer and fuzzy casts can be chained before boost."""
+    query_tokenizer = tokenizer.regex_pattern(pattern=r"[^\s]+")
+    stmt_base = select(MockItem.id).where(
+        search.match_any(MockItem.description, "runnning", distance=1, tokenizer=query_tokenizer)
+    )
+    stmt_boost = select(MockItem.id).where(
+        search.match_any(MockItem.description, "runnning", distance=1, tokenizer=query_tokenizer, boost=2.0)
+    )
+    assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_search_idx")
+    ids_base = _ids(mock_session, stmt_base)
+    ids_boost = _ids(mock_session, stmt_boost)
+    assert ids_base == RUNNING_IDS
+    assert ids_boost == RUNNING_IDS
+
+
 def test_fuzzy_with_const(mock_session):
     """match_any(..., distance=, const=) bridges through query and executes."""
     stmt = (
         select(MockItem.id, pdb.score(MockItem.id).label("score"))
         .where(search.match_any(MockItem.description, "runnning", distance=1, const=1.0))
+        .order_by(MockItem.id)
+    )
+    assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
+    rows = mock_session.execute(stmt).all()
+    assert [row.id for row in rows] == sorted(RUNNING_IDS)
+    assert [row.score for row in rows] == [pytest.approx(1.0)]
+
+
+def test_fuzzy_with_tokenizer_and_const(mock_session):
+    """Tokenizer and fuzzy casts can be chained through query before const."""
+    stmt = (
+        select(MockItem.id, pdb.score(MockItem.id).label("score"))
+        .where(
+            search.match_any(
+                MockItem.description,
+                "runnning",
+                distance=1,
+                tokenizer=tokenizer.regex_pattern(pattern=r"[^\s]+"),
+                const=1.0,
+            )
+        )
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
