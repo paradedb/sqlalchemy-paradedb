@@ -29,7 +29,7 @@ def test_expr_helpers_execute(session):
 
 
 def test_inspect_detects_paradedb_predicates():
-    stmt = select(Product.id).where(search.match_all(Product.description, "running", "shoes"))
+    stmt = select(Product.id).where(search.match_all(Product.description, ["running", "shoes"]))
     assert pdb_inspect.has_paradedb_predicate(stmt)
     assert "&&&" in pdb_inspect.collect_paradedb_operators(stmt)
 

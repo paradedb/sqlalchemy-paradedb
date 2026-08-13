@@ -20,7 +20,6 @@ from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
 
 from paradedb.sqlalchemy import pdb, search, select_with, vector
-from paradedb.sqlalchemy.errors import InvalidArgumentError
 from paradedb.sqlalchemy.vector import Vector
 
 
@@ -54,7 +53,7 @@ def _sql(stmt) -> str:
 
 
 def test_match_all_multiple_terms_compile():
-    stmt = select(products.c.id).where(search.match_all(products.c.description, "running", "shoes"))
+    stmt = select(products.c.id).where(search.match_all(products.c.description, ["running", "shoes"]))
     sql = _sql(stmt)
     assert (
         sql
@@ -65,7 +64,9 @@ WHERE products.description &&& ARRAY['running', 'shoes']"""
 
 
 def test_phrase_with_slop_and_boost_compile():
-    stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", slop=2, boost=3))
+    stmt = select(products.c.id).where(
+        search.phrase(products.c.description, search.boost(search.slop("running shoes", 2), 3))
+    )
     sql = _sql(stmt)
     assert (
         sql
@@ -77,7 +78,7 @@ WHERE products.description ### 'running shoes'::pdb.slop(2)::pdb.boost(3)"""
 
 def test_term_fuzzy_compile_with_options():
     stmt = select(products.c.id).where(
-        search.term(products.c.description, "shose", distance=1, prefix=False, transpose_cost_one=True)
+        search.term(products.c.description, search.fuzzy("shose", 1, prefix=False, transpose_cost_one=True))
     )
     sql = _sql(stmt)
     assert (
@@ -90,7 +91,7 @@ WHERE products.description === 'shose'::pdb.fuzzy(1, f, t)"""
 
 def test_match_any_fuzzy_compile():
     stmt = select(products.c.id).where(
-        search.match_any(products.c.description, "running", "shose", distance=1, prefix=True)
+        search.match_any(products.c.description, search.fuzzy(["running", "shose"], 1, prefix=True))
     )
     sql = _sql(stmt)
     assert (
@@ -103,7 +104,7 @@ WHERE products.description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)"""
 
 def test_term_fuzzy_compile_with_transpose_implicit_prefix_slot():
     stmt = select(products.c.id).where(
-        search.term(products.c.description, "shose", distance=1, transpose_cost_one=True)
+        search.term(products.c.description, search.fuzzy("shose", 1, transpose_cost_one=True))
     )
     sql = _sql(stmt)
     assert (
@@ -158,14 +159,14 @@ WHERE products.id @@@ pdb.parse('running shoes', true, false)"""
 
 def test_search_helpers_accept_sql_expressions_compile():
     match_any_stmt = select(products.c.id).where(
-        search.match_any(products.c.description, func.trim("  running  "), "shoes")
+        search.match_any(products.c.description, [func.trim("  running  "), "shoes"])
     )
     match_all_stmt = select(products.c.id).where(
-        search.match_all(products.c.description, func.trim("  running  "), func.lower("SHOES"))
+        search.match_all(products.c.description, [func.trim("  running  "), func.lower("SHOES")])
     )
     term_stmt = select(products.c.id).where(search.term(products.c.description, func.trim("  running  ")))
     phrase_stmt = select(products.c.id).where(
-        search.phrase(products.c.description, func.trim("  running shoes  "), slop=2)
+        search.phrase(products.c.description, search.slop(func.trim("  running shoes  "), 2))
     )
     regex_stmt = select(products.c.id).where(search.regex(products.c.description, func.trim("run.*")))
     parse_stmt = select(products.c.id).where(search.parse(products.c.id, func.trim("description:sleek"), lenient=True))
@@ -237,7 +238,7 @@ WHERE products.description @@@ ((pdb.prox_regex(trim('run.*')) ## 1) ## trim('sh
 
 def test_match_any_with_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.match_any(products.c.description, "running shoes", tokenizer=tokenizer.whitespace())
+        search.match_any(products.c.description, search.tokenize("running shoes", tokenizer.whitespace()))
     )
     sql = _sql(stmt)
     assert (
@@ -250,7 +251,7 @@ WHERE products.description ||| 'running shoes'::pdb.whitespace"""
 
 def test_match_all_with_str_enum_and_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.match_all(products.c.description, SearchTerm.phrase, tokenizer=tokenizer.whitespace())
+        search.match_all(products.c.description, search.tokenize(SearchTerm.phrase, tokenizer.whitespace()))
     )
     sql = _sql(stmt)
     assert (
@@ -263,7 +264,7 @@ WHERE products.description &&& 'running shoes'::pdb.whitespace"""
 
 def test_match_all_multiple_str_enum_with_fuzzy_compile():
     stmt = select(products.c.id).where(
-        search.match_all(products.c.description, SearchTerm.running, SearchTerm.shoes, distance=1)
+        search.match_all(products.c.description, search.fuzzy([SearchTerm.running, SearchTerm.shoes], 1))
     )
     sql = _sql(stmt)
     assert (
@@ -276,7 +277,7 @@ WHERE products.description &&& ARRAY['running', 'shoes']::pdb.fuzzy(1)"""
 
 def test_match_any_with_str_enum_and_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.match_any(products.c.description, SearchTerm.phrase, tokenizer=tokenizer.whitespace())
+        search.match_any(products.c.description, search.tokenize(SearchTerm.phrase, tokenizer.whitespace()))
     )
     sql = _sql(stmt)
     assert (
@@ -289,7 +290,7 @@ WHERE products.description ||| 'running shoes'::pdb.whitespace"""
 
 def test_match_any_multiple_str_enum_with_fuzzy_compile():
     stmt = select(products.c.id).where(
-        search.match_any(products.c.description, SearchTerm.running, SearchTerm.typo, distance=1, prefix=True)
+        search.match_any(products.c.description, search.fuzzy([SearchTerm.running, SearchTerm.typo], 1, prefix=True))
     )
     sql = _sql(stmt)
     assert (
@@ -302,7 +303,7 @@ WHERE products.description ||| ARRAY['running', 'shose']::pdb.fuzzy(1, t)"""
 
 def test_phrase_with_tokenizer_compile():
     stmt = select(products.c.id).where(
-        search.phrase(products.c.description, "running shoes", tokenizer=tokenizer.whitespace())
+        search.phrase(products.c.description, search.tokenize("running shoes", tokenizer.whitespace()))
     )
     sql = _sql(stmt)
     assert (
@@ -314,7 +315,7 @@ WHERE products.description ### 'running shoes'::pdb.whitespace"""
 
 
 def test_phrase_with_str_enum_and_slop_compile():
-    stmt = select(products.c.id).where(search.phrase(products.c.description, SearchTerm.phrase, slop=2))
+    stmt = select(products.c.id).where(search.phrase(products.c.description, search.slop(SearchTerm.phrase, 2)))
     sql = _sql(stmt)
     assert (
         sql
@@ -325,7 +326,7 @@ WHERE products.description ### 'running shoes'::pdb.slop(2)"""
 
 
 def test_phrase_pretokenized_with_slop_compile():
-    stmt = select(products.c.id).where(search.phrase(products.c.description, ["shoes", "running"], slop=2))
+    stmt = select(products.c.id).where(search.phrase(products.c.description, search.slop(["shoes", "running"], 2)))
     sql = _sql(stmt)
     assert (
         sql
@@ -362,7 +363,9 @@ WHERE products.description @@@ pdb.regex_phrase(ARRAY['running', 'shoes'], 1)"""
 
 
 def test_phrase_with_slop_and_const_compile():
-    stmt = select(products.c.id).where(search.phrase(products.c.description, "running shoes", slop=2, const=1.0))
+    stmt = select(products.c.id).where(
+        search.phrase(products.c.description, search.constant(search.slop("running shoes", 2), 1.0))
+    )
     sql = _sql(stmt)
     assert (
         sql
@@ -373,7 +376,7 @@ WHERE products.description ### 'running shoes'::pdb.slop(2)::pdb.query::pdb.cons
 
 
 def test_term_fuzzy_with_str_enum_compile():
-    stmt = select(products.c.id).where(search.term(products.c.description, SearchTerm.typo, distance=1))
+    stmt = select(products.c.id).where(search.term(products.c.description, search.fuzzy(SearchTerm.typo, 1)))
     sql = _sql(stmt)
     assert (
         sql
@@ -384,7 +387,7 @@ WHERE products.description === 'shose'::pdb.fuzzy(1)"""
 
 
 def test_regex_boost_compile():
-    stmt = select(products.c.id).where(search.regex(products.c.description, "key.*", boost=2.0))
+    stmt = select(products.c.id).where(search.boost(search.regex(products.c.description, "key.*"), 2.0))
     sql = _sql(stmt)
     assert (
         sql
@@ -395,7 +398,9 @@ WHERE products.description @@@ pdb.regex('key.*')::pdb.boost(2.0)"""
 
 
 def test_match_any_fuzzy_with_const_compile():
-    stmt = select(products.c.id).where(search.match_any(products.c.description, "shose", distance=2, const=1.0))
+    stmt = select(products.c.id).where(
+        search.match_any(products.c.description, search.constant(search.fuzzy("shose", 2), 1.0))
+    )
     sql = _sql(stmt)
     assert (
         sql
@@ -406,7 +411,7 @@ WHERE products.description ||| 'shose'::pdb.fuzzy(2)::pdb.query::pdb.const(1.0)"
 
 
 def test_match_any_const_compile():
-    stmt = select(products.c.id).where(search.match_any(products.c.description, "shoes", const=1.0))
+    stmt = select(products.c.id).where(search.match_any(products.c.description, search.constant("shoes", 1.0)))
     sql = _sql(stmt)
     assert (
         sql
@@ -489,9 +494,9 @@ WHERE products.description ||| 'running'"""
     )
 
 
-def test_match_all_requires_terms():
-    with pytest.raises(ValueError, match="at least one search term"):
-        search.match_all(products.c.description)
+def test_match_all_requires_value():
+    with pytest.raises(ValueError, match="value must contain at least one token"):
+        search.match_all(products.c.description, [])
 
 
 def test_snippet_requires_both_tags():
@@ -569,7 +574,7 @@ WHERE products.description @@@ ((pdb.prox_regex('run.*') ## 1) ## 'shoes')"""
 
 def test_proximity_query_with_boost():
     prox_stmt = select(products.c.id).where(
-        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe"), boost=1.24)
+        search.boost(search.proximity(products.c.description, search.prox_str("running").within(2, "shoe")), 1.24)
     )
 
     assert (
@@ -582,7 +587,7 @@ WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.boost(1.24)"""
 
 def test_proximity_query_with_const():
     prox_stmt = select(products.c.id).where(
-        search.proximity(products.c.description, search.prox_str("running").within(2, "shoe"), const=1.25)
+        search.constant(search.proximity(products.c.description, search.prox_str("running").within(2, "shoe")), 1.25)
     )
 
     assert (
@@ -591,13 +596,6 @@ def test_proximity_query_with_const():
 FROM products
 WHERE products.description @@@ (('running' ## 2) ## 'shoe')::pdb.const(1.25)"""
     )
-
-
-def test_proximity_error_is_thrown_if_boost_and_const_are_both_set():
-    with pytest.raises(InvalidArgumentError, match="boost and const cannot both be set at the same time"):
-        _ = search.proximity(
-            products.c.description, search.prox_str("running").within(2, "shoe"), const=1.25, boost=123
-        )
 
 
 def test_proximity_terms_are_escaped_properly():
@@ -746,7 +744,7 @@ def test_alias_subquery_cte_compile():
     aliased_stmt = select(ProductAlias.c.id).where(search.match_any(ProductAlias.c.description, "running"))
 
     sq = select(products.c.id.label("pid"), products.c.description.label("description")).subquery("sq")
-    sq_stmt = select(sq.c.pid).where(search.match_all(sq.c.description, "running", "shoes"))
+    sq_stmt = select(sq.c.pid).where(search.match_all(sq.c.description, ["running", "shoes"]))
 
     cte = select(products.c.id.label("pid"), products.c.description.label("description")).cte("base")
     cte_stmt = select(cte.c.pid).where(search.match_any(cte.c.description, "wireless"))

@@ -35,7 +35,7 @@ def test_search_with_subquery_columns(session):
         Product.id.label("pid"),
         Product.description.label("description"),
     ).subquery()
-    stmt = select(sq.c.pid).where(search.match_all(sq.c.description, "running", "shoes")).order_by(sq.c.pid)
+    stmt = select(sq.c.pid).where(search.match_all(sq.c.description, ["running", "shoes"])).order_by(sq.c.pid)
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [1, 2]

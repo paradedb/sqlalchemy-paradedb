@@ -60,7 +60,7 @@ def test_range_query_with_op_and_all_predicate(engine):
             stmt_with_text = (
                 select(items.c.id)
                 .where(items.c.weight_range.op("@>")(5))
-                .where(search.match_any(items.c.description, "running", "camera"))
+                .where(search.match_any(items.c.description, ["running", "camera"]))
                 .order_by(items.c.id)
             )
             assert_uses_paradedb_scan(session, stmt_with_text, index_name="range_items_search_idx")

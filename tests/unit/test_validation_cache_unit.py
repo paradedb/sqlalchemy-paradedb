@@ -32,10 +32,10 @@ def _sql(stmt) -> str:
 
 def test_search_argument_validation_errors():
     with pytest.raises(InvalidArgumentError, match="distance must be between 0 and 2"):
-        search.term(products.c.description, "oops", distance=3)
+        search.fuzzy("oops", 3)
 
     with pytest.raises(InvalidArgumentError, match="slop must be >= 0"):
-        search.phrase(products.c.description, "running shoes", slop=-1)
+        search.slop("running shoes", -1)
 
     with pytest.raises(InvalidArgumentError, match="max_expansions must be > 0"):
         search.phrase_prefix(products.c.description, ["running"], max_expansions=0)
@@ -57,9 +57,6 @@ def test_search_argument_validation_errors():
 
     with pytest.raises(InvalidArgumentError, match="relation is only supported"):
         search.range_term(products.c.id, 1, relation="Contains")
-
-    with pytest.raises(InvalidArgumentError, match="mutually exclusive"):
-        search.match_any(products.c.description, "shoes", boost=2.0, const=1.0)
 
 
 def test_more_like_this_uses_specific_error_type():
