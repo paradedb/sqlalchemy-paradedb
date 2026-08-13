@@ -40,17 +40,17 @@ def _ids(session, stmt) -> set[int]:
 
 def test_match_any_or_semantics(mock_session):
     """match_any on multiple terms performs OR search."""
-    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "running", "wireless"))
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, ["running", "wireless"]))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     ids = _ids(mock_session, stmt)
     assert ids == RUNNING_OR_WIRELESS_IDS
 
 
 def test_match_any_custom_tokenizer(mock_session):
-    """match_any(..., tokenizer=) uses explicit query tokenization."""
+    """tokenize() uses explicit query tokenization."""
     stmt_default = select(MockItem.id).where(search.match_any(MockItem.description, "running shoes"))
     stmt_custom = select(MockItem.id).where(
-        search.match_any(MockItem.description, "running shoes", tokenizer=tokenizer.whitespace())
+        search.match_any(MockItem.description, search.tokenize("running shoes", tokenizer.whitespace()))
     )
     assert_uses_paradedb_scan(mock_session, stmt_custom, index_name="mock_items_search_idx")
     ids_default = _ids(mock_session, stmt_default)
@@ -61,8 +61,8 @@ def test_match_any_custom_tokenizer(mock_session):
 
 def test_match_all_and_semantics(mock_session):
     """match_all requires all terms to be present (AND search)."""
-    stmt_all = select(MockItem.id).where(search.match_all(MockItem.description, "running", "shoes"))
-    stmt_any = select(MockItem.id).where(search.match_any(MockItem.description, "running", "shoes"))
+    stmt_all = select(MockItem.id).where(search.match_all(MockItem.description, ["running", "shoes"]))
+    stmt_any = select(MockItem.id).where(search.match_any(MockItem.description, ["running", "shoes"]))
     assert_uses_paradedb_scan(mock_session, stmt_all, index_name="mock_items_search_idx")
     ids_all = _ids(mock_session, stmt_all)
     ids_any = _ids(mock_session, stmt_any)
@@ -89,7 +89,7 @@ def test_phrase_match(mock_session):
 def test_phrase_with_slop(mock_session):
     """phrase() with slop allows intervening tokens."""
     stmt_exact = select(MockItem.id).where(search.phrase(MockItem.description, "running shoes"))
-    stmt_slop = select(MockItem.id).where(search.phrase(MockItem.description, "running shoes", slop=2))
+    stmt_slop = select(MockItem.id).where(search.phrase(MockItem.description, search.slop("running shoes", 2)))
     assert_uses_paradedb_scan(mock_session, stmt_slop, index_name="mock_items_search_idx")
     ids_slop = _ids(mock_session, stmt_slop)
     ids_exact = _ids(mock_session, stmt_exact)
@@ -98,10 +98,10 @@ def test_phrase_with_slop(mock_session):
 
 
 def test_phrase_with_slop_and_const(mock_session):
-    """phrase(..., slop=, const=) bridges through query and executes."""
+    """constant(slop(...)) bridges through query and executes."""
     stmt = (
         select(MockItem.id, pdb.score(MockItem.id).label("score"))
-        .where(search.phrase(MockItem.description, "running shoes", slop=2, const=1.0))
+        .where(search.phrase(MockItem.description, search.constant(search.slop("running shoes", 2), 1.0)))
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
@@ -111,10 +111,10 @@ def test_phrase_with_slop_and_const(mock_session):
 
 
 def test_phrase_custom_tokenizer(mock_session):
-    """phrase(..., tokenizer=) uses explicit query tokenization."""
+    """phrase() accepts a tokenized value."""
     stmt_default = select(MockItem.id).where(search.phrase(MockItem.description, "running shoes"))
     stmt_custom = select(MockItem.id).where(
-        search.phrase(MockItem.description, "running shoes", tokenizer=tokenizer.whitespace())
+        search.phrase(MockItem.description, search.tokenize("running shoes", tokenizer.whitespace()))
     )
     assert_uses_paradedb_scan(mock_session, stmt_custom, index_name="mock_items_search_idx")
     ids_default = _ids(mock_session, stmt_default)
@@ -133,7 +133,7 @@ def test_phrase_pretokenized(mock_session):
 
 def test_phrase_pretokenized_with_slop(mock_session):
     """phrase() supports slop for token arrays."""
-    stmt = select(MockItem.id).where(search.phrase(MockItem.description, ["shoes", "running"], slop=2))
+    stmt = select(MockItem.id).where(search.phrase(MockItem.description, search.slop(["shoes", "running"], 2)))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     ids = _ids(mock_session, stmt)
     assert ids == RUNNING_IDS
@@ -148,9 +148,9 @@ def test_regex_match(mock_session):
 
 
 def test_regex_boost_preserves_matches(mock_session):
-    """regex(..., boost=) only changes scoring, not match set."""
+    """boost(regex(...)) only changes scoring, not match set."""
     stmt_base = select(MockItem.id).where(search.regex(MockItem.description, "run.*"))
-    stmt_boost = select(MockItem.id).where(search.regex(MockItem.description, "run.*", boost=2.0))
+    stmt_boost = select(MockItem.id).where(search.boost(search.regex(MockItem.description, "run.*"), 2.0))
     assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_search_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)
@@ -164,17 +164,17 @@ def test_regex_boost_preserves_matches(mock_session):
 
 
 def test_fuzzy_distance_1(mock_session):
-    """match_any(..., distance=1) catches single-character typos."""
-    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
+    """fuzzy(..., 1) catches single-character typos."""
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, search.fuzzy("runnning", 1)))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     ids = _ids(mock_session, stmt)
     assert ids == RUNNING_IDS
 
 
 def test_fuzzy_distance_2(mock_session):
-    """match_any(..., distance=2) catches two-character typos."""
-    stmt_d1 = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
-    stmt_d2 = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=2))
+    """fuzzy(..., 2) catches two-character typos."""
+    stmt_d1 = select(MockItem.id).where(search.match_any(MockItem.description, search.fuzzy("runnning", 1)))
+    stmt_d2 = select(MockItem.id).where(search.match_any(MockItem.description, search.fuzzy("runnning", 2)))
     assert_uses_paradedb_scan(mock_session, stmt_d2, index_name="mock_items_search_idx")
     ids_d1 = _ids(mock_session, stmt_d1)
     ids_d2 = _ids(mock_session, stmt_d2)
@@ -183,17 +183,17 @@ def test_fuzzy_distance_2(mock_session):
 
 
 def test_fuzzy_with_prefix(mock_session):
-    """match_any(..., prefix=True) matches prefix expansions."""
-    stmt = select(MockItem.id).where(search.match_any(MockItem.description, "runn", distance=1, prefix=True))
+    """fuzzy(..., prefix=True) matches prefix expansions."""
+    stmt = select(MockItem.id).where(search.match_any(MockItem.description, search.fuzzy("runn", 1, prefix=True)))
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     ids = _ids(mock_session, stmt)
     assert ids == RUNNING_IDS
 
 
 def test_fuzzy_with_transpose_cost_one(mock_session):
-    """match_any(..., transpose_cost_one=True) treats transpositions as single edits."""
+    """fuzzy(..., transpose_cost_one=True) treats transpositions as single edits."""
     stmt = select(MockItem.id).where(
-        search.match_any(MockItem.description, "rnnuing", distance=2, transpose_cost_one=True)
+        search.match_any(MockItem.description, search.fuzzy("rnnuing", 2, transpose_cost_one=True))
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     ids = _ids(mock_session, stmt)
@@ -201,9 +201,11 @@ def test_fuzzy_with_transpose_cost_one(mock_session):
 
 
 def test_fuzzy_with_boost(mock_session):
-    """match_any(..., boost=) does not change the result set, only scores."""
-    stmt_base = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1))
-    stmt_boost = select(MockItem.id).where(search.match_any(MockItem.description, "runnning", distance=1, boost=2.0))
+    """boost(fuzzy(...)) does not change the result set, only scores."""
+    stmt_base = select(MockItem.id).where(search.match_any(MockItem.description, search.fuzzy("runnning", 1)))
+    stmt_boost = select(MockItem.id).where(
+        search.match_any(MockItem.description, search.boost(search.fuzzy("runnning", 1), 2.0))
+    )
     assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_search_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)
@@ -211,10 +213,10 @@ def test_fuzzy_with_boost(mock_session):
 
 
 def test_fuzzy_with_const(mock_session):
-    """match_any(..., distance=, const=) bridges through query and executes."""
+    """constant(fuzzy(...)) bridges through query and executes."""
     stmt = (
         select(MockItem.id, pdb.score(MockItem.id).label("score"))
-        .where(search.match_any(MockItem.description, "runnning", distance=1, const=1.0))
+        .where(search.match_any(MockItem.description, search.constant(search.fuzzy("runnning", 1), 1.0)))
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
@@ -224,10 +226,10 @@ def test_fuzzy_with_const(mock_session):
 
 
 def test_match_any_const_sets_constant_score(mock_session):
-    """match_any(..., const=) assigns a constant score to every match."""
+    """constant() assigns a constant score to every match."""
     stmt = (
         select(MockItem.id, pdb.score(MockItem.id).label("score"))
-        .where(search.match_any(MockItem.description, "shoes", const=1.0))
+        .where(search.match_any(MockItem.description, search.constant("shoes", 1.0)))
         .order_by(MockItem.id)
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
@@ -387,7 +389,7 @@ def test_score_ordering_descending(mock_session):
     """Higher-relevance results appear first when ordering by score desc."""
     stmt = (
         select(MockItem.id, pdb.score(MockItem.id).label("score"))
-        .where(search.match_all(MockItem.description, "running", "shoes"))
+        .where(search.match_all(MockItem.description, ["running", "shoes"]))
         .order_by(pdb.score(MockItem.id).desc(), MockItem.id.asc())
     )
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
@@ -398,9 +400,9 @@ def test_score_ordering_descending(mock_session):
 
 
 def test_boost_does_not_change_result_set(mock_session):
-    """boost= only affects score, not which rows match."""
+    """boost() only affects score, not which rows match."""
     stmt_base = select(MockItem.id).where(search.match_any(MockItem.description, "shoes"))
-    stmt_boost = select(MockItem.id).where(search.match_any(MockItem.description, "shoes", boost=2.0))
+    stmt_boost = select(MockItem.id).where(search.match_any(MockItem.description, search.boost("shoes", 2.0)))
     assert_uses_paradedb_scan(mock_session, stmt_boost, index_name="mock_items_search_idx")
     ids_base = _ids(mock_session, stmt_base)
     ids_boost = _ids(mock_session, stmt_boost)

@@ -36,6 +36,7 @@ _PROXIMITY: Any = operators.custom_op("##", precedence=5)
 _PROXIMITY_ORDERED: Any = operators.custom_op("##>", precedence=5)
 _PDB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _TextClause = str | ClauseElement
+_SearchValue = _TextClause | Sequence[_TextClause]
 _TOKENIZER_PARAMS = Sequence[Any]
 
 
@@ -57,42 +58,9 @@ def _inline_string_literal(value: str) -> ClauseElement:
     return literal_column("'" + value.replace("'", "''") + "'", Text())
 
 
-def _to_term_payload(*terms: _TextClause) -> ClauseElement:
-    if not terms:
-        raise InvalidArgumentError("at least one search term is required")
-    if len(terms) == 1:
-        return _to_text_clause(terms[0])
-    return _text_array(terms)
-
-
-def _apply_boost(expr: ClauseElement, boost: float | None) -> ClauseElement:
-    if boost is None:
-        return expr
-    return PDBCast(expr, "boost", (boost,))
-
-
-def _apply_const(expr: ClauseElement, const: float | None) -> ClauseElement:
-    if const is None:
-        return expr
-    if isinstance(expr, PDBCast) and expr.type_name in {"fuzzy", "slop"}:
-        expr = PDBCast(expr, "query")
-    return PDBCast(expr, "const", (const,))
-
-
-def _apply_tokenizer(
-    expr: ClauseElement,
-    tokenizer: Tokenizer | None,
-) -> ClauseElement:
-    if tokenizer is None:
-        return expr
-    return PDBCast(expr, None, raw_cast=tokenizer.render())
-
-
-def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElement:
-    if isinstance(value, str):
-        return _text_literal(value)
-    if isinstance(value, ClauseElement):
-        return value
+def _to_search_value(value: _SearchValue) -> ClauseElement:
+    if isinstance(value, (str, ClauseElement)):
+        return _to_text_clause(value)
     if not isinstance(value, Sequence):
         raise InvalidArgumentError("value must be a string, SQL expression, or a sequence of those values")
     if not value:
@@ -100,124 +68,80 @@ def _to_phrase_payload(value: _TextClause | Sequence[_TextClause]) -> ClauseElem
     return _text_array(value)
 
 
-def _apply_score_tuning(
-    expr: ClauseElement,
-    *,
-    boost: float | None = None,
-    const: float | None = None,
-) -> ClauseElement:
-    if boost is not None and const is not None:
-        raise InvalidArgumentError("boost and const are mutually exclusive")
-    expr = _apply_boost(expr, boost)
-    return _apply_const(expr, const)
+def boost(value: _SearchValue, factor: float) -> ClauseElement:
+    return PDBCast(_to_search_value(value), "boost", (factor,))
 
 
-def _apply_fuzzy(
-    expr: ClauseElement,
-    *,
-    distance: int | None = None,
-    prefix: bool = False,
-    transpose_cost_one: bool = False,
+def constant(value: _SearchValue, score: float) -> ClauseElement:
+    expr = _to_search_value(value)
+    if isinstance(expr, PDBCast) and expr.type_name in {"fuzzy", "slop"}:
+        expr = PDBCast(expr, "query")
+    return PDBCast(expr, "const", (score,))
+
+
+def slop(value: _SearchValue, n: int) -> ClauseElement:
+    require_non_negative(n, field_name="slop")
+    expr = _to_search_value(value)
+    if isinstance(value, Sequence) and not isinstance(value, (str, ClauseElement)):
+        expr = cast(expr, ARRAY(Text()))
+    return PDBCast(expr, "slop", (n,))
+
+
+def fuzzy(
+    value: _SearchValue,
+    distance: int,
+    prefix: bool | None = None,
+    transpose_cost_one: bool | None = None,
 ) -> ClauseElement:
-    if distance is not None and (distance < 0 or distance > 2):
+    if distance < 0 or distance > 2:
         raise InvalidArgumentError("distance must be between 0 and 2")
-
-    if distance is None and not prefix and not transpose_cost_one:
-        return expr
-
-    args: list[object] = [1 if distance is None else distance]
-    if prefix or transpose_cost_one:
+    args: list[object] = [distance]
+    if prefix is not None:
         args.append(prefix)
-    if transpose_cost_one:
-        args.append(True)
-    return PDBCast(expr, "fuzzy", args)
+    if transpose_cost_one is not None:
+        if prefix is None:
+            args.append(False)
+        args.append(transpose_cost_one)
+    return PDBCast(_to_search_value(value), "fuzzy", args)
+
+
+def tokenize(value: _SearchValue, tokenizer: Tokenizer) -> ClauseElement:
+    return PDBCast(_to_search_value(value), None, raw_cast=tokenizer.render())
 
 
 def match_all(
     field: ColumnElement,
-    *terms: _TextClause,
-    boost: float | None = None,
-    const: float | None = None,
-    distance: int | None = None,
-    prefix: bool = False,
-    transpose_cost_one: bool = False,
-    tokenizer: Tokenizer | None = None,
+    value: _SearchValue,
 ) -> ColumnElement[bool]:
-    payload = _to_term_payload(*terms)
-    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer)
-    payload = _apply_score_tuning(payload, boost=boost, const=const)
-    return field.operate(_MATCH_ALL, payload)
+    return field.operate(_MATCH_ALL, _to_search_value(value))
 
 
 def match_any(
     field: ColumnElement,
-    *terms: _TextClause,
-    boost: float | None = None,
-    const: float | None = None,
-    distance: int | None = None,
-    prefix: bool = False,
-    transpose_cost_one: bool = False,
-    tokenizer: Tokenizer | None = None,
+    value: _SearchValue,
 ) -> ColumnElement[bool]:
-    payload = _to_term_payload(*terms)
-    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer)
-    payload = _apply_score_tuning(payload, boost=boost, const=const)
-    return field.operate(_MATCH_ANY, payload)
+    return field.operate(_MATCH_ANY, _to_search_value(value))
 
 
 def term(
     field: ColumnElement,
-    value: _TextClause,
-    boost: float | None = None,
-    const: float | None = None,
-    *,
-    distance: int | None = None,
-    prefix: bool = False,
-    transpose_cost_one: bool = False,
-    tokenizer: Tokenizer | None = None,
+    value: _SearchValue,
 ) -> ColumnElement[bool]:
-    payload: ClauseElement = _to_text_clause(value)
-    payload = _apply_fuzzy(payload, distance=distance, prefix=prefix, transpose_cost_one=transpose_cost_one)
-    payload = _apply_tokenizer(payload, tokenizer)
-    payload = _apply_score_tuning(payload, boost=boost, const=const)
-    return field.operate(_TERM, payload)
+    return field.operate(_TERM, _to_search_value(value))
 
 
 def phrase(
     field: ColumnElement,
-    value: _TextClause | Sequence[_TextClause],
-    *,
-    slop: int | None = None,
-    boost: float | None = None,
-    const: float | None = None,
-    tokenizer: Tokenizer | None = None,
+    value: _SearchValue,
 ) -> ColumnElement[bool]:
-    if slop is not None:
-        require_non_negative(slop, field_name="slop")
-    is_token_array = isinstance(value, Sequence) and not isinstance(value, (str, ClauseElement))
-    payload: ClauseElement = _to_phrase_payload(value)
-    payload = _apply_tokenizer(payload, tokenizer)
-    if slop is not None:
-        # psycopg binds array elements as VARCHAR by default; slop cast requires TEXT[].
-        if is_token_array:
-            payload = cast(payload, ARRAY(Text()))
-        payload = PDBCast(payload, "slop", (slop,))
-    payload = _apply_score_tuning(payload, boost=boost, const=const)
-    return field.operate(_PHRASE, payload)
+    return field.operate(_PHRASE, _to_search_value(value))
 
 
 def regex(
     field: ColumnElement,
     pattern: _TextClause,
-    *,
-    boost: float | None = None,
-    const: float | None = None,
 ) -> ColumnElement[bool]:
-    payload: ClauseElement = func.pdb.regex(_to_text_clause(pattern))
-    payload = _apply_score_tuning(payload, boost=boost, const=const)
-    return field.operate(_QUERY, payload)
+    return field.operate(_QUERY, func.pdb.regex(_to_text_clause(pattern)))
 
 
 def all(field: ColumnElement) -> ColumnElement[bool]:
@@ -259,16 +183,8 @@ def prox_str(clause: _TextClause) -> ProximityExpr:
     return ProximityExpr(_to_proximity_operand(clause))
 
 
-def proximity(
-    field: ColumnElement, prox: ProximityExpr | ClauseElement, boost: float | None = None, const: float | None = None
-) -> ColumnElement[bool]:
+def proximity(field: ColumnElement, prox: ProximityExpr | ClauseElement) -> ColumnElement[bool]:
     prox_expr = prox.expr if isinstance(prox, ProximityExpr) else prox
-    if boost is not None and const is not None:
-        raise InvalidArgumentError("boost and const cannot both be set at the same time")
-    if boost is not None:
-        prox_expr = PDBCast(prox_expr.self_group(), "boost", (boost,))
-    if const is not None:
-        prox_expr = PDBCast(prox_expr.self_group(), "const", (const,))
     return field.operate(_QUERY, prox_expr)
 
 

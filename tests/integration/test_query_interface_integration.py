@@ -26,7 +26,7 @@ def _sql(stmt) -> str:
 
 
 def test_match_all_returns_expected_rows(session):
-    stmt = select(Product.id).where(search.match_all(Product.description, "running", "shoes")).order_by(Product.id)
+    stmt = select(Product.id).where(search.match_all(Product.description, ["running", "shoes"])).order_by(Product.id)
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [1, 2]
@@ -54,16 +54,37 @@ def test_regex_match(session):
 
 
 def test_fuzzy_match(session):
-    stmt = select(Product.id).where(search.match_any(Product.description, "wirless", distance=1))
+    stmt = select(Product.id).where(search.match_any(Product.description, search.fuzzy("wirless", 1)))
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == WIRELESS_PRODUCT_IDS
 
 
+def test_fuzzy_with_tokenizer_applies_tokenizer_first(session):
+    stmt = (
+        select(Product.id)
+        .where(
+            search.match_any(
+                Product.description,
+                search.fuzzy(search.tokenize("runnning", tokenizer.regex_pattern(r"[^\s]+")), 1),
+            )
+        )
+        .order_by(Product.id)
+    )
+
+    assert list(session.scalars(stmt)) == RUNNING_PRODUCT_IDS
+    assert (
+        _sql(stmt)
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| 'runnning'::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1) ORDER BY products.id"""
+    )
+
+
 def test_score_and_ordering(session):
     stmt = (
         select(Product.id, pdb.score(Product.id).label("score"))
-        .where(search.match_all(Product.description, "running", "shoes"))
+        .where(search.match_all(Product.description, ["running", "shoes"]))
         .order_by(pdb.score(Product.id).desc(), Product.id.asc())
     )
     assert_uses_paradedb_scan(session, stmt)
@@ -98,19 +119,25 @@ def test_select_with_helpers(session):
 
 
 def test_select_with_snippet_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(
+        search.match_any(Product.description, search.fuzzy("wirless", 1))
+    )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet(base, Product.description)
 
 
 def test_select_with_snippets_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(
+        search.match_any(Product.description, search.fuzzy("wirless", 1))
+    )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippets(base, Product.description)
 
 
 def test_select_with_snippet_positions_rejects_fuzzy_predicate():
-    base = select(Product.id, Product.description).where(search.match_any(Product.description, "wirless", distance=1))
+    base = select(Product.id, Product.description).where(
+        search.match_any(Product.description, search.fuzzy("wirless", 1))
+    )
     with pytest.raises(SnippetWithFuzzyPredicateError):
         select_with.snippet_positions(base, Product.description)
 
@@ -165,7 +192,7 @@ def test_agg_function_projection(session):
 def test_all_tokenizers(session, expected: str, tokenizer: Tokenizer) -> None:
     stmt = (
         select(Product.id)
-        .where(search.match_all(Product.description, "running shoes", tokenizer=tokenizer))
+        .where(search.match_all(Product.description, search.tokenize("running shoes", tokenizer)))
         .order_by(Product.id)
     )
     assert_uses_paradedb_scan(session, stmt)
