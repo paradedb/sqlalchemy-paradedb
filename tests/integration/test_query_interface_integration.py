@@ -60,6 +60,27 @@ def test_fuzzy_match(session):
     assert ids == WIRELESS_PRODUCT_IDS
 
 
+def test_fuzzy_with_tokenizer_applies_tokenizer_first(session):
+    stmt = (
+        select(Product.id)
+        .where(
+            search.match_any(
+                Product.description,
+                search.fuzzy(search.tokenize("runnning", tokenizer.regex_pattern(r"[^\s]+")), 1),
+            )
+        )
+        .order_by(Product.id)
+    )
+
+    assert list(session.scalars(stmt)) == RUNNING_PRODUCT_IDS
+    assert (
+        _sql(stmt)
+        == r"""SELECT products.id
+FROM products
+WHERE products.description ||| 'runnning'::pdb.regex_pattern('[^\s]+')::pdb.fuzzy(1) ORDER BY products.id"""
+    )
+
+
 def test_score_and_ordering(session):
     stmt = (
         select(Product.id, pdb.score(Product.id).label("score"))
