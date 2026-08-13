@@ -13,7 +13,7 @@ def main() -> None:
 
     stmt = (
         select(Product.id, Product.description)
-        .where(search.match_any(Product.description, "runnning", distance=1))
+        .where(search.match_any(Product.description, search.fuzzy("runnning", 1)))
         .order_by(Product.id)
         .limit(5)
     )

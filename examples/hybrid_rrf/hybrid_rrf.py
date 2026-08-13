@@ -19,7 +19,7 @@ def main() -> None:
             Product.id.label("id"),
             func.row_number().over(order_by=pdb.score(Product.id).desc()).label("rank"),
         )
-        .where(search.match_any(Product.description, *query.split()))
+        .where(search.match_any(Product.description, query.split()))
         .order_by(pdb.score(Product.id).desc())
         .limit(20)
         .cte("fulltext")
