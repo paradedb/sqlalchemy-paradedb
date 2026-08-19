@@ -41,6 +41,13 @@ def test_search_with_subquery_columns(session):
     assert ids == [1, 2]
 
 
+def test_match_all_query_as_subquery(session):
+    sq = select(Product.id).where(search.all(Product.id)).subquery()
+    stmt = select(sq.c.id).order_by(sq.c.id)
+    assert_uses_paradedb_scan(session, stmt)
+    assert list(session.scalars(stmt)) == [1, 2, 3, 4, 5]
+
+
 def test_search_with_cte_columns(session):
     base = select(
         Product.id.label("pid"),
