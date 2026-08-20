@@ -22,8 +22,10 @@ keywords = [
   "text search",
   "full text search",
   "hybrid search",
+  "vector search",
   "faceted search",
   "facets",
+  "aggregations",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
