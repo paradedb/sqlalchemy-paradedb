@@ -59,7 +59,7 @@ Changelog = "https://github.com/paradedb/sqlalchemy-paradedb/blob/main/CHANGELOG
 
 [project.optional-dependencies]
 test = [
-  "pytest>=8.0.0",
+  "pytest>=9.1.1",
   "pytest-cov>=6.0",
   "psycopg[binary]>=3.1.18",
   "alembic>=1.13.0",
@@ -67,7 +67,7 @@ test = [
 ]
 dev = [
   "ruff>=0.15.0",
-  "mypy>=1.19.0",
+  "mypy>=2.3.1",
   "pre-commit>=4.0.0",
   "json5>=0.9",
 ]
