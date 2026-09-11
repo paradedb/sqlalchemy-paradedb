@@ -670,3 +670,27 @@ def test_with_options_changed():
     assert pdb_alembic._with_options_changed({}, {"centroid_ratio": 0.01})
     assert pdb_alembic._with_options_changed({"centroid_ratio": "0.01"}, {})
     assert pdb_alembic._with_options_changed({"centroid_ratio": "0.01"}, {"centroid_ratio": 0.02})
+
+
+@pytest.mark.parametrize(
+    ("options", "suffix"),
+    [(None, ""), (VectorIndexOptions(cluster_replication=2), " WITH (cluster_replication=2)")],
+)
+def test_keyless_create_render_and_downgrade(options, suffix):
+    create = pdb_alembic.CreateParadeDBIndexOp(
+        "keyless_idx", "products", ["description"], with_options=options, where="rating > 0"
+    )
+    ops = DummyOps()
+    pdb_alembic._create_paradedb_index_impl(ops, create)
+    assert ops.sql == [
+        'CREATE INDEX "keyless_idx" ON "products" USING paradedb (description)' + suffix + " WHERE rating > 0"
+    ]
+    context = AutogenContext(MigrationContext.configure(dialect_name="postgresql"))
+    assert "key_field" not in pdb_alembic._render_create_paradedb_index_op(context, create)
+    drop = pdb_alembic.DropParadeDBIndexOp(
+        "keyless_idx", table_name="products", expressions=["description"], with_options=options, where="rating > 0"
+    )
+    restored = drop.reverse()
+    replay = DummyOps()
+    pdb_alembic._create_paradedb_index_impl(replay, restored)
+    assert replay.sql == ops.sql

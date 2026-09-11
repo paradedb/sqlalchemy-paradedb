@@ -21,9 +21,7 @@ from .errors import (
     FieldNotIndexedError,
     InvalidArgumentError,
     InvalidIndexOptionError,
-    InvalidKeyFieldError,
     InvalidParadeDBFieldError,
-    MissingKeyFieldError,
 )
 
 VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
@@ -53,14 +51,14 @@ def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
 class VectorIndexOptions:
     """Vector index build options (pg_search 0.25.0+), validated at construction.
 
-    Unpack into ``postgresql_with`` alongside ``key_field``::
+    Unpack into ``postgresql_with``::
 
         Index(
             "products_search_idx",
             ParadeDBField(products.c.id),
             VectorField(products.c.embedding, metric="cosine"),
             postgresql_using="paradedb",
-            postgresql_with={"key_field": "id", **VectorIndexOptions(centroid_ratio=0.01)},
+            postgresql_with=dict(VectorIndexOptions(centroid_ratio=0.01)),
         )
 
     Options left as ``None`` are omitted so the server defaults apply. Raw
@@ -187,26 +185,7 @@ def validate_paradedb_index(index: Index) -> None:
         aliases.add(alias)
 
     with_options = index.dialect_options["postgresql"].get("with") or {}
-    key_field = with_options.get("key_field")
-    if not key_field:
-        raise MissingKeyFieldError("ParadeDB indexes require postgresql_with={'key_field': '<column>'}")
-
     _validate_vector_index_options(with_options)
-
-    field_names = {_paradedb_field_name(expr) for expr in index.expressions if isinstance(expr, ParadeDBField)}
-    if key_field not in field_names:
-        raise InvalidKeyFieldError(f"key_field '{key_field}' must match one of the indexed ParadeDBField columns")
-
-    first_field = index.expressions[0]
-    if not isinstance(first_field, ParadeDBField):
-        raise InvalidParadeDBFieldError("ParadeDB indexes must use ParadeDBField for every indexed field")
-    first_field_name = _paradedb_field_name(first_field)
-    if first_field_name != key_field:
-        raise InvalidKeyFieldError(f"key_field '{key_field}' must be the first indexed ParadeDBField")
-    if first_field.tokenizer is not None:
-        raise InvalidKeyFieldError(f"key_field '{key_field}' must be untokenized")
-    if isinstance(first_field, VectorField):
-        raise InvalidKeyFieldError(f"key_field '{key_field}' cannot be a VectorField")
 
 
 @event.listens_for(Index, "before_create")
