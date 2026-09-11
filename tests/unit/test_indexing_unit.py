@@ -300,7 +300,7 @@ def test_duplicate_alias_validation_raises():
         validate_paradedb_index(idx)
 
 
-def test_key_field_validation_raises_when_missing():
+def test_key_field_is_optional():
     idx = Index(
         "products_missing_key_idx",
         ParadeDBField(products.c.id),
@@ -308,11 +308,10 @@ def test_key_field_validation_raises_when_missing():
         postgresql_using="paradedb",
     )
 
-    with pytest.raises(ValueError, match="key_field"):
-        validate_paradedb_index(idx)
+    validate_paradedb_index(idx)
 
 
-def test_key_field_must_exist_in_fields():
+def test_legacy_key_field_does_not_restrict_fields():
     idx = Index(
         "products_bad_key_idx",
         ParadeDBField(products.c.id),
@@ -321,11 +320,10 @@ def test_key_field_must_exist_in_fields():
         postgresql_with={"key_field": "missing"},
     )
 
-    with pytest.raises(ValueError, match="must match one of the indexed"):
-        validate_paradedb_index(idx)
+    validate_paradedb_index(idx)
 
 
-def test_key_field_must_be_first_field():
+def test_legacy_key_field_does_not_restrict_column_order():
     idx = Index(
         "products_key_not_first_idx",
         ParadeDBField(products.c.description),
@@ -334,11 +332,10 @@ def test_key_field_must_be_first_field():
         postgresql_with={"key_field": "id"},
     )
 
-    with pytest.raises(ValueError, match="must be the first indexed ParadeDBField"):
-        validate_paradedb_index(idx)
+    validate_paradedb_index(idx)
 
 
-def test_key_field_must_be_untokenized():
+def test_legacy_key_field_does_not_restrict_tokenizers():
     idx = Index(
         "products_key_tokenized_idx",
         ParadeDBField(products.c.id, tokenizer=tokenizer.literal(options={"alias": "id_alias"})),
@@ -347,8 +344,7 @@ def test_key_field_must_be_untokenized():
         postgresql_with={"key_field": "id"},
     )
 
-    with pytest.raises(ValueError, match="must be untokenized"):
-        validate_paradedb_index(idx)
+    validate_paradedb_index(idx)
 
 
 def test_extract_key_field_handles_normalized_indexdef():
@@ -620,7 +616,7 @@ def test_vector_field_invalid_metric_raises():
         VectorField(products.c.embedding, metric="euclidean")
 
 
-def test_vector_field_cannot_be_key_field():
+def test_legacy_key_field_does_not_restrict_vector_fields():
     idx = Index(
         "products_vector_bad_key_idx",
         VectorField(products.c.embedding),
@@ -628,8 +624,7 @@ def test_vector_field_cannot_be_key_field():
         postgresql_using="paradedb",
         postgresql_with={"key_field": "embedding"},
     )
-    with pytest.raises(ValueError, match="cannot be a VectorField"):
-        validate_paradedb_index(idx)
+    validate_paradedb_index(idx)
 
 
 def test_vector_field_non_postgres_compile_raises():

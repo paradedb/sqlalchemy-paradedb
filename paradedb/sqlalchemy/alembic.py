@@ -35,11 +35,11 @@ def _render_with_option_value(value: object) -> str:
     return _quote_literal(str(value))
 
 
-def _render_with_clause(key_field: str, with_options: VectorIndexOptions | None) -> str:
-    parts = [f"key_field={_quote_literal(key_field)}"]
+def _render_with_clause(key_field: str | None, with_options: VectorIndexOptions | None) -> str:
+    parts = [f"key_field={_quote_literal(key_field)}"] if key_field is not None else []
     for name, value in (dict(with_options) if with_options is not None else {}).items():
         parts.append(f"{name}={_render_with_option_value(value)}")
-    return f"WITH ({', '.join(parts)})"
+    return f" WITH ({', '.join(parts)})" if parts else ""
 
 
 @Operations.register_operation("create_paradedb_index")
@@ -49,7 +49,7 @@ class CreateParadeDBIndexOp(MigrateOperation):
         index_name: str,
         table_name: str,
         expressions: list[str],
-        key_field: str,
+        key_field: str | None = None,
         *,
         table_schema: str | None = None,
         where: str | None = None,
@@ -73,7 +73,7 @@ class CreateParadeDBIndexOp(MigrateOperation):
         table_name: str,
         expressions: list[str],
         *,
-        key_field: str,
+        key_field: str | None = None,
         table_schema: str | None = None,
         where: str | None = None,
         with_options: VectorIndexOptions | None = None,
@@ -100,7 +100,7 @@ def _create_paradedb_index_impl(operations: Operations, operation: CreateParadeD
     sql = (
         f"CREATE INDEX {_quote_ident(operation.index_name)} "
         f"ON {_quote_qualified(operation.table_schema, operation.table_name)} "
-        f"USING paradedb ({expressions_sql}) {_render_with_clause(operation.key_field, operation.with_options)}"
+        f"USING paradedb ({expressions_sql}){_render_with_clause(operation.key_field, operation.with_options)}"
     )
     if operation.where is not None:
         sql += f" WHERE {operation.where}"
@@ -113,8 +113,9 @@ def _render_create_paradedb_index_op(autogen_context, op: CreateParadeDBIndexOp)
         repr(op.index_name),
         repr(op.table_name),
         repr(op.expressions),
-        f"key_field={op.key_field!r}",
     ]
+    if op.key_field is not None:
+        parts.append(f"key_field={op.key_field!r}")
     if op.table_schema is not None:
         parts.append(f"table_schema={op.table_schema!r}")
     if op.where is not None:
@@ -178,7 +179,7 @@ class DropParadeDBIndexOp(MigrateOperation):
         )
 
     def reverse(self) -> MigrateOperation:
-        if self.table_name is None or self.expressions is None or self.key_field is None:
+        if self.table_name is None or self.expressions is None:
             raise NotImplementedError("DropParadeDBIndexOp requires recreate metadata for Alembic downgrade generation")
 
         return CreateParadeDBIndexOp(
@@ -308,7 +309,7 @@ def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tupl
                 {
                     "table_name": row["tablename"],
                     "expressions": [],
-                    "key_field": _normalize_reloption_value(row["key_field"]) or "",
+                    "key_field": _normalize_reloption_value(row["key_field"]) or None,
                     "where": _extract_where_clause(str(row["indexdef"])),
                     "with_options": _parse_index_reloptions(row["reloptions"]),
                 },
@@ -324,7 +325,7 @@ def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tupl
                     expression = f"{expression} {opclass}"
             index_entry["expressions"].append(expression)
             if not index_entry["key_field"]:
-                index_entry["key_field"] = _extract_key_field(str(row["indexdef"])) or ""
+                index_entry["key_field"] = _extract_key_field(str(row["indexdef"])) or None
     return result
 
 
@@ -555,7 +556,7 @@ def _compare_paradedb_indexes(autogen_context, upgrade_ops, schemas) -> Priority
     # Also re-create indexes whose expression list, key_field, WITH options, or WHERE clause differs from the DB.
     for key, index in meta_paradedb.items():
         with_opts = index.dialect_options["postgresql"].get("with") or {}
-        key_field = with_opts.get("key_field", "")
+        key_field = with_opts.get("key_field")
         meta_options = _meta_with_options(index)
         expressions = [
             _strip_relation_qualifiers(_render_paradedb_expression(expr), index.table.name, index.table.schema)
@@ -579,7 +580,7 @@ def _compare_paradedb_indexes(autogen_context, upgrade_ops, schemas) -> Priority
             expressions_changed = _normalized_expression_list(db["expressions"]) != _normalized_expression_list(
                 expressions
             )
-            key_field_changed = db["key_field"] != key_field
+            key_field_changed = (db["key_field"] or None) != key_field
             where_changed = _normalize_where(db.get("where")) != _normalize_where(meta_where)
             options_changed = _with_options_changed(db.get("with_options") or {}, meta_options)
             if expressions_changed or key_field_changed or where_changed or options_changed:
