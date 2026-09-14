@@ -51,5 +51,6 @@ if "&&&" not in sql:
 PY
 
 WHEEL_NAME="$(basename "$(find "${DIST_DIR}" -name 'sqlalchemy_paradedb-*.whl' | head -1)")"
-VERSION="${WHEEL_NAME#sqlalchemy_paradedb-}"; VERSION="${VERSION%%-*}"
+VERSION="${WHEEL_NAME#sqlalchemy_paradedb-}"
+VERSION="${VERSION%%-*}"
 echo "✅ Package smoke install passed for sqlalchemy-paradedb ${VERSION}"
