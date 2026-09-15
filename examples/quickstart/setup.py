@@ -39,7 +39,6 @@ Index(
     indexing.ParadeDBField(Product.category, tokenizer=tokenizer.literal()),
     indexing.ParadeDBField(Product.rating),
     postgresql_using="paradedb",
-    postgresql_with={"key_field": "id"},
 )
 
 
