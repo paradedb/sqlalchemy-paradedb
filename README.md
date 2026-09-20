@@ -50,15 +50,7 @@ The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB
 
 ## Examples
 
-Complete the [Start tutorial](https://www.paradedb.com/docs/start/connect-your-app), then choose a guide and select the SQLAlchemy tab:
-
-- [Quickstart](https://www.paradedb.com/docs/start/connect-your-app)
-- [Vector Search](https://www.paradedb.com/docs/guides/vector-search)
-- [Faceted Search](https://www.paradedb.com/docs/guides/faceted-search)
-- [Hybrid Search (RRF)](https://www.paradedb.com/docs/guides/hybrid-search)
-- [Retrieval-Augmented Generation (RAG)](https://www.paradedb.com/docs/guides/rag)
-- [Autocomplete](https://www.paradedb.com/docs/guides/autocomplete)
-- [More Like This](https://www.paradedb.com/docs/guides/more-like-this)
+See the [ParadeDB guides](https://www.paradedb.com/docs/guides/overview) for usage examples. Select the SQLAlchemy tab in each guide.
 
 ## Contributing
 
