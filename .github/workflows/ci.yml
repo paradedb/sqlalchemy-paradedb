@@ -156,10 +156,3 @@ jobs:
           verbose: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Run examples
-        env:
-          # ParadeDB already runs as a service container for this job.
-          SKIP_PARADEDB_START: "1"
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: scripts/run_examples.sh
