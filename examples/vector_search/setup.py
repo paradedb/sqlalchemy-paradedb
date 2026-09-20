@@ -36,7 +36,6 @@ Index(
     indexing.ParadeDBField(Product.description),
     indexing.VectorField(Product.embedding, metric="l2"),
     postgresql_using="paradedb",
-    postgresql_with={"key_field": "id"},
 )
 
 

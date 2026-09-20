@@ -332,9 +332,9 @@ def test_duplicate_tokenizer_alias_is_rejected(engine):
     _drop_table_and_index(engine, table_name, index_name)
 
 
-def test_missing_key_field_is_rejected(engine):
-    table_name = "invalid_key_field_products"
-    index_name = "invalid_key_field_products_search_idx"
+def test_index_without_key_field(engine):
+    table_name = "keyless_products"
+    index_name = "keyless_products_search_idx"
     _drop_table_and_index(engine, table_name, index_name)
 
     metadata = MetaData()
@@ -348,13 +348,16 @@ def test_missing_key_field_is_rejected(engine):
 
     idx = Index(
         index_name,
-        ParadeDBField(products.c.id),
         ParadeDBField(products.c.description),
         postgresql_using="paradedb",
     )
 
-    with pytest.raises(ValueError, match="key_field"):
-        idx.create(engine)
+    idx.create(engine)
+    with engine.connect() as conn:
+        definition = conn.execute(
+            text("SELECT pg_get_indexdef(CAST(:name AS regclass))"), {"name": index_name}
+        ).scalar_one()
+        assert "key_field" not in definition
 
     _drop_table_and_index(engine, table_name, index_name)
 
@@ -608,7 +611,7 @@ def test_paradedb_partial_index_generates_where_clause(engine):
 
 
 def test_paradedb_partial_index_filters_search_results(engine):
-    """Rows excluded by the partial index condition are not found via ParadeDB search."""
+    """Apply the partial-index predicate explicitly when filtering search results."""
     from sqlalchemy import select
     from sqlalchemy.orm import Session
 
@@ -649,7 +652,7 @@ def test_paradedb_partial_index_filters_search_results(engine):
         )
 
     with Session(engine) as session:
-        stmt = select(products.c.id).where(match_all(products.c.description, "running"))
+        stmt = select(products.c.id).where(match_all(products.c.description, "running"), products.c.rating > 3)
         ids = [row.id for row in session.execute(stmt)]
 
     # id=1 (rating 5) is indexed; id=2 (rating 2) is excluded by the partial condition

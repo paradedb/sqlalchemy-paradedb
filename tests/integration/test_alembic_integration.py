@@ -172,7 +172,7 @@ def _teardown_autogen_table(engine):
         conn.execute(text(f'DROP TABLE IF EXISTS "{_AG_TABLE}" CASCADE'))
 
 
-def _metadata_with_paradedb_index() -> MetaData:
+def _metadata_with_paradedb_index(*, key_field: str | None = "id") -> MetaData:
     """MetaData that defines autogen_test with a ParadeDB index."""
     m = MetaData()
     t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
@@ -183,7 +183,7 @@ def _metadata_with_paradedb_index() -> MetaData:
         ParadeDBField(t.c.id),
         ParadeDBField(t.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
+        postgresql_with={"key_field": key_field} if key_field is not None else {},
     )
     return m
 
@@ -1039,3 +1039,29 @@ def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index
     upgrade_ops_after = _run_comparator(engine, metadata)
     ops_after = [op for op in upgrade_ops_after.ops if getattr(op, "index_name", None) == _MOCK_IDX]
     assert ops_after == [], f"Expected convergence after applying create op, got: {ops_after}"
+
+
+def test_keyless_index_autogenerate_round_trip(engine):
+    _setup_autogen_table(engine)
+    try:
+        metadata = _metadata_with_paradedb_index(key_field=None)
+        create_ops = [
+            op for op in _run_comparator(engine, metadata).ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)
+        ]
+        assert len(create_ops) == 1
+        assert create_ops[0].key_field is None
+        next(iter(metadata.tables[_AG_TABLE].indexes)).create(engine)
+        assert not any(op.index_name == _AG_IDX for op in _run_comparator(engine, metadata).ops)
+        drop_ops = [
+            op
+            for op in _run_comparator(engine, _metadata_without_paradedb_index()).ops
+            if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
+        ]
+        assert len(drop_ops) == 1
+        with engine.begin() as connection:
+            operations = Operations(MigrationContext.configure(connection))
+            pdb_alembic._drop_paradedb_index_impl(operations, drop_ops[0])
+            pdb_alembic._create_paradedb_index_impl(operations, drop_ops[0].reverse())
+        assert not any(op.index_name == _AG_IDX for op in _run_comparator(engine, metadata).ops)
+    finally:
+        _teardown_autogen_table(engine)

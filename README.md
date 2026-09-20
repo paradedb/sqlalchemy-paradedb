@@ -48,6 +48,8 @@ The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB
 | PostgreSQL | 15+ (with the ParadeDB pg_search extension)                        |
 | pgvector   | Required for vector search (included in the ParadeDB Docker image) |
 
+ParadeDB indexes and `op.create_paradedb_index()` no longer require `key_field`. Keyless creation requires a pg_search version with keyless index support. For older servers, retain `postgresql_with={"key_field": "id"}` on SQLAlchemy indexes or pass `key_field="id"` to the Alembic helper.
+
 ## Examples
 
 - [Quickstart](examples/quickstart/quickstart.py)
