@@ -50,7 +50,7 @@ The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB
 
 ## Examples
 
-Follow the [example setup guide](https://www.paradedb.com/docs/guides/setup), then choose a guide and select the SQLAlchemy tab:
+Complete the [Start tutorial](https://www.paradedb.com/docs/start/connect-your-app), then choose a guide and select the SQLAlchemy tab:
 
 - [Quickstart](https://www.paradedb.com/docs/start/connect-your-app)
 - [Vector Search](https://www.paradedb.com/docs/guides/vector-search)
