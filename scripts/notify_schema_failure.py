@@ -7,9 +7,7 @@ import subprocess
 
 
 def gh(*args: str) -> str:
-    return subprocess.run(
-        ["gh", *args], check=True, capture_output=True, text=True
-    ).stdout
+    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
 
 
 def notify(repository: str, version: str, run_url: str) -> None:
@@ -24,12 +22,7 @@ def notify(repository: str, version: str, run_url: str) -> None:
             f"repos/{repository}/issues?state=all&per_page=100",
         )
     )
-    matches = [
-        issue
-        for page in issues
-        for issue in page
-        if issue["title"] == title and "pull_request" not in issue
-    ]
+    matches = [issue for page in issues for issue in page if issue["title"] == title and "pull_request" not in issue]
     matches.sort(key=lambda issue: (issue["state"] != "open", -issue["number"]))
     body = (
         f"The schema compatibility check or integration tests failed against "
@@ -60,10 +53,7 @@ def notify(repository: str, version: str, run_url: str) -> None:
 
 def main() -> None:
     repository = os.environ["GITHUB_REPOSITORY"]
-    run_url = (
-        f"{os.environ['GITHUB_SERVER_URL']}/{repository}/actions/runs/"
-        f"{os.environ['GITHUB_RUN_ID']}"
-    )
+    run_url = f"{os.environ['GITHUB_SERVER_URL']}/{repository}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
     notify(repository, os.environ["PARADEDB_VERSION"], run_url)
 
 

@@ -16,12 +16,8 @@ SPEC.loader.exec_module(notification)
 
 class NotificationTests(unittest.TestCase):
     def run_notification(self, pages):
-        with patch.object(
-            notification, "gh", side_effect=[json.dumps(pages), "", ""]
-        ) as gh:
-            notification.notify(
-                "paradedb/example", "v0.26.0", "https://github.com/example/run/1"
-            )
+        with patch.object(notification, "gh", side_effect=[json.dumps(pages), "", ""]) as gh:
+            notification.notify("paradedb/example", "v0.26.0", "https://github.com/example/run/1")
             return gh.call_args_list
 
     def test_first_failure_creates_issue(self):
@@ -106,13 +102,9 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(calls[1].args[:3], ("issue", "comment", "12"))
 
     def test_api_failure_does_not_create_duplicate(self):
-        with patch.object(
-            notification, "gh", side_effect=subprocess.CalledProcessError(1, "gh")
-        ) as gh:
+        with patch.object(notification, "gh", side_effect=subprocess.CalledProcessError(1, "gh")) as gh:
             with self.assertRaises(subprocess.CalledProcessError):
-                notification.notify(
-                    "paradedb/example", "0.26.0", "https://github.com/example/run/1"
-                )
+                notification.notify("paradedb/example", "0.26.0", "https://github.com/example/run/1")
             self.assertEqual(gh.call_count, 1)
 
 
