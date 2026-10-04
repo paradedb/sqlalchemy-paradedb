@@ -5,7 +5,6 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.operations.ops import UpgradeOps
 from sqlalchemy import Boolean, Column, Index, Integer, MetaData, String, Table, Text, text
-from sqlalchemy.exc import SQLAlchemyError
 from unittest.mock import MagicMock
 
 import paradedb.sqlalchemy.alembic as pdb_alembic  # noqa: F401  Ensure op registration
@@ -259,30 +258,6 @@ def test_autogenerate_detects_changed_fields(engine):
         _teardown_autogen_table(engine)
 
 
-def _tokenizer_cast_supported(engine) -> bool:
-    table_name = "autogen_tok_support"
-    index_name = "autogen_tok_support_idx"
-    try:
-        with engine.begin() as conn:
-            conn.execute(text(f'DROP INDEX IF EXISTS "{index_name}"'))
-            conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
-            conn.execute(text(f'CREATE TABLE "{table_name}" (id int primary key, description text not null)'))
-            conn.execute(
-                text(
-                    f'CREATE INDEX "{index_name}" ON "{table_name}" '
-                    "USING paradedb (id, (description::pdb.unicode_words('lowercase=true'))) "
-                    ""
-                )
-            )
-        return True
-    except SQLAlchemyError:
-        return False
-    finally:
-        with engine.begin() as conn:
-            conn.execute(text(f'DROP INDEX IF EXISTS "{index_name}"'))
-            conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
-
-
 def _metadata_with_tokenized_paradedb_index() -> MetaData:
     m = MetaData()
     t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
@@ -300,9 +275,6 @@ def _metadata_with_tokenized_paradedb_index() -> MetaData:
 
 
 def test_autogenerate_detects_changed_tokenizer_expression(engine):
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
     _setup_autogen_table(engine, with_index=False)
     try:
         with engine.begin() as conn:
@@ -743,9 +715,6 @@ _EXPR_IDX = "alembic_expr_search_idx"
 
 
 def test_alembic_expression_index_lifecycle(engine):
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_EXPR_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_EXPR_TABLE}" CASCADE'))
@@ -786,9 +755,6 @@ _MULTI_IDX = "alembic_multi_tok_search_idx"
 
 
 def test_alembic_multi_tokenizer_expression_lifecycle(engine):
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
     with engine.begin() as conn:
         conn.execute(text(f'DROP INDEX IF EXISTS "{_MULTI_IDX}"'))
         conn.execute(text(f'DROP TABLE IF EXISTS "{_MULTI_TABLE}" CASCADE'))

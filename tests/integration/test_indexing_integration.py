@@ -23,30 +23,6 @@ def _drop_table_and_index(engine, table_name: str, index_name: str) -> None:
         conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
 
 
-def _tokenizer_cast_supported(engine) -> bool:
-    table_name = "__idx_syntax_test"
-    index_name = "__idx_syntax_test_idx"
-    _drop_table_and_index(engine, table_name, index_name)
-    try:
-        with engine.begin() as conn:
-            conn.execute(text(f"CREATE TABLE {table_name} (id int primary key, description text not null)"))
-            conn.execute(
-                text(
-                    f"""
-                    CREATE INDEX {index_name}
-                    ON {table_name}
-                    USING paradedb (id, (description::pdb.unicode_words('lowercase=true')))
-
-                    """
-                )
-            )
-        return True
-    except SQLAlchemyError:
-        return False
-    finally:
-        _drop_table_and_index(engine, table_name, index_name)
-
-
 def test_paradedb_index_create(engine):
     table_name = "indexing_products"
     index_name = "indexing_products_search_idx"
@@ -91,10 +67,7 @@ def test_paradedb_index_create(engine):
     _drop_table_and_index(engine, table_name, index_name)
 
 
-def test_paradedb_index_with_tokenizers_when_supported(engine):
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
+def test_paradedb_index_with_tokenizers(engine):
     table_name = "indexing_products_tokenized"
     index_name = "indexing_products_tokenized_search_idx"
     _drop_table_and_index(engine, table_name, index_name)
@@ -139,9 +112,6 @@ def test_paradedb_index_with_tokenizers_when_supported(engine):
 
 
 def test_paradedb_index_json_keys_when_supported(engine):
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
     table_name = "indexing_products_json"
     index_name = "indexing_products_json_search_idx"
     _drop_table_and_index(engine, table_name, index_name)
@@ -362,9 +332,6 @@ def test_describe_returns_fields_and_aliases(engine):
 
 def test_describe_includes_tokenizers(engine):
     """describe() populates IndexMeta.tokenizers from the index definition."""
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
     table_name = "describe_tokenizers_products"
     index_name = "describe_tokenizers_search_idx"
     _drop_table_and_index(engine, table_name, index_name)
@@ -400,9 +367,6 @@ def test_describe_includes_tokenizers(engine):
 
 def test_describe_and_assert_indexed_for_json_expression_tokenizer(engine):
     """JSON expression ParadeDB fields map back to the base column for introspection checks."""
-    if not _tokenizer_cast_supported(engine):
-        pytest.skip("ParadeDB instance does not support tokenizer cast index syntax yet")
-
     table_name = "describe_json_expr_products"
     index_name = "describe_json_expr_search_idx"
     _drop_table_and_index(engine, table_name, index_name)

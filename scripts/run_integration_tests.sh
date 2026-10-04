@@ -11,16 +11,16 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-source "${SCRIPT_DIR}/run_paradedb.sh"
+if [[ -z "${PARADEDB_TEST_DSN:-${DATABASE_URL:-}}" ]]; then
+  # shellcheck source=scripts/run_paradedb.sh
+  source "${SCRIPT_DIR}/run_paradedb.sh"
+fi
 
-PORT="${PARADEDB_PORT}"
-USER="${PARADEDB_USER}"
-PASSWORD="${PARADEDB_PASSWORD}"
-DB="${PARADEDB_DB}"
+export PARADEDB_TEST_DSN="${PARADEDB_TEST_DSN:-${DATABASE_URL}}"
+export DATABASE_URL="${DATABASE_URL:-${PARADEDB_TEST_DSN}}"
+export PGPASSWORD="${PGPASSWORD:-${PARADEDB_PASSWORD:-postgres}}"
 
 export PARADEDB_INTEGRATION=1
-export PARADEDB_TEST_DSN="postgresql+psycopg://${USER}:${PASSWORD}@localhost:${PORT}/${DB}"
-export PGPASSWORD="${PASSWORD}"
 
 PYTEST_CMD=(uv run --extra test pytest)
 

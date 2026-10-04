@@ -650,8 +650,5 @@ def test_vector_index_options_class_boundary_values_pass(name, value):
 def test_vector_index_options_class_omits_unset_fields():
     assert dict(VectorIndexOptions()) == {}
     assert dict(VectorIndexOptions(training_sample_ratio=0.01)) == {"training_sample_ratio": 0.01}
-    assert dict(VectorIndexOptions(training_sample_ratio=0.01)) == {
-        "training_sample_ratio": 0.01,
-    }
     with pytest.raises(KeyError):
         VectorIndexOptions(training_sample_ratio=0.01)["max_leaf_size"]
