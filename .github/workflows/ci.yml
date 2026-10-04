@@ -61,6 +61,9 @@ jobs:
       - name: Check API coverage
         run: uv run --no-sync scripts/check_api_coverage.py
 
+      - name: Test tooling scripts
+        run: uv run --no-sync python -m unittest discover -s scripts/tests -p "test_*.py"
+
       - name: Package install smoke test
         run: bash scripts/smoke_package_install.sh
 
@@ -100,7 +103,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
@@ -128,18 +131,6 @@ jobs:
         run: |
           uv venv --python "${{ matrix.python-version }}"
           uv sync --extra test --extra dev
-
-      - name: Install pg client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
-      - name: Wait for ParadeDB
-        run: |
-          for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" && exit 0
-            sleep 2
-          done
-          echo "ParadeDB did not become ready" >&2
-          exit 1
 
       - name: Run unit tests
         run: uv run --no-sync pytest tests/unit --cov=paradedb
