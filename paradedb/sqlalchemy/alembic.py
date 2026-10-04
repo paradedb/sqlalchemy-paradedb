@@ -259,7 +259,7 @@ def _parse_index_reloptions(reloptions) -> dict[str, str]:
     options: dict[str, str] = {}
     for opt in reloptions or []:
         name, sep, value = str(opt).partition("=")
-        if sep and name != "key_field":
+        if sep:
             options[name] = _normalize_reloption_value(value) or ""
     return options
 
@@ -451,7 +451,7 @@ def _with_options_changed(db_options: dict[str, object], meta_options: dict[str,
 
 def _meta_with_options(index) -> dict[str, object]:
     with_opts = index.dialect_options["postgresql"].get("with") or {}
-    return {name: value for name, value in with_opts.items() if name != "key_field"}
+    return dict(with_opts)
 
 
 def _render_where_from_index(index) -> str | None:

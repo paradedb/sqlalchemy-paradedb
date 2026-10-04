@@ -20,6 +20,7 @@ export PARADEDB_USER="${PARADEDB_USER:-postgres}"
 export PARADEDB_PASSWORD="${PARADEDB_PASSWORD:-postgres}"
 export PARADEDB_DB="${PARADEDB_DB:-postgres}"
 PORT="${PARADEDB_PORT}"
+HOST="${PARADEDB_HOST:-127.0.0.1}"
 USER="${PARADEDB_USER}"
 PASSWORD="${PARADEDB_PASSWORD}"
 DB="${PARADEDB_DB}"
@@ -48,7 +49,7 @@ if docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}" &&
   docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 fi
 
-if ! docker ps -a --format '{{.Names}}' | grep -Eq "^${CONTAINER_NAME}$"; then
+if ! docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
   echo "Starting ParadeDB container ${CONTAINER_NAME} from ${IMAGE}..."
   docker run -d \
     --name "${CONTAINER_NAME}" \
@@ -62,18 +63,18 @@ else
   docker start "${CONTAINER_NAME}" >/dev/null
 fi
 
-DATABASE_URL="postgresql+psycopg://${USER}:${PASSWORD}@localhost:${PORT}/${DB}"
+DATABASE_URL="postgresql+psycopg://${USER}:${PASSWORD}@${HOST}:${PORT}/${DB}"
 export DATABASE_URL
 
 # Check readiness over TCP: during first-time initialization the image runs a
 # temporary socket-only server that seeds extensions and sample data, and it
 # must not be mistaken for the real one.
 echo "Waiting for ParadeDB to become ready..."
-for _ in $(seq 1 "${PARADEDB_WAIT_ATTEMPTS:-45}"); do
+for ((paradedb_attempt = 1; paradedb_attempt <= ${PARADEDB_WAIT_ATTEMPTS:-30}; paradedb_attempt++)); do
   if docker exec "${CONTAINER_NAME}" pg_isready -h 127.0.0.1 -U "${USER}" -d "${DB}" >/dev/null 2>&1; then
     break
   fi
-  sleep 2
+  sleep "${PARADEDB_WAIT_INTERVAL:-2}"
 done
 
 if ! docker exec "${CONTAINER_NAME}" pg_isready -h 127.0.0.1 -U "${USER}" -d "${DB}" >/dev/null 2>&1; then
