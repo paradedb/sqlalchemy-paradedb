@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Changed
 
+- **Breaking:** Rename the facet query helpers’ `key_field` argument to `field`; it selects the column for the match-all predicate.
+
 - **Breaking:** Remove key-field metadata from index reflection and Alembic migration helpers. Require ParadeDB 0.26.0 or newer; generated migrations no longer emit a designated key.
 - **Breaking:** Update vector index build options to `training_sample_ratio` and `max_leaf_size` for ParadeDB 0.26.0 and remove the obsolete cluster replication option.
 

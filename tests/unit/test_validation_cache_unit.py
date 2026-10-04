@@ -87,18 +87,18 @@ def test_snippet_builder_validation_errors():
 def test_with_rows_guard_error_types():
     missing_order = select(products.c.id).limit(5)
     with pytest.raises(FacetRequiresOrderByError):
-        facets.with_rows(missing_order, agg=facets.value_count(field="id"), key_field=products.c.id)
+        facets.with_rows(missing_order, agg=facets.value_count(field="id"), field=products.c.id)
 
     missing_limit = select(products.c.id).order_by(products.c.id)
     with pytest.raises(FacetRequiresLimitError):
-        facets.with_rows(missing_limit, agg=facets.value_count(field="id"), key_field=products.c.id)
+        facets.with_rows(missing_limit, agg=facets.value_count(field="id"), field=products.c.id)
 
     plain = select(products.c.id).order_by(products.c.id).limit(5)
     with pytest.raises(FacetRequiresParadeDBPredicateError):
         facets.with_rows(
             plain,
             agg=facets.value_count(field="id"),
-            key_field=products.c.id,
+            field=products.c.id,
             ensure_predicate=False,
         )
 
@@ -110,7 +110,7 @@ def test_with_rows_does_not_inject_sentinel_when_predicate_exists():
         .order_by(products.c.id)
         .limit(5)
     )
-    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=products.c.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), field=products.c.id)
     assert (
         _sql(stmt)
         == """\
@@ -130,7 +130,7 @@ def test_with_rows_limit_guard_ignores_limit_identifier_names():
     stmt = select(odd_table.c.limit).order_by(odd_table.c.id)
 
     with pytest.raises(FacetRequiresLimitError):
-        facets.with_rows(stmt, agg=facets.value_count(field="id"), key_field=odd_table.c.id)
+        facets.with_rows(stmt, agg=facets.value_count(field="id"), field=odd_table.c.id)
 
 
 def test_validate_pushdown_ignores_limit_identifier_names():

@@ -95,10 +95,10 @@ def multi(*aggs: dict[str, object]) -> dict[str, object]:
     return merged
 
 
-def ensure_operator(stmt: Select, *, key_field: ColumnElement) -> Select:
+def ensure_operator(stmt: Select, *, field: ColumnElement) -> Select:
     if pdb_inspect.has_paradedb_predicate(stmt):
         return stmt
-    return stmt.where(search.all(key_field))
+    return stmt.where(search.all(field))
 
 
 def extract(rows: Sequence[object], *, label: str = "facets") -> Any | None:
@@ -117,7 +117,7 @@ def with_rows(
     base_stmt: Select,
     *,
     agg: dict[str, Any],
-    key_field: ColumnElement,
+    field: ColumnElement,
     label: str = "facets",
     ensure_predicate: bool = True,
 ) -> Select:
@@ -126,7 +126,7 @@ def with_rows(
     if not has_limit(base_stmt):
         raise FacetRequiresLimitError("with_rows requires LIMIT")
 
-    stmt = ensure_operator(base_stmt, key_field=key_field) if ensure_predicate else base_stmt
+    stmt = ensure_operator(base_stmt, field=field) if ensure_predicate else base_stmt
     if not ensure_predicate and not pdb_inspect.has_paradedb_predicate(stmt):
         raise FacetRequiresParadeDBPredicateError("with_rows requires a ParadeDB predicate")
 
