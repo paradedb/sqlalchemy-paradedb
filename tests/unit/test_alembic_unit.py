@@ -357,7 +357,7 @@ def test_suppress_standard_paradedb_ops_noop_when_no_paradedb_indexes():
 def test_normalize_paradedb_expression_keeps_dotted_literal_content():
     expr = "(description)::pdb.regex_pattern('run.*')"
     normalized = pdb_alembic._normalize_paradedb_expression(expr)
-    assert normalized == "(description)::pdb.regex_pattern('run.*')"
+    assert normalized == "description::pdb.regex_pattern('run.*')"
 
 
 def test_normalize_paradedb_expression_strips_relation_qualifiers_only():
@@ -625,3 +625,11 @@ def test_with_options_changed():
     assert pdb_alembic._with_options_changed({}, {"training_sample_ratio": 0.01})
     assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {})
     assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {"training_sample_ratio": 0.02})
+
+
+def test_tokenizer_column_parentheses_do_not_cause_autogenerate_churn():
+    db = "(description::pdb.simple('pnorms=true'))"
+    metadata = "((items.description)::pdb.simple('pnorms=true'))"
+    assert pdb_alembic._normalize_paradedb_expression(db) == pdb_alembic._normalize_paradedb_expression(metadata)
+    literal = "(description::pdb.simple('alias=(description)::pdb.simple'))"
+    assert "'alias=(description)::pdb.simple'" in pdb_alembic._normalize_paradedb_expression(literal)

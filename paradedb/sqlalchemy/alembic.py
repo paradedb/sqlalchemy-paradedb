@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 
@@ -272,6 +273,12 @@ def _to_vector_index_options(options: dict[str, object] | None) -> VectorIndexOp
         for name, value in options.items()
         if name in VECTOR_INDEX_OPTIONS
     }
+    if "vector_router" in options:
+        coerced["vector_router"] = str(options["vector_router"])
+    if "partition_by" in options:
+        coerced["partition_by"] = str(options["partition_by"])
+    if "vector_fields" in options:
+        coerced["vector_fields"] = json.loads(str(options["vector_fields"]))
     return VectorIndexOptions(**coerced) if coerced else None
 
 
@@ -349,7 +356,14 @@ def _normalize_paradedb_expression(expr: str) -> str:
     normalized = "".join(normalized.split())
     normalized = normalized.replace('"', "")
     normalized = normalized.replace("::text", "")
-    return _strip_non_pdb_qualifiers(normalized)
+    normalized = _strip_non_pdb_qualifiers(normalized)
+    # PostgreSQL removes parentheses around a column before a tokenizer cast.
+    # Keep quoted tokenizer options intact when normalizing that syntax.
+    parts = re.split(r"('(?:''|[^'])*')", normalized)
+    return "".join(
+        re.sub(r"\(([a-zA-Z_][a-zA-Z_0-9]*)\)(?=::pdb\.)", r"\1", part) if i % 2 == 0 else part
+        for i, part in enumerate(parts)
+    )
 
 
 def _strip_non_pdb_qualifiers(expr: str) -> str:
@@ -438,6 +452,8 @@ def _with_option_values_equal(db_value: object, meta_value: object) -> bool:
     db_text = _normalize_reloption_value(str(db_value)) or ""
     meta_text = _normalize_reloption_value(str(meta_value)) or ""
     try:
+        if db_text.startswith("{") and meta_text.startswith("{"):
+            return json.loads(db_text) == json.loads(meta_text)
         return math.isclose(float(db_text), float(meta_text), rel_tol=1e-6)
     except ValueError:
         return db_text.strip().lower() == meta_text.strip().lower()

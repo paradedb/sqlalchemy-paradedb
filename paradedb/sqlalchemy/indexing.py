@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field, fields
 from typing import Any
@@ -8,6 +9,7 @@ from sqlalchemy import Index, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import CompileError
 from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.schema import CreateIndex
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 
@@ -27,10 +29,17 @@ from .errors import (
 VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
     "training_sample_ratio": (float, 0.000001, 1.0),
     "max_leaf_size": (int, 1, 2147483647),
+    "target_segment_count": (int, 1, 2147483647),
 }
 
 
 def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
+    if "vector_router" in with_options and with_options["vector_router"] not in ("graph", "ivf"):
+        raise InvalidIndexOptionError("vector_router must be graph or ivf")
+    if "partition_by" in with_options:
+        value = with_options["partition_by"]
+        if not isinstance(value, str) or not value.strip() or any(not field.strip() for field in value.split(",")):
+            raise InvalidIndexOptionError("partition_by must contain non-empty index field names")
     for name, (num_type, min_value, max_value) in VECTOR_INDEX_OPTIONS.items():
         if name not in with_options:
             continue
@@ -66,6 +75,10 @@ class VectorIndexOptions:
 
     training_sample_ratio: float | None = None
     max_leaf_size: int | None = None
+    partition_by: str | None = None
+    vector_router: str | None = None
+    target_segment_count: int | None = None
+    vector_fields: dict[str, dict[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         _validate_vector_index_options(dict(self))
@@ -73,15 +86,20 @@ class VectorIndexOptions:
     def keys(self) -> list[str]:
         return [f.name for f in fields(self) if getattr(self, f.name) is not None]
 
-    def __getitem__(self, name: str) -> float | int:
+    def __getitem__(self, name: str) -> Any:
         if name not in self.keys():
             raise KeyError(name)
-        value: float | int = getattr(self, name)
+        value = getattr(self, name)
+        if name == "vector_fields":
+            return json.dumps(value, separators=(",", ":"), sort_keys=True)
         return value
 
     def __repr__(self) -> str:
-        args = ", ".join(f"{name}={self[name]!r}" for name in self.keys())
+        args = ", ".join(f"{name}={getattr(self, name)!r}" for name in self.keys())
         return f"VectorIndexOptions({args})"
+
+
+IndexOptions = VectorIndexOptions
 
 
 class ParadeDBField(ColumnElement[Any]):
@@ -535,3 +553,21 @@ def validate_pushdown(stmt: Any) -> list[str]:
         warnings.append("ORDER BY is present without LIMIT; Top K pushdown to ParadeDB requires both")
 
     return warnings
+
+
+@compiles(CreateIndex, "postgresql")
+def _compile_create_index(element, compiler, **kw):
+    rendered = compiler.visit_create_index(element, **kw)
+    index = element.element
+    if not _is_paradedb_index(index):
+        return rendered
+    options = index.dialect_options["postgresql"].get("with") or {}
+    if not options:
+        return rendered
+    original = ", ".join(f"{name} = {value}" for name, value in options.items())
+    values = []
+    for name, value in options.items():
+        if name in ("partition_by", "vector_fields", "vector_router"):
+            value = "'" + str(value).replace("'", "''") + "'"
+        values.append(f"{name} = {value}")
+    return rendered.replace(f"WITH ({original})", "WITH (" + ", ".join(values) + ")", 1)

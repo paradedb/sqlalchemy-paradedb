@@ -2,11 +2,14 @@ from . import sqlalchemy
 from .sqlalchemy.diagnostics import (
     paradedb_index_segments,
     paradedb_indexes,
+    paradedb_vector_estimator_info,
+    paradedb_vector_config,
+    paradedb_vector_info,
     paradedb_verify_all_indexes,
     paradedb_verify_index,
 )
 from .sqlalchemy.facets import with_rows
-from .sqlalchemy.indexing import ParadeDBField, VectorField, VectorIndexOptions, assert_indexed, describe
+from .sqlalchemy.indexing import IndexOptions, ParadeDBField, VectorField, VectorIndexOptions, assert_indexed, describe
 from .sqlalchemy.tokenizer import Tokenizer
 from .sqlalchemy.vector import Vector, cosine_distance, inner_product, l2_distance
 from .sqlalchemy import tokenizer
@@ -38,6 +41,7 @@ __all__ = [
     "Vector",
     "VectorField",
     "VectorIndexOptions",
+    "IndexOptions",
     "agg",
     "alias",
     "all",
@@ -53,6 +57,9 @@ __all__ = [
     "parse",
     "paradedb_index_segments",
     "paradedb_indexes",
+    "paradedb_vector_estimator_info",
+    "paradedb_vector_config",
+    "paradedb_vector_info",
     "paradedb_verify_all_indexes",
     "paradedb_verify_index",
     "phrase",

@@ -101,6 +101,41 @@ def paradedb_verify_all_indexes(
 __all__ = [
     "paradedb_index_segments",
     "paradedb_indexes",
+    "paradedb_vector_info",
+    "paradedb_vector_config",
+    "paradedb_vector_estimator_info",
     "paradedb_verify_all_indexes",
     "paradedb_verify_index",
 ]
+
+
+def paradedb_vector_info(engine: Engine, index: str, field: str) -> list[dict[str, Any]]:
+    """Return ``paradedb.vector_info()`` diagnostics for a vector index field."""
+    params: list[Any] = [index, field]
+    args = "%s::regclass, %s::text"
+    sql = f"SELECT * FROM paradedb.vector_info({args})"
+    with engine.connect() as conn:
+        return _exec_and_collect(conn, sql, params)
+
+
+def paradedb_vector_config(engine: Engine, index: str, field: str) -> list[dict[str, Any]]:
+    """Return ``paradedb.vector_config()`` diagnostics for a vector index field."""
+    params: list[Any] = [index, field]
+    args = "%s::regclass, %s::text"
+    sql = f"SELECT * FROM paradedb.vector_config({args})"
+    with engine.connect() as conn:
+        return _exec_and_collect(conn, sql, params)
+
+
+def paradedb_vector_estimator_info(
+    engine: Engine, index: str, field: str, queries: Sequence[Sequence[float]] | None = None
+) -> list[dict[str, Any]]:
+    """Return ``paradedb.vector_estimator_info()`` diagnostics for a vector index field."""
+    params: list[Any] = [index, field]
+    args = "%s::regclass, %s::text"
+    if queries is not None:
+        params.append(["[" + ",".join(str(float(value)) for value in query) + "]" for query in queries])
+        args += ", %s::vector[]"
+    sql = f"SELECT * FROM paradedb.vector_estimator_info({args})"
+    with engine.connect() as conn:
+        return _exec_and_collect(conn, sql, params)
