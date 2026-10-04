@@ -54,7 +54,7 @@ def db_url() -> str:
     url = (
         os.environ.get("PARADEDB_TEST_DSN")
         or os.environ.get("DATABASE_URL")
-        or "postgresql://postgres:postgres@localhost:5443/postgres"
+        or "postgresql://postgres:postgres@localhost:5432/postgres"
     )
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://") :]
