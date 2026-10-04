@@ -149,7 +149,7 @@ def _compile_vector_field_default(element: VectorField, compiler, **kw: Any) -> 
 
 def _is_paradedb_index(index: Index) -> bool:
     using = index.dialect_options["postgresql"].get("using")
-    return bool(using) and str(using).lower() == "paradedb"
+    return bool(using) and str(using).lower() in ("bm25", "paradedb")
 
 
 def _paradedb_field_name(field: ParadeDBField) -> str | None:
@@ -242,7 +242,7 @@ def _split_top_level_csv(expr: str) -> list[str]:
 
 
 def _extract_paradedb_field_list(indexdef: str) -> list[str]:
-    marker = re.search(r"USING\s+paradedb\s*\(", indexdef, re.IGNORECASE)
+    marker = re.search(r"USING\s+(?:bm25|paradedb)\s*\(", indexdef, re.IGNORECASE)
     if marker is None:
         return []
 
@@ -398,7 +398,7 @@ def _introspect_paradedb_index_rows(conn, *, schema_name: str, table_name: str |
              AND attr.attnum = key_ord.attnum
             WHERE ns.nspname = :schema_name
               AND (CAST(:table_name AS text) IS NULL OR tbl.relname = CAST(:table_name AS text))
-              AND am.amname = 'paradedb'
+              AND am.amname IN ('bm25', 'paradedb')
             ORDER BY idx.relname, key_ord.ord
             """
             ),

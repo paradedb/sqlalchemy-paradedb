@@ -259,13 +259,14 @@ def test_paradedb_field_non_postgres_compile_raises():
         str(ParadeDBField(products.c.id).compile(dialect=sqlite.dialect()))
 
 
-def test_is_paradedb_index_accepts_only_paradedb():
-    idx = Index(
-        "products_paradedb_recognition_idx",
-        ParadeDBField(products.c.id),
-        postgresql_using="paradedb",
-    )
-    assert _is_paradedb_index(idx)
+def test_is_paradedb_index_accepts_paradedb_and_bm25():
+    for am in ("paradedb", "bm25"):
+        idx = Index(
+            f"products_{am}_recognition_idx",
+            ParadeDBField(products.c.id),
+            postgresql_using=am,
+        )
+        assert _is_paradedb_index(idx), am
 
     for am in ("gin", "gist", "btree", None):
         other = Index(f"products_{am or 'default'}_idx", products.c.description, postgresql_using=am)
@@ -322,6 +323,11 @@ def test_extract_trailing_opclass():
     assert _extract_trailing_opclass("embedding vector_ip_ops") == "vector_ip_ops"
     assert _extract_trailing_opclass("embedding") is None
     assert _extract_trailing_opclass("id") is None
+
+
+def test_extract_paradedb_field_list_parses_legacy_bm25_indexdef():
+    indexdef = "CREATE INDEX idx ON public.products USING bm25 (id, description)"
+    assert _extract_paradedb_field_list(indexdef) == ["id", "description"]
 
 
 def test_extract_field_name_from_json_key_tokenizer_cast():
