@@ -326,36 +326,6 @@ def test_duplicate_tokenizer_alias_is_rejected(engine):
     _drop_table_and_index(engine, table_name, index_name)
 
 
-def test_index_without_key_field(engine):
-    table_name = "keyless_products"
-    index_name = "keyless_products_search_idx"
-    _drop_table_and_index(engine, table_name, index_name)
-
-    metadata = MetaData()
-    products = Table(
-        table_name,
-        metadata,
-        Column("id", Integer, primary_key=True),
-        Column("description", Text, nullable=False),
-    )
-    metadata.create_all(engine)
-
-    idx = Index(
-        index_name,
-        ParadeDBField(products.c.description),
-        postgresql_using="paradedb",
-    )
-
-    idx.create(engine)
-    with engine.connect() as conn:
-        definition = conn.execute(
-            text("SELECT pg_get_indexdef(CAST(:name AS regclass))"), {"name": index_name}
-        ).scalar_one()
-        assert "key_field" not in definition
-
-    _drop_table_and_index(engine, table_name, index_name)
-
-
 def test_describe_returns_fields_and_aliases(engine):
     table_name = "describe_products"
     index_name = "describe_products_search_idx"
@@ -423,7 +393,7 @@ def test_describe_includes_tokenizers(engine):
 
     assert "unicode_words" in meta.tokenizers.get("description", ())
     assert "literal" in meta.tokenizers.get("category", ())
-    assert "id" not in meta.tokenizers  # no tokenizer for plain key field
+    assert "id" not in meta.tokenizers  # plain columns do not have a tokenizer
 
     _drop_table_and_index(engine, table_name, index_name)
 

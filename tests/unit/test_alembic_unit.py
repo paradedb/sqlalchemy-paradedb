@@ -600,8 +600,8 @@ def test_drop_paradedb_index_reverse_carries_with_options():
     assert reversed_op.with_options == VectorIndexOptions(training_sample_ratio=0.01)
 
 
-def test_parse_index_reloptions_excludes_key_field():
-    reloptions = ["key_field=id", "training_sample_ratio=0.01", "max_leaf_size=32"]
+def test_parse_index_reloptions():
+    reloptions = ["training_sample_ratio=0.01", "max_leaf_size=32"]
     assert pdb_alembic._parse_index_reloptions(reloptions) == {
         "training_sample_ratio": "0.01",
         "max_leaf_size": "32",

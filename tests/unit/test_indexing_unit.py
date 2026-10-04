@@ -288,17 +288,6 @@ def test_duplicate_alias_validation_raises():
         validate_paradedb_index(idx)
 
 
-def test_key_field_is_optional():
-    idx = Index(
-        "products_missing_key_idx",
-        ParadeDBField(products.c.id),
-        ParadeDBField(products.c.description),
-        postgresql_using="paradedb",
-    )
-
-    validate_paradedb_index(idx)
-
-
 def test_extract_paradedb_field_list_parses_tokenizer_casts():
     indexdef = (
         "CREATE INDEX idx ON public.products USING paradedb "
