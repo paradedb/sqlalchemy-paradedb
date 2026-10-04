@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** Rename the facet query helpers’ `key_field` argument to `field`; it selects the column for the match-all predicate.
+
+- **Breaking:** Remove key-field metadata from index reflection and Alembic migration helpers. Require ParadeDB 0.26.0 or newer; generated migrations no longer emit a designated key.
+- **Breaking:** Update vector index build options to `training_sample_ratio` and `max_leaf_size` for ParadeDB 0.26.0 and remove the obsolete cluster replication option.
+
 ## [0.11.0] - 2026-08-13
 
 ### Changed

@@ -29,9 +29,7 @@ def test_range_query_with_op_and_all_predicate(engine):
 
     with engine.begin() as conn:
         conn.execute(
-            text(
-                "CREATE INDEX range_items_search_idx ON range_items USING paradedb (id, description, weight_range) WITH (key_field='id')"
-            )
+            text("CREATE INDEX range_items_search_idx ON range_items USING paradedb (id, description, weight_range)")
         )
         conn.execute(
             text(

@@ -59,16 +59,16 @@ def test_multi_merges_specs():
 def test_with_rows_requires_order_and_limit():
     base_missing_order = select(products.c.id).limit(5)
     with pytest.raises(FacetRequiresOrderByError, match="requires ORDER BY"):
-        facets.with_rows(base_missing_order, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+        facets.with_rows(base_missing_order, agg=facets.terms(field="category", size=10), field=products.c.id)
 
     base_missing_limit = select(products.c.id).order_by(products.c.id)
     with pytest.raises(FacetRequiresLimitError, match="requires LIMIT"):
-        facets.with_rows(base_missing_limit, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+        facets.with_rows(base_missing_limit, agg=facets.terms(field="category", size=10), field=products.c.id)
 
 
 def test_with_rows_adds_window_agg_column():
     base = select(products.c.id, products.c.description).order_by(products.c.id).limit(10)
-    stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+    stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), field=products.c.id)
     assert (
         _sql(stmt)
         == """\
@@ -81,7 +81,7 @@ WHERE products.id @@@ pdb.all() ORDER BY products.id
 
 def test_with_rows_accepts_fetch_clause():
     base = select(products.c.id, products.c.description).order_by(products.c.id).fetch(10)
-    stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), key_field=products.c.id)
+    stmt = facets.with_rows(base, agg=facets.terms(field="category", size=10), field=products.c.id)
     assert (
         _sql(stmt)
         == """\

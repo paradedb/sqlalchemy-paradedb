@@ -27,13 +27,9 @@ def test_create_drop_reindex_sql_generation():
         index_name='idx "quoted"',
         table_name='tbl "quoted"',
         expressions=["id", "description"],
-        key_field="id",
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
-    assert (
-        ops.sql[-1]
-        == 'CREATE INDEX "idx ""quoted""" ON "tbl ""quoted""" USING paradedb (id, description) WITH (key_field=\'id\')'
-    )
+    assert ops.sql[-1] == 'CREATE INDEX "idx ""quoted""" ON "tbl ""quoted""" USING paradedb (id, description)'
 
     drop_op = pdb_alembic.DropParadeDBIndexOp(index_name='idx "quoted"', if_exists=True)
     pdb_alembic._drop_paradedb_index_impl(ops, drop_op)
@@ -50,13 +46,11 @@ def test_create_sql_generation_preserves_tokenizer_expression():
         index_name="products_search_idx",
         table_name="products",
         expressions=["id", "((description)::pdb.simple('alias=description_simple,lowercase=true'))"],
-        key_field="id",
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
         'CREATE INDEX "products_search_idx" ON "products" '
-        "USING paradedb (id, ((description)::pdb.simple('alias=description_simple,lowercase=true'))) "
-        "WITH (key_field='id')"
+        "USING paradedb (id, ((description)::pdb.simple('alias=description_simple,lowercase=true')))"
     )
 
 
@@ -66,13 +60,11 @@ def test_create_drop_reindex_sql_generation_with_schema():
         index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
-        key_field="id",
         table_schema="analytics",
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        'CREATE INDEX "products_search_idx" ON "analytics"."products" '
-        "USING paradedb (id, description) WITH (key_field='id')"
+        'CREATE INDEX "products_search_idx" ON "analytics"."products" USING paradedb (id, description)'
     )
 
     drop_op = pdb_alembic.DropParadeDBIndexOp(index_name="products_search_idx", if_exists=True, schema="analytics")
@@ -91,7 +83,6 @@ def test_create_paradedb_index_rejects_removed_index_schema_kwarg():
             "products_search_idx",
             "products",
             ["id", "description"],
-            key_field="id",
             index_schema="analytics",
         )
 
@@ -101,7 +92,6 @@ def test_create_paradedb_index_reverse_returns_drop_op():
         index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
-        key_field="id",
         table_schema="analytics",
     )
 
@@ -120,7 +110,6 @@ def test_drop_paradedb_index_reverse_returns_create_op_when_metadata_present():
         schema="analytics",
         table_name="products",
         expressions=["id", "description"],
-        key_field="id",
         where="rating > 3",
     )
 
@@ -130,7 +119,6 @@ def test_drop_paradedb_index_reverse_returns_create_op_when_metadata_present():
     assert reversed_op.index_name == "products_search_idx"
     assert reversed_op.table_name == "products"
     assert reversed_op.expressions == ["id", "description"]
-    assert reversed_op.key_field == "id"
     assert reversed_op.table_schema == "analytics"
     assert reversed_op.where == "rating > 3"
 
@@ -149,7 +137,6 @@ def test_upgrade_ops_reverse_into_handles_paradedb_create_op():
                 index_name="products_search_idx",
                 table_name="products",
                 expressions=["id", "description"],
-                key_field="id",
                 table_schema="analytics",
             )
         ]
@@ -174,7 +161,6 @@ def test_upgrade_ops_reverse_into_handles_paradedb_drop_op_with_recreate_metadat
                 schema="analytics",
                 table_name="products",
                 expressions=["id", "description"],
-                key_field="id",
                 where="rating > 3",
             )
         ]
@@ -188,7 +174,6 @@ def test_upgrade_ops_reverse_into_handles_paradedb_drop_op_with_recreate_metadat
     assert reversed_op.index_name == "products_search_idx"
     assert reversed_op.table_name == "products"
     assert reversed_op.expressions == ["id", "description"]
-    assert reversed_op.key_field == "id"
     assert reversed_op.table_schema == "analytics"
     assert reversed_op.where == "rating > 3"
 
@@ -203,12 +188,9 @@ def test_alembic_renderers_registered_and_emit_python():
             index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
-            key_field="id",
         ),
     )
-    assert create_lines == [
-        "op.create_paradedb_index('products_search_idx', 'products', ['id', 'description'], key_field='id')"
-    ]
+    assert create_lines == ["op.create_paradedb_index('products_search_idx', 'products', ['id', 'description'])"]
 
     drop_lines = render_op(
         autogen_ctx,
@@ -224,12 +206,11 @@ def test_alembic_renderers_registered_and_emit_python():
             schema="analytics",
             table_name="products",
             expressions=["id", "description"],
-            key_field="id",
             where="rating > 3",
         ),
     )
     assert drop_lines_with_recreate == [
-        "op.drop_paradedb_index('products_search_idx', if_exists=False, schema='analytics', table_name='products', expressions=['id', 'description'], key_field='id', where='rating > 3')"
+        "op.drop_paradedb_index('products_search_idx', if_exists=False, schema='analytics', table_name='products', expressions=['id', 'description'], where='rating > 3')"
     ]
 
     reindex_lines = render_op(
@@ -244,12 +225,11 @@ def test_alembic_renderers_registered_and_emit_python():
             index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
-            key_field="id",
             table_schema="analytics",
         ),
     )
     assert create_lines_with_schema == [
-        "op.create_paradedb_index('products_search_idx', 'products', ['id', 'description'], key_field='id', table_schema='analytics')"
+        "op.create_paradedb_index('products_search_idx', 'products', ['id', 'description'], table_schema='analytics')"
     ]
 
 
@@ -269,7 +249,6 @@ def _make_metadata_with_paradedb_index() -> tuple[MetaData, object]:
         ParadeDBField(t.c.id),
         ParadeDBField(t.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     # A regular (non-ParadeDB) index on the same table
     Index("products_desc_idx", t.c.description)
@@ -296,7 +275,6 @@ def test_autogen_meta_indexes_schema_filter():
         ParadeDBField(t.c.id),
         ParadeDBField(t.c.body),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     # Only looking at schema "public" — the "other" table's index must not appear
@@ -318,7 +296,6 @@ def test_autogen_meta_indexes_uses_explicit_default_schema_for_unschematized_tab
         ParadeDBField(t.c.id),
         ParadeDBField(t.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     result_public = pdb_alembic._autogen_paradedb_meta_indexes(m, {"public", "other"}, default_schema="public")
@@ -415,13 +392,11 @@ def test_create_sql_generation_with_where_clause():
         index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
-        key_field="id",
         where="rating > 3",
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
-        'CREATE INDEX "products_search_idx" ON "products" '
-        "USING paradedb (id, description) WITH (key_field='id') WHERE rating > 3"
+        'CREATE INDEX "products_search_idx" ON "products" USING paradedb (id, description) WHERE rating > 3'
     )
 
 
@@ -432,13 +407,9 @@ def test_create_sql_generation_without_where_clause():
         index_name="products_search_idx",
         table_name="products",
         expressions=["id", "description"],
-        key_field="id",
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
-    assert (
-        ops.sql[-1]
-        == 'CREATE INDEX "products_search_idx" ON "products" USING paradedb (id, description) WITH (key_field=\'id\')'
-    )
+    assert ops.sql[-1] == 'CREATE INDEX "products_search_idx" ON "products" USING paradedb (id, description)'
 
 
 def test_renderer_emits_where_kwarg():
@@ -451,7 +422,6 @@ def test_renderer_emits_where_kwarg():
             index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
-            key_field="id",
             where="rating > 3",
         ),
     )
@@ -469,7 +439,6 @@ def test_renderer_omits_where_when_none():
             index_name="products_search_idx",
             table_name="products",
             expressions=["id", "description"],
-            key_field="id",
         ),
     )
     assert "where=" not in lines[0]
@@ -485,15 +454,10 @@ def test_normalize_where_clause():
 def test_extract_where_clause():
     from paradedb.sqlalchemy.indexing import _extract_where_clause
 
-    indexdef = (
-        "CREATE INDEX products_search_idx ON public.products "
-        "USING paradedb (id, description) WITH (key_field='id') WHERE (rating > 3)"
-    )
+    indexdef = "CREATE INDEX products_search_idx ON public.products USING paradedb (id, description) WHERE (rating > 3)"
     assert _extract_where_clause(indexdef) == "rating > 3"
 
-    indexdef_no_where = (
-        "CREATE INDEX products_search_idx ON public.products USING paradedb (id, description) WITH (key_field='id')"
-    )
+    indexdef_no_where = "CREATE INDEX products_search_idx ON public.products USING paradedb (id, description)"
     assert _extract_where_clause(indexdef_no_where) is None
 
 
@@ -525,14 +489,13 @@ def test_create_sql_generation_with_all_vector_options():
         index_name="items_search_idx",
         table_name="items",
         expressions=["id", "embedding vector_cosine_ops"],
-        key_field="id",
-        with_options=VectorIndexOptions(centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1),
+        with_options=VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32),
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
         'CREATE INDEX "items_search_idx" ON "items" '
         "USING paradedb (id, embedding vector_cosine_ops) "
-        "WITH (key_field='id', centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1)"
+        "WITH (training_sample_ratio=0.01, max_leaf_size=32)"
     )
 
 
@@ -542,13 +505,12 @@ def test_create_sql_generation_with_single_option():
         index_name="items_search_idx",
         table_name="items",
         expressions=["id", "embedding vector_l2_ops"],
-        key_field="id",
-        with_options=VectorIndexOptions(centroid_ratio=0.5),
+        with_options=VectorIndexOptions(training_sample_ratio=0.5),
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
         'CREATE INDEX "items_search_idx" ON "items" '
-        "USING paradedb (id, embedding vector_l2_ops) WITH (key_field='id', centroid_ratio=0.5)"
+        "USING paradedb (id, embedding vector_l2_ops) WITH (training_sample_ratio=0.5)"
     )
 
 
@@ -558,13 +520,12 @@ def test_ops_reject_plain_dict_with_options():
             index_name="items_search_idx",
             table_name="items",
             expressions=["id"],
-            key_field="id",
-            with_options={"centroid_ratio": 0.01},
+            with_options={"training_sample_ratio": 0.01},
         )
     with pytest.raises(TypeError, match="VectorIndexOptions"):
         pdb_alembic.DropParadeDBIndexOp(
             index_name="items_search_idx",
-            with_options={"centroid_ratio": 0.01},
+            with_options={"training_sample_ratio": 0.01},
         )
 
 
@@ -578,15 +539,12 @@ def test_renderer_emits_with_options_kwarg():
             index_name="items_search_idx",
             table_name="items",
             expressions=["id", "embedding vector_cosine_ops"],
-            key_field="id",
-            with_options=VectorIndexOptions(
-                centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1
-            ),
+            with_options=VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32),
         ),
     )
     assert lines == [
-        "op.create_paradedb_index('items_search_idx', 'items', ['id', 'embedding vector_cosine_ops'], key_field='id', "
-        "with_options=VectorIndexOptions(centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1))"
+        "op.create_paradedb_index('items_search_idx', 'items', ['id', 'embedding vector_cosine_ops'], "
+        "with_options=VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32))"
     ]
     assert "from paradedb.sqlalchemy import VectorIndexOptions" in autogen_ctx.imports
 
@@ -601,10 +559,9 @@ def test_renderer_omits_with_options_when_none():
             index_name="items_search_idx",
             table_name="items",
             expressions=["id"],
-            key_field="id",
         ),
     )
-    assert lines == ["op.create_paradedb_index('items_search_idx', 'items', ['id'], key_field='id')"]
+    assert lines == ["op.create_paradedb_index('items_search_idx', 'items', ['id'])"]
 
 
 def test_drop_renderer_emits_with_options_kwarg():
@@ -618,13 +575,12 @@ def test_drop_renderer_emits_with_options_kwarg():
             if_exists=True,
             table_name="items",
             expressions=["id"],
-            key_field="id",
-            with_options=VectorIndexOptions(centroid_ratio=0.01),
+            with_options=VectorIndexOptions(training_sample_ratio=0.01),
         ),
     )
     assert lines == [
         "op.drop_paradedb_index('items_search_idx', if_exists=True, table_name='items', expressions=['id'], "
-        "key_field='id', with_options=VectorIndexOptions(centroid_ratio=0.01))"
+        "with_options=VectorIndexOptions(training_sample_ratio=0.01))"
     ]
     assert "from paradedb.sqlalchemy import VectorIndexOptions" in autogen_ctx.imports
 
@@ -635,21 +591,20 @@ def test_drop_paradedb_index_reverse_carries_with_options():
         if_exists=True,
         table_name="items",
         expressions=["id", "embedding vector_cosine_ops"],
-        key_field="id",
-        with_options=VectorIndexOptions(centroid_ratio=0.01, cluster_replication=1),
+        with_options=VectorIndexOptions(training_sample_ratio=0.01),
     )
 
     reversed_op = drop_op.reverse()
 
     assert isinstance(reversed_op, pdb_alembic.CreateParadeDBIndexOp)
-    assert reversed_op.with_options == VectorIndexOptions(centroid_ratio=0.01, cluster_replication=1)
+    assert reversed_op.with_options == VectorIndexOptions(training_sample_ratio=0.01)
 
 
-def test_parse_index_reloptions_excludes_key_field():
-    reloptions = ["key_field=id", "centroid_ratio=0.01", "training_samples_per_centroid=32"]
+def test_parse_index_reloptions():
+    reloptions = ["training_sample_ratio=0.01", "max_leaf_size=32"]
     assert pdb_alembic._parse_index_reloptions(reloptions) == {
-        "centroid_ratio": "0.01",
-        "training_samples_per_centroid": "32",
+        "training_sample_ratio": "0.01",
+        "max_leaf_size": "32",
     }
     assert pdb_alembic._parse_index_reloptions(None) == {}
 
@@ -664,9 +619,9 @@ def test_with_option_values_equal_tolerates_real_normalization():
 def test_with_options_changed():
     assert not pdb_alembic._with_options_changed({}, {})
     assert not pdb_alembic._with_options_changed(
-        {"centroid_ratio": "0.0099999998", "cluster_replication": "1"},
-        {"centroid_ratio": 0.01, "cluster_replication": 1},
+        {"training_sample_ratio": "0.0099999998", "max_leaf_size": "32"},
+        {"training_sample_ratio": 0.01, "max_leaf_size": 32},
     )
-    assert pdb_alembic._with_options_changed({}, {"centroid_ratio": 0.01})
-    assert pdb_alembic._with_options_changed({"centroid_ratio": "0.01"}, {})
-    assert pdb_alembic._with_options_changed({"centroid_ratio": "0.01"}, {"centroid_ratio": 0.02})
+    assert pdb_alembic._with_options_changed({}, {"training_sample_ratio": 0.01})
+    assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {})
+    assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {"training_sample_ratio": 0.02})

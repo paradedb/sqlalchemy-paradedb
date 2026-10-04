@@ -31,7 +31,7 @@ class Product(Base):
 
 
 class MockItem(Base):
-    """Maps to mock_items created by paradedb.create_bm25_test_table."""
+    """Maps to mock_items created by paradedb.create_paradedb_test_table."""
 
     __tablename__ = "mock_items"
 
@@ -74,9 +74,7 @@ def engine(db_url: str) -> Iterator[Engine]:
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(
-            text(
-                "CREATE INDEX products_search_idx ON products USING paradedb (id, description, category, rating) WITH (key_field='id')"
-            )
+            text("CREATE INDEX products_search_idx ON products USING paradedb (id, description, category, rating)")
         )
     yield engine
     with engine.begin() as conn:
@@ -157,10 +155,11 @@ MOCK_ITEMS_INDEX_EXPRESSIONS = ["id", "description", "category", "rating", "in_s
 
 def create_mock_items_index(conn, options_sql: str = "") -> None:
     conn.execute(text("DROP INDEX IF EXISTS mock_items_search_idx"))
+    with_sql = f" WITH ({options_sql.lstrip(', ')})" if options_sql else ""
     conn.execute(
         text(
             f"CREATE INDEX mock_items_search_idx ON mock_items USING paradedb "
-            f"({', '.join(MOCK_ITEMS_INDEX_EXPRESSIONS)}) WITH (key_field='id'{options_sql})"
+            f"({', '.join(MOCK_ITEMS_INDEX_EXPRESSIONS)}){with_sql}"
         )
     )
 
@@ -171,7 +170,9 @@ def paradedb_ready(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.execute(text("DROP INDEX IF EXISTS mock_items_search_idx"))
         conn.execute(text("DROP TABLE IF EXISTS mock_items"))
-        conn.execute(text("CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items')"))
+        conn.execute(
+            text("CALL paradedb.create_paradedb_test_table(schema_name => 'public', table_name => 'mock_items')")
+        )
         create_mock_items_index(conn)
 
 

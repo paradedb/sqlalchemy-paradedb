@@ -111,7 +111,7 @@ def test_window_agg_with_raw_query_operators(mock_session):
         .limit(3)
     )
 
-    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=MockItem.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), field=MockItem.id)
 
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     assert (
@@ -137,7 +137,7 @@ def test_with_rows_adds_window_agg_and_extracts_payload(session):
         .order_by(Product.rating.desc())
         .limit(3)
     )
-    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), field=Product.id)
     assert_uses_paradedb_scan(session, stmt)
 
     assert (
@@ -161,7 +161,7 @@ def test_with_rows_auto_injects_sentinel_when_no_paradedb_predicate(session):
         .order_by(Product.rating.desc())
         .limit(3)
     )
-    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), key_field=Product.id)
+    stmt = facets.with_rows(base, agg=facets.value_count(field="id"), field=Product.id)
     assert (
         _sql(stmt)
         == """\

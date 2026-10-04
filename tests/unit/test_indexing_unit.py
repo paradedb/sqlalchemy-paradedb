@@ -16,7 +16,6 @@ from paradedb.sqlalchemy.indexing import (
     _extract_alias,
     _extract_paradedb_field_list,
     _extract_field_name,
-    _extract_key_field,
     _extract_tokenizer_name,
     _extract_trailing_opclass,
     _is_paradedb_index,
@@ -106,13 +105,12 @@ def test_paradedb_index_compile_with_tokenizers():
         ),
         ParadeDBField(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_search_idx ON products USING paradedb (id, ((description)::pdb.unicode_words('lowercase=true','stemmer=english')), ((category)::pdb.literal_normalized('alias=category_exact'))) WITH (key_field = id)"""
+CREATE INDEX products_search_idx ON products USING paradedb (id, ((description)::pdb.unicode_words('lowercase=true','stemmer=english')), ((category)::pdb.literal_normalized('alias=category_exact')))"""
     )
 
 
@@ -122,13 +120,12 @@ def test_paradedb_index_compile_unicode_omits_none_options():
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_search_idx ON products USING paradedb (id, ((description)::pdb.unicode_words('lowercase=true'))) WITH (key_field = id)"""
+CREATE INDEX products_search_idx ON products USING paradedb (id, ((description)::pdb.unicode_words('lowercase=true')))"""
     )
 
 
@@ -143,12 +140,11 @@ def test_paradedb_index_compile_with_structured_tokenizer_config():
             ),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_structured_idx ON products USING paradedb (id, ((description)::pdb.simple('alias=description_simple','lowercase=true','stemmer=english'))) WITH (key_field = id)"""
+CREATE INDEX products_structured_idx ON products USING paradedb (id, ((description)::pdb.simple('alias=description_simple','lowercase=true','stemmer=english')))"""
     )
 
 
@@ -163,12 +159,11 @@ def test_paradedb_index_compile_with_tokenizer_positional_and_named_args():
             ),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_ngram_idx ON products USING paradedb (id, ((description)::pdb.ngram(3,8,'alias=description_ngram','prefix_only=true','positions=true'))) WITH (key_field = id)"""
+CREATE INDEX products_ngram_idx ON products USING paradedb (id, ((description)::pdb.ngram(3,8,'alias=description_ngram','prefix_only=true','positions=true')))"""
     )
 
 
@@ -180,12 +175,11 @@ def test_paradedb_index_compile_lindera_wrapper():
             products.c.description, tokenizer=tokenizer.lindera("japanese", options={"alias": "description_jp"})
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_lindera_idx ON products USING paradedb (id, ((description)::pdb.lindera('japanese','alias=description_jp'))) WITH (key_field = id)"""
+CREATE INDEX products_lindera_idx ON products USING paradedb (id, ((description)::pdb.lindera('japanese','alias=description_jp')))"""
     )
 
 
@@ -198,12 +192,11 @@ def test_paradedb_index_compile_regex_pattern_wrapper():
             tokenizer=tokenizer.regex_pattern(r"(?i)\\bh\\w*", options={"alias": "description_regex"}),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_regex_idx ON products USING paradedb (id, ((description)::pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex'))) WITH (key_field = id)"""
+CREATE INDEX products_regex_idx ON products USING paradedb (id, ((description)::pdb.regex_pattern('(?i)\\\\bh\\\\w*','alias=description_regex')))"""
     )
 
 
@@ -216,12 +209,11 @@ def test_paradedb_index_compile_json_key_with_tokenizer():
             tokenizer=tokenizer.literal(options={"alias": "metadata_color"}),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_json_idx ON products USING paradedb (id, ((metadata ->> 'color')::pdb.literal('alias=metadata_color'))) WITH (key_field = id)"""
+CREATE INDEX products_json_idx ON products USING paradedb (id, ((metadata ->> 'color')::pdb.literal('alias=metadata_color')))"""
     )
 
 
@@ -238,12 +230,11 @@ def test_paradedb_index_compile_multiple_json_keys():
             tokenizer=tokenizer.literal(options={"alias": "metadata_location"}),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_json_multi_idx ON products USING paradedb (id, ((metadata ->> 'color')::pdb.literal('alias=metadata_color')), ((metadata ->> 'location')::pdb.literal('alias=metadata_location'))) WITH (key_field = id)"""
+CREATE INDEX products_json_multi_idx ON products USING paradedb (id, ((metadata ->> 'color')::pdb.literal('alias=metadata_color')), ((metadata ->> 'location')::pdb.literal('alias=metadata_location')))"""
     )
 
 
@@ -254,13 +245,12 @@ def test_paradedb_index_compile_non_text_expression_with_pdb_alias():
         ParadeDBField(products.c.description),
         ParadeDBField(pdb.alias(products.c.id + 1, "next_id")),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_expr_idx ON products USING paradedb (id, description, ((id + 1)::pdb.alias('next_id'))) WITH (key_field = id)"""
+CREATE INDEX products_expr_idx ON products USING paradedb (id, description, ((id + 1)::pdb.alias('next_id')))"""
     )
 
 
@@ -275,7 +265,6 @@ def test_is_paradedb_index_accepts_paradedb_and_bm25():
             f"products_{am}_recognition_idx",
             ParadeDBField(products.c.id),
             postgresql_using=am,
-            postgresql_with={"key_field": "id"},
         )
         assert _is_paradedb_index(idx), am
 
@@ -293,74 +282,17 @@ def test_duplicate_alias_validation_raises():
         ),
         ParadeDBField(products.c.category, tokenizer=tokenizer.literal(options={"alias": "description_alias"})),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     with pytest.raises(ValueError, match="Duplicate tokenizer alias"):
         validate_paradedb_index(idx)
 
 
-def test_key_field_validation_raises_when_missing():
-    idx = Index(
-        "products_missing_key_idx",
-        ParadeDBField(products.c.id),
-        ParadeDBField(products.c.description),
-        postgresql_using="paradedb",
-    )
-
-    with pytest.raises(ValueError, match="key_field"):
-        validate_paradedb_index(idx)
-
-
-def test_key_field_must_exist_in_fields():
-    idx = Index(
-        "products_bad_key_idx",
-        ParadeDBField(products.c.id),
-        ParadeDBField(products.c.description),
-        postgresql_using="paradedb",
-        postgresql_with={"key_field": "missing"},
-    )
-
-    with pytest.raises(ValueError, match="must match one of the indexed"):
-        validate_paradedb_index(idx)
-
-
-def test_key_field_must_be_first_field():
-    idx = Index(
-        "products_key_not_first_idx",
-        ParadeDBField(products.c.description),
-        ParadeDBField(products.c.id),
-        postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
-    )
-
-    with pytest.raises(ValueError, match="must be the first indexed ParadeDBField"):
-        validate_paradedb_index(idx)
-
-
-def test_key_field_must_be_untokenized():
-    idx = Index(
-        "products_key_tokenized_idx",
-        ParadeDBField(products.c.id, tokenizer=tokenizer.literal(options={"alias": "id_alias"})),
-        ParadeDBField(products.c.description),
-        postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
-    )
-
-    with pytest.raises(ValueError, match="must be untokenized"):
-        validate_paradedb_index(idx)
-
-
-def test_extract_key_field_handles_normalized_indexdef():
-    indexdef = "CREATE INDEX idx ON public.products USING paradedb (id, description) WITH (key_field=id)"
-    assert _extract_key_field(indexdef) == "id"
-
-
 def test_extract_paradedb_field_list_parses_tokenizer_casts():
     indexdef = (
         "CREATE INDEX idx ON public.products USING paradedb "
         "(id, ((description)::pdb.unicode_words('lowercase=true')), "
-        "((category)::pdb.literal_normalized('alias=category_exact'))) WITH (key_field=id)"
+        "((category)::pdb.literal_normalized('alias=category_exact')))"
     )
     parts = _extract_paradedb_field_list(indexdef)
     assert parts == [
@@ -378,7 +310,7 @@ def test_extract_paradedb_field_list_parses_vector_opclass():
     indexdef = (
         "CREATE INDEX idx ON public.items USING paradedb "
         "(id, ((description)::pdb.unicode_words('lowercase=true')), embedding vector_cosine_ops) "
-        "WITH (key_field=id)"
+        ""
     )
     parts = _extract_paradedb_field_list(indexdef)
     assert parts[2] == "embedding vector_cosine_ops"
@@ -394,7 +326,7 @@ def test_extract_trailing_opclass():
 
 
 def test_extract_paradedb_field_list_parses_legacy_bm25_indexdef():
-    indexdef = "CREATE INDEX idx ON public.products USING bm25 (id, description) WITH (key_field=id)"
+    indexdef = "CREATE INDEX idx ON public.products USING bm25 (id, description)"
     assert _extract_paradedb_field_list(indexdef) == ["id", "description"]
 
 
@@ -455,7 +387,6 @@ def test_extract_tokenizer_name_plain_field_returns_none():
 def test_index_meta_tokenizers_field_defaults_empty():
     meta = IndexMeta(
         index_name="idx",
-        key_field="id",
         fields=("id",),
         aliases={},
     )
@@ -465,7 +396,6 @@ def test_index_meta_tokenizers_field_defaults_empty():
 def test_index_meta_tokenizers_stored():
     meta = IndexMeta(
         index_name="idx",
-        key_field="id",
         fields=("id", "description"),
         aliases={},
         tokenizers={"description": ("unicode_words",)},
@@ -492,7 +422,6 @@ def test_assert_indexed_raises_field_not_indexed(monkeypatch):
 
     meta = IndexMeta(
         index_name="products_search_idx",
-        key_field="id",
         fields=("id", "description"),
         aliases={},
     )
@@ -507,7 +436,6 @@ def test_assert_indexed_passes_when_field_found(monkeypatch):
 
     meta = IndexMeta(
         index_name="products_search_idx",
-        key_field="id",
         fields=("id", "description", "category"),
         aliases={},
     )
@@ -522,7 +450,6 @@ def test_assert_indexed_tokenizer_match(monkeypatch):
 
     meta = IndexMeta(
         index_name="products_search_idx",
-        key_field="id",
         fields=("id", "category"),
         aliases={},
         tokenizers={"category": ("literal",)},
@@ -537,7 +464,6 @@ def test_assert_indexed_tokenizer_mismatch_raises(monkeypatch):
 
     meta = IndexMeta(
         index_name="products_search_idx",
-        key_field="id",
         fields=("id", "category"),
         aliases={},
         tokenizers={"category": ("unicode_words",)},
@@ -553,7 +479,6 @@ def test_assert_indexed_passes_schema_override_to_describe(monkeypatch):
 
     meta = IndexMeta(
         index_name="products_search_idx",
-        key_field="id",
         fields=("id", "category"),
         aliases={},
     )
@@ -575,12 +500,11 @@ def test_vector_index_default_metric_compile():
         ParadeDBField(products.c.description),
         VectorField(products.c.embedding),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_idx ON products USING paradedb (id, description, embedding vector_l2_ops) WITH (key_field = id)"""
+CREATE INDEX products_vector_idx ON products USING paradedb (id, description, embedding vector_l2_ops)"""
     )
     validate_paradedb_index(idx)
 
@@ -591,12 +515,11 @@ def test_vector_index_cosine_metric_compile():
         ParadeDBField(products.c.id),
         VectorField(products.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_cosine_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (key_field = id)"""
+CREATE INDEX products_vector_cosine_idx ON products USING paradedb (id, embedding vector_cosine_ops)"""
     )
 
 
@@ -606,30 +529,17 @@ def test_vector_index_ip_metric_compile():
         ParadeDBField(products.c.id),
         VectorField(products.c.embedding, metric="ip"),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_ip_idx ON products USING paradedb (id, embedding vector_ip_ops) WITH (key_field = id)"""
+CREATE INDEX products_vector_ip_idx ON products USING paradedb (id, embedding vector_ip_ops)"""
     )
 
 
 def test_vector_field_invalid_metric_raises():
     with pytest.raises(InvalidArgumentError, match="metric must be one of: cosine, ip, l2"):
         VectorField(products.c.embedding, metric="euclidean")
-
-
-def test_vector_field_cannot_be_key_field():
-    idx = Index(
-        "products_vector_bad_key_idx",
-        VectorField(products.c.embedding),
-        ParadeDBField(products.c.id),
-        postgresql_using="paradedb",
-        postgresql_with={"key_field": "embedding"},
-    )
-    with pytest.raises(ValueError, match="cannot be a VectorField"):
-        validate_paradedb_index(idx)
 
 
 def test_vector_field_non_postgres_compile_raises():
@@ -644,14 +554,13 @@ def test_vector_index_options_compile():
         VectorField(products.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
         postgresql_with={
-            "key_field": "id",
-            **VectorIndexOptions(centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1),
+            **VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32),
         },
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (key_field = id, centroid_ratio = 0.01, training_samples_per_centroid = 32, cluster_replication = 1)"""
+CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (training_sample_ratio = 0.01, max_leaf_size = 32)"""
     )
     validate_paradedb_index(idx)
 
@@ -662,12 +571,12 @@ def test_vector_index_options_dict_passthrough_compile():
         ParadeDBField(products.c.id),
         VectorField(products.c.embedding),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id", "centroid_ratio": 0.5},
+        postgresql_with={"training_sample_ratio": 0.5},
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_single_option_idx ON products USING paradedb (id, embedding vector_l2_ops) WITH (key_field = id, centroid_ratio = 0.5)"""
+CREATE INDEX products_vector_single_option_idx ON products USING paradedb (id, embedding vector_l2_ops) WITH (training_sample_ratio = 0.5)"""
     )
     validate_paradedb_index(idx)
 
@@ -678,30 +587,27 @@ def test_vector_index_options_allowed_without_vector_field():
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id", "centroid_ratio": 0.01},
+        postgresql_with={"training_sample_ratio": 0.01},
     )
     validate_paradedb_index(idx)
 
 
 _INVALID_OPTION_VALUES = [
-    ("centroid_ratio", 0.0000001),
-    ("centroid_ratio", 1.5),
-    ("centroid_ratio", "not-a-number"),
-    ("centroid_ratio", True),
-    ("training_samples_per_centroid", 0),
-    ("training_samples_per_centroid", 100001),
-    ("training_samples_per_centroid", 32.5),
-    ("cluster_replication", 0),
-    ("cluster_replication", 2147483648),
+    ("training_sample_ratio", 0.0000001),
+    ("training_sample_ratio", 1.5),
+    ("training_sample_ratio", "not-a-number"),
+    ("training_sample_ratio", True),
+    ("max_leaf_size", 0),
+    ("max_leaf_size", 2147483648),
+    ("max_leaf_size", 32.5),
 ]
 
 _BOUNDARY_OPTION_VALUES = [
-    ("centroid_ratio", 0.000001),
-    ("centroid_ratio", 1.0),
-    ("centroid_ratio", "0.01"),
-    ("training_samples_per_centroid", 1),
-    ("training_samples_per_centroid", 100000),
-    ("cluster_replication", 2147483647),
+    ("training_sample_ratio", 0.000001),
+    ("training_sample_ratio", 1.0),
+    ("training_sample_ratio", "0.01"),
+    ("max_leaf_size", 1),
+    ("max_leaf_size", 2147483647),
 ]
 
 
@@ -712,7 +618,7 @@ def test_vector_index_option_invalid_values_raise(name, value):
         ParadeDBField(products.c.id),
         VectorField(products.c.embedding),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id", name: value},
+        postgresql_with={name: value},
     )
     with pytest.raises(InvalidIndexOptionError, match=name):
         validate_paradedb_index(idx)
@@ -725,7 +631,7 @@ def test_vector_index_option_boundary_values_pass(name, value):
         ParadeDBField(products.c.id),
         VectorField(products.c.embedding),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id", name: value},
+        postgresql_with={name: value},
     )
     validate_paradedb_index(idx)
 
@@ -743,10 +649,9 @@ def test_vector_index_options_class_boundary_values_pass(name, value):
 
 def test_vector_index_options_class_omits_unset_fields():
     assert dict(VectorIndexOptions()) == {}
-    assert dict(VectorIndexOptions(centroid_ratio=0.01)) == {"centroid_ratio": 0.01}
-    assert dict(VectorIndexOptions(centroid_ratio=0.01, cluster_replication=2)) == {
-        "centroid_ratio": 0.01,
-        "cluster_replication": 2,
+    assert dict(VectorIndexOptions(training_sample_ratio=0.01)) == {"training_sample_ratio": 0.01}
+    assert dict(VectorIndexOptions(training_sample_ratio=0.01)) == {
+        "training_sample_ratio": 0.01,
     }
     with pytest.raises(KeyError):
-        VectorIndexOptions(centroid_ratio=0.01)["cluster_replication"]
+        VectorIndexOptions(training_sample_ratio=0.01)["max_leaf_size"]

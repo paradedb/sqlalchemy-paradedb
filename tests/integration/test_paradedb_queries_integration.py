@@ -1,7 +1,7 @@
 """Comprehensive integration tests for all ParadeDB search operators.
 
 Mirrors the coverage of django-paradedb's test_paradedb_queries.py,
-using the mock_items dataset from paradedb.create_bm25_test_table.
+using the mock_items dataset from paradedb.create_paradedb_test_table.
 """
 
 from __future__ import annotations
@@ -508,11 +508,7 @@ def test_range_term_with_range_type(mock_session):
     metadata.create_all(engine)
 
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE INDEX rt_items_pq_search_idx ON rt_items_pq USING paradedb (id, weight_range) WITH (key_field='id')"
-            )
-        )
+        conn.execute(text("CREATE INDEX rt_items_pq_search_idx ON rt_items_pq USING paradedb (id, weight_range)"))
         conn.execute(
             text(
                 "INSERT INTO rt_items_pq (id, weight_range) VALUES "
@@ -561,10 +557,7 @@ def test_range_term_scalar_contains_point(mock_session):
 
     with engine.begin() as conn:
         conn.execute(
-            text(
-                "CREATE INDEX rt_scalar_items_pq_search_idx ON rt_scalar_items_pq USING paradedb (id, weight_range) "
-                "WITH (key_field='id')"
-            )
+            text("CREATE INDEX rt_scalar_items_pq_search_idx ON rt_scalar_items_pq USING paradedb (id, weight_range) ")
         )
         conn.execute(
             text(
@@ -657,11 +650,7 @@ def test_exists_query_matches_non_null(mock_session):
     metadata.create_all(engine)
 
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE INDEX exists_items_pq_search_idx ON exists_items_pq USING paradedb (id, rating) WITH (key_field='id')"
-            )
-        )
+        conn.execute(text("CREATE INDEX exists_items_pq_search_idx ON exists_items_pq USING paradedb (id, rating)"))
         conn.execute(text("INSERT INTO exists_items_pq (id, rating) VALUES (1, 5), (2, NULL), (3, 0)"))
 
     try:

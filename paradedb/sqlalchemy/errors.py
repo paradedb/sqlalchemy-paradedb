@@ -17,14 +17,6 @@ class ParadeDBValidationError(ParadeDBError, ValueError):
     """Base class for ParadeDB index validation errors."""
 
 
-class MissingKeyFieldError(ParadeDBValidationError):
-    """Raised when a ParadeDB index is missing key_field option."""
-
-
-class InvalidKeyFieldError(ParadeDBValidationError):
-    """Raised when ParadeDB key_field is not part of index fields."""
-
-
 class DuplicateTokenizerAliasError(ParadeDBValidationError):
     """Raised when tokenizer aliases are duplicated in one ParadeDB index."""
 
