@@ -49,7 +49,7 @@ def test_alembic_create_reindex_drop_with_quoted_identifiers(engine):
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
 
-        op.create_paradedb_index(index_name, table_name, ["id", "description"], key_field="id")
+        op.create_paradedb_index(index_name, table_name, ["id", "description"])
 
         exists = conn.execute(
             text(
@@ -105,7 +105,6 @@ def test_alembic_create_reindex_drop_with_schema(engine):
             index_name,
             table_name,
             ["id", "description"],
-            key_field="id",
             table_schema=schema,
         )
 
@@ -159,11 +158,7 @@ def _setup_autogen_table(engine, *, with_index: bool = False):
         conn.execute(text(f'DROP TABLE IF EXISTS "{_AG_TABLE}" CASCADE'))
         conn.execute(text(f'CREATE TABLE "{_AG_TABLE}" (id int primary key, description text not null)'))
         if with_index:
-            conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WITH (key_field=\'id\')'
-                )
-            )
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description)'))
 
 
 def _teardown_autogen_table(engine):
@@ -172,7 +167,7 @@ def _teardown_autogen_table(engine):
         conn.execute(text(f'DROP TABLE IF EXISTS "{_AG_TABLE}" CASCADE'))
 
 
-def _metadata_with_paradedb_index(*, key_field: str | None = "id") -> MetaData:
+def _metadata_with_paradedb_index() -> MetaData:
     """MetaData that defines autogen_test with a ParadeDB index."""
     m = MetaData()
     t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
@@ -183,7 +178,6 @@ def _metadata_with_paradedb_index(*, key_field: str | None = "id") -> MetaData:
         ParadeDBField(t.c.id),
         ParadeDBField(t.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": key_field} if key_field is not None else {},
     )
     return m
 
@@ -206,7 +200,6 @@ def test_autogenerate_detects_missing_index(engine):
         op = create_ops[0]
         assert op.index_name == _AG_IDX
         assert op.table_name == _AG_TABLE
-        assert op.key_field == "id"
         assert "id" in op.expressions
         assert "description" in op.expressions
     finally:
@@ -253,7 +246,7 @@ def test_autogenerate_detects_changed_fields(engine):
     try:
         # DB index only covers 'id'
         with engine.begin() as conn:
-            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id) WITH (key_field=\'id\')'))
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id)'))
 
         # MetaData index covers 'id' and 'description'
         upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
@@ -278,7 +271,7 @@ def _tokenizer_cast_supported(engine) -> bool:
                 text(
                     f'CREATE INDEX "{index_name}" ON "{table_name}" '
                     "USING paradedb (id, (description::pdb.unicode_words('lowercase=true'))) "
-                    "WITH (key_field='id')"
+                    ""
                 )
             )
         return True
@@ -302,7 +295,6 @@ def _metadata_with_tokenized_paradedb_index() -> MetaData:
             t.c.description, tokenizer=tokenizer.simple(options={"alias": "description_simple", "lowercase": True})
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     return m
 
@@ -314,11 +306,7 @@ def test_autogenerate_detects_changed_tokenizer_expression(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         with engine.begin() as conn:
-            conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WITH (key_field=\'id\')'
-                )
-            )
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description)'))
 
         upgrade_ops = _run_comparator(engine, _metadata_with_tokenized_paradedb_index())
 
@@ -348,7 +336,7 @@ def _setup_autogen_schema_table(engine, *, with_index: bool = False):
             conn.execute(
                 text(
                     f'CREATE INDEX "{_AG_SCHEMA_IDX}" ON "{_AG_SCHEMA}"."{_AG_SCHEMA_TABLE}" '
-                    "USING paradedb (id, description) WITH (key_field='id')"
+                    "USING paradedb (id, description)"
                 )
             )
 
@@ -369,7 +357,6 @@ def _metadata_with_paradedb_index_in_schema() -> MetaData:
         ParadeDBField(t.c.id),
         ParadeDBField(t.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     return m
 
@@ -441,7 +428,6 @@ def test_alembic_create_partial_index_with_where_clause(engine):
             _PARTIAL_IDX,
             _PARTIAL_TABLE,
             ["id", "description", "rating"],
-            key_field="id",
             where="rating > 3",
         )
 
@@ -492,7 +478,6 @@ def test_autogenerate_detects_missing_partial_index(engine):
             ParadeDBField(t.c.id),
             ParadeDBField(t.c.description),
             postgresql_using="paradedb",
-            postgresql_with={"key_field": "id"},
             postgresql_where=t.c.id > 2,
         )
 
@@ -518,10 +503,7 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
         # Create index with WHERE (id > 2) in DB
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING paradedb (id, description) WITH (key_field='id') WHERE (id > 2)"
-                )
+                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WHERE (id > 2)')
             )
 
         # MetaData declares WHERE (id > 5)
@@ -534,7 +516,6 @@ def test_autogenerate_detects_changed_partial_predicate(engine):
             ParadeDBField(t.c.id),
             ParadeDBField(t.c.description),
             postgresql_using="paradedb",
-            postgresql_with={"key_field": "id"},
             postgresql_where=t.c.id > 5,
         )
 
@@ -564,10 +545,7 @@ def test_autogenerate_no_op_when_partial_indexes_match(engine):
     try:
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING paradedb (id, description) WITH (key_field='id') WHERE (id > 2)"
-                )
+                text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WHERE (id > 2)')
             )
 
         m = MetaData()
@@ -579,7 +557,6 @@ def test_autogenerate_no_op_when_partial_indexes_match(engine):
             ParadeDBField(t.c.id),
             ParadeDBField(t.c.description),
             postgresql_using="paradedb",
-            postgresql_with={"key_field": "id"},
             postgresql_where=t.c.id > 2,
         )
 
@@ -602,7 +579,7 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
             conn.execute(
                 text(
                     f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" '
-                    f"USING paradedb (id, description) WITH (key_field='id') "
+                    f"USING paradedb (id, description) "
                     f"WHERE (description = 'ACTIVE')"
                 )
             )
@@ -616,7 +593,6 @@ def test_autogenerate_detects_changed_partial_string_literal_case(engine):
             ParadeDBField(t.c.id),
             ParadeDBField(t.c.description),
             postgresql_using="paradedb",
-            postgresql_with={"key_field": "id"},
             postgresql_where="description = 'active'::text",
         )
 
@@ -644,7 +620,7 @@ def test_autogenerate_round_trip_converges(engine):
     _setup_autogen_table(engine, with_index=False)
     try:
         with engine.begin() as conn:
-            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id) WITH (key_field=\'id\')'))
+            conn.execute(text(f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id)'))
 
         upgrade_ops = _run_comparator(engine, _metadata_with_paradedb_index())
         our_ops = tuple(
@@ -698,7 +674,7 @@ def test_alembic_create_reindex_drop_is_queryable(engine):
         op = Operations(ctx)
 
         # Create
-        op.create_paradedb_index(_LIFECYCLE_IDX, _LIFECYCLE_TABLE, ["id", "description"], key_field="id")
+        op.create_paradedb_index(_LIFECYCLE_IDX, _LIFECYCLE_TABLE, ["id", "description"])
         _assert_paradedb_queryable(conn, _LIFECYCLE_TABLE, _LIFECYCLE_IDX, "description", "running")
 
         # Reindex
@@ -735,7 +711,7 @@ def test_alembic_reindex_concurrently_autocommit(engine):
     with engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
-        op.create_paradedb_index(_CONC_IDX, _CONC_TABLE, ["id", "description"], key_field="id")
+        op.create_paradedb_index(_CONC_IDX, _CONC_TABLE, ["id", "description"])
 
     # Reindex concurrently requires AUTOCOMMIT
     autocommit_engine = engine.execution_options(isolation_level="AUTOCOMMIT")
@@ -754,49 +730,8 @@ def test_alembic_reindex_concurrently_autocommit(engine):
 
 
 # ---------------------------------------------------------------------------
-# 2i. Autogenerate detects changed key_field
+# 2i. Autogenerate detects changed options
 # ---------------------------------------------------------------------------
-
-
-def test_autogenerate_detects_changed_key_field(engine):
-    _setup_autogen_table(engine, with_index=False)
-    try:
-        # DB has key_field='id'
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    f'CREATE INDEX "{_AG_IDX}" ON "{_AG_TABLE}" USING paradedb (id, description) WITH (key_field=\'id\')'
-                )
-            )
-
-        # MetaData declares key_field='description' (different) but keeps the
-        # expression list identical so only key_field drift is under test.
-        m = MetaData()
-        t = Table(_AG_TABLE, m, Column("id", Integer, primary_key=True), Column("description", Text))
-        from sqlalchemy.schema import Index
-
-        Index(
-            _AG_IDX,
-            ParadeDBField(t.c.id),
-            ParadeDBField(t.c.description),
-            postgresql_using="paradedb",
-            postgresql_with={"key_field": "description"},
-        )
-
-        upgrade_ops = _run_comparator(engine, m)
-        drop_ops = [
-            op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
-        ]
-        create_ops = [
-            op
-            for op in upgrade_ops.ops
-            if isinstance(op, pdb_alembic.CreateParadeDBIndexOp) and op.index_name == _AG_IDX
-        ]
-        assert len(drop_ops) == 1, "Expected DropParadeDBIndexOp for key_field change"
-        assert len(create_ops) == 1, "Expected CreateParadeDBIndexOp for key_field change"
-        assert create_ops[0].key_field == "description"
-    finally:
-        _teardown_autogen_table(engine)
 
 
 # ---------------------------------------------------------------------------
@@ -823,7 +758,6 @@ def test_alembic_expression_index_lifecycle(engine):
             _EXPR_IDX,
             _EXPR_TABLE,
             ["id", "((description)::pdb.simple('alias=desc_simple,lowercase=true'))"],
-            key_field="id",
         )
 
         # Verify index exists and indexdef contains the tokenizer expression
@@ -873,7 +807,6 @@ def test_alembic_multi_tokenizer_expression_lifecycle(engine):
                 "((title)::pdb.simple('alias=title_simple,lowercase=true'))",
                 "((body)::pdb.unicode_words('alias=body_unicode,lowercase=true'))",
             ],
-            key_field="id",
         )
 
         # Verify index exists and indexdef contains both tokenizer expressions
@@ -912,7 +845,7 @@ def _mock_items_metadata(**with_options) -> MetaData:
         ParadeDBField(items.c.in_stock),
         VectorField(items.c.embedding),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id", **with_options},
+        postgresql_with=with_options,
     )
     return metadata
 
@@ -928,8 +861,8 @@ def test_autogen_comparator_reports_no_vector_index_churn(engine, paradedb_ready
 # ---------------------------------------------------------------------------
 
 _MOCK_IDX = "mock_items_search_idx"
-_VIOPT_OPTIONS = {"centroid_ratio": 0.01, "training_samples_per_centroid": 32, "cluster_replication": 1}
-_VIOPT_OPTIONS_SQL = ", centroid_ratio=0.01, training_samples_per_centroid=32, cluster_replication=1"
+_VIOPT_OPTIONS = {"training_sample_ratio": 0.01, "max_leaf_size": 32}
+_VIOPT_OPTIONS_SQL = ", training_sample_ratio=0.01, max_leaf_size=32"
 
 
 @pytest.fixture()
@@ -959,15 +892,13 @@ def test_alembic_create_index_with_options_sets_reloptions(engine, mock_items_in
             _MOCK_IDX,
             "mock_items",
             MOCK_ITEMS_INDEX_EXPRESSIONS,
-            key_field="id",
             with_options=VectorIndexOptions(**_VIOPT_OPTIONS),
         )
 
         reloptions = _index_reloptions(conn, _MOCK_IDX)
         options = dict(opt.split("=", 1) for opt in reloptions)
-        assert float(options["centroid_ratio"]) == pytest.approx(0.01)
-        assert options["training_samples_per_centroid"] == "32"
-        assert options["cluster_replication"] == "1"
+        assert float(options["training_sample_ratio"]) == pytest.approx(0.01)
+        assert options["max_leaf_size"] == "32"
 
 
 def test_autogenerate_no_op_when_index_options_match(engine, mock_items_index):
@@ -982,7 +913,7 @@ def test_autogenerate_detects_missing_index_options(engine, mock_items_index):
     """DB index has no options but MetaData declares them → drop + create with with_options."""
     with engine.begin() as conn:
         create_mock_items_index(conn)
-    upgrade_ops = _run_comparator(engine, _mock_items_metadata(centroid_ratio=0.02))
+    upgrade_ops = _run_comparator(engine, _mock_items_metadata(training_sample_ratio=0.02))
 
     drop_ops = [
         op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _MOCK_IDX
@@ -992,13 +923,13 @@ def test_autogenerate_detects_missing_index_options(engine, mock_items_index):
     ]
     assert len(drop_ops) == 1
     assert len(create_ops) == 1
-    assert create_ops[0].with_options == VectorIndexOptions(centroid_ratio=0.02)
+    assert create_ops[0].with_options == VectorIndexOptions(training_sample_ratio=0.02)
 
 
 def test_autogenerate_detects_changed_index_options(engine, mock_items_index):
     with engine.begin() as conn:
         create_mock_items_index(conn, _VIOPT_OPTIONS_SQL)
-    upgrade_ops = _run_comparator(engine, _mock_items_metadata(**{**_VIOPT_OPTIONS, "centroid_ratio": 0.5}))
+    upgrade_ops = _run_comparator(engine, _mock_items_metadata(**{**_VIOPT_OPTIONS, "training_sample_ratio": 0.5}))
 
     drop_ops = [
         op for op in upgrade_ops.ops if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _MOCK_IDX
@@ -1009,7 +940,7 @@ def test_autogenerate_detects_changed_index_options(engine, mock_items_index):
     assert len(drop_ops) == 1
     assert drop_ops[0].with_options is not None
     assert len(create_ops) == 1
-    assert create_ops[0].with_options == VectorIndexOptions(**{**_VIOPT_OPTIONS, "centroid_ratio": 0.5})
+    assert create_ops[0].with_options == VectorIndexOptions(**{**_VIOPT_OPTIONS, "training_sample_ratio": 0.5})
 
 
 def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index):
@@ -1030,7 +961,6 @@ def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index
             create_ops[0].index_name,
             create_ops[0].table_name,
             create_ops[0].expressions,
-            key_field=create_ops[0].key_field,
             table_schema=create_ops[0].table_schema,
             where=create_ops[0].where,
             with_options=create_ops[0].with_options,
@@ -1039,29 +969,3 @@ def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index
     upgrade_ops_after = _run_comparator(engine, metadata)
     ops_after = [op for op in upgrade_ops_after.ops if getattr(op, "index_name", None) == _MOCK_IDX]
     assert ops_after == [], f"Expected convergence after applying create op, got: {ops_after}"
-
-
-def test_keyless_index_autogenerate_round_trip(engine):
-    _setup_autogen_table(engine)
-    try:
-        metadata = _metadata_with_paradedb_index(key_field=None)
-        create_ops = [
-            op for op in _run_comparator(engine, metadata).ops if isinstance(op, pdb_alembic.CreateParadeDBIndexOp)
-        ]
-        assert len(create_ops) == 1
-        assert create_ops[0].key_field is None
-        next(iter(metadata.tables[_AG_TABLE].indexes)).create(engine)
-        assert not any(op.index_name == _AG_IDX for op in _run_comparator(engine, metadata).ops)
-        drop_ops = [
-            op
-            for op in _run_comparator(engine, _metadata_without_paradedb_index()).ops
-            if isinstance(op, pdb_alembic.DropParadeDBIndexOp) and op.index_name == _AG_IDX
-        ]
-        assert len(drop_ops) == 1
-        with engine.begin() as connection:
-            operations = Operations(MigrationContext.configure(connection))
-            pdb_alembic._drop_paradedb_index_impl(operations, drop_ops[0])
-            pdb_alembic._create_paradedb_index_impl(operations, drop_ops[0].reverse())
-        assert not any(op.index_name == _AG_IDX for op in _run_comparator(engine, metadata).ops)
-    finally:
-        _teardown_autogen_table(engine)

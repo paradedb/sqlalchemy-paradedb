@@ -25,9 +25,8 @@ from .errors import (
 )
 
 VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
-    "centroid_ratio": (float, 0.000001, 1.0),
-    "training_samples_per_centroid": (int, 1, 100000),
-    "cluster_replication": (int, 1, 2147483647),
+    "training_sample_ratio": (float, 0.000001, 1.0),
+    "max_leaf_size": (int, 1, 2147483647),
 }
 
 
@@ -49,7 +48,7 @@ def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
 
 @dataclass(frozen=True)
 class VectorIndexOptions:
-    """Vector index build options (pg_search 0.25.0+), validated at construction.
+    """Vector index build options (pg_search 0.26.0+), validated at construction.
 
     Unpack into ``postgresql_with``::
 
@@ -58,16 +57,15 @@ class VectorIndexOptions:
             ParadeDBField(products.c.id),
             VectorField(products.c.embedding, metric="cosine"),
             postgresql_using="paradedb",
-            postgresql_with=dict(VectorIndexOptions(centroid_ratio=0.01)),
+            postgresql_with=dict(VectorIndexOptions(training_sample_ratio=0.01)),
         )
 
     Options left as ``None`` are omitted so the server defaults apply. Raw
     entries in ``postgresql_with`` are still accepted and validated the same way.
     """
 
-    centroid_ratio: float | None = None
-    training_samples_per_centroid: int | None = None
-    cluster_replication: int | None = None
+    training_sample_ratio: float | None = None
+    max_leaf_size: int | None = None
 
     def __post_init__(self) -> None:
         _validate_vector_index_options(dict(self))
@@ -196,14 +194,12 @@ def _validate_paradedb_before_create(index: Index, connection, **kw: Any) -> Non
 @dataclass(frozen=True)
 class IndexMeta:
     index_name: str
-    key_field: str | None
     fields: tuple[str, ...]
     aliases: dict[str, str]
     tokenizers: dict[str, tuple[str, ...]] = field(default_factory=dict)
     """Maps field name to the tokenizer names used in this index, e.g. ``{"description": ("unicode_words",)}``."""
 
 
-_KEY_FIELD_RE = re.compile(r"key_field\s*=\s*'?\"?([^'\",)\s]+)\"?'?", re.IGNORECASE)
 _VECTOR_OPCLASS_TAIL_RE = re.compile(r"\s(vector_(?:l2|cosine|ip)_ops)\s*$")
 _ALIAS_RE = re.compile(r"alias\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
 _TOKENIZER_NAME_RE = re.compile(r"::pdb\.([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
@@ -326,13 +322,6 @@ def _has_balanced_outer_parens(value: str) -> bool:
     return depth == 0
 
 
-def _extract_key_field(indexdef: str) -> str | None:
-    match = _KEY_FIELD_RE.search(indexdef)
-    if match:
-        return match.group(1)
-    return None
-
-
 _WHERE_CLAUSE_RE = re.compile(r"\bWHERE\s*\((.+)\)\s*$", re.IGNORECASE)
 
 
@@ -395,7 +384,6 @@ def _introspect_paradedb_index_rows(conn, *, schema_name: str, table_name: str |
               am.amname AS amname,
               pg_get_indexdef(idx.oid) AS indexdef,
               idx.reloptions AS reloptions,
-              split_part(opt.opt, '=', 2) AS key_field,
               key_ord.ord::int AS ordinality,
               pg_get_indexdef(idx.oid, key_ord.ord::int, true) AS keydef,
               CASE WHEN key_ord.attnum > 0 THEN attr.attname ELSE NULL END AS attname
@@ -404,12 +392,6 @@ def _introspect_paradedb_index_rows(conn, *, schema_name: str, table_name: str |
             JOIN pg_index AS i ON i.indexrelid = idx.oid
             JOIN pg_class AS tbl ON tbl.oid = i.indrelid
             JOIN pg_am AS am ON am.oid = idx.relam
-            LEFT JOIN LATERAL (
-              SELECT opt
-              FROM unnest(COALESCE(idx.reloptions, ARRAY[]::text[])) AS opt
-              WHERE split_part(opt, '=', 1) = 'key_field'
-              LIMIT 1
-            ) AS opt ON true
             JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS key_ord(attnum, ord) ON true
             LEFT JOIN pg_attribute AS attr
               ON attr.attrelid = tbl.oid
@@ -444,16 +426,11 @@ def describe(engine: Engine, table, *, schema: str | None = None) -> list[IndexM
             index_name,
             {
                 "indexdef": row["indexdef"],
-                "key_field": _normalize_reloption_value(row["key_field"]),
                 "fields": [],
                 "aliases": {},
                 "tokenizers": {},
             },
         )
-
-        key_field = _normalize_reloption_value(row["key_field"])
-        if key_field and not group["key_field"]:
-            group["key_field"] = key_field
 
         raw_expr = str(row["keydef"] or "")
         field_name = row["attname"] or _extract_field_name(raw_expr)
@@ -476,11 +453,9 @@ def describe(engine: Engine, table, *, schema: str | None = None) -> list[IndexM
 
     output: list[IndexMeta] = []
     for index_name, data in grouped.items():
-        key_field = data["key_field"] or _extract_key_field(str(data["indexdef"]))
         output.append(
             IndexMeta(
                 index_name=index_name,
-                key_field=key_field,
                 fields=tuple(data["fields"]),
                 aliases=dict(data["aliases"]),
                 tokenizers={k: tuple(v) for k, v in data["tokenizers"].items()},

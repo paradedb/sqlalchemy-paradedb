@@ -63,7 +63,6 @@ def test_custom_errors_raised_for_validation(engine):
         ParadeDBField(products.c.description, tokenizer=tokenizer.unicode_words(options={"alias": "dup"})),
         ParadeDBField(products.c.description, tokenizer=tokenizer.literal(options={"alias": "dup"})),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     with pytest.raises(DuplicateTokenizerAliasError):
@@ -90,7 +89,7 @@ def test_alembic_ops_create_reindex_drop(engine):
         ctx = MigrationContext.configure(conn)
         op = Operations(ctx)
 
-        op.create_paradedb_index(index_name, table_name, ["id", "description"], key_field="id")
+        op.create_paradedb_index(index_name, table_name, ["id", "description"])
 
         exists = conn.execute(
             text(

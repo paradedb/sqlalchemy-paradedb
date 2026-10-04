@@ -36,7 +36,7 @@ def _tokenizer_cast_supported(engine) -> bool:
                     CREATE INDEX {index_name}
                     ON {table_name}
                     USING paradedb (id, (description::pdb.unicode_words('lowercase=true')))
-                    WITH (key_field='id')
+
                     """
                 )
             )
@@ -68,7 +68,6 @@ def test_paradedb_index_create(engine):
         ParadeDBField(products.c.description),
         ParadeDBField(products.c.category),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -116,7 +115,6 @@ def test_paradedb_index_with_tokenizers_when_supported(engine):
         ParadeDBField(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
         ParadeDBField(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -169,7 +167,6 @@ def test_paradedb_index_json_keys_when_supported(engine):
             tokenizer=tokenizer.literal(options={"alias": "metadata_location"}),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -215,7 +212,6 @@ def test_paradedb_index_non_text_expression_with_pdb_alias(engine):
         ParadeDBField(products.c.description),
         ParadeDBField(pdb.alias(products.c.rating + 1, "rating_plus_one")),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -257,7 +253,6 @@ def test_create_all_with_attached_paradedb_index(engine):
         ParadeDBField(items.c.description),
         VectorField(items.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     metadata.create_all(engine)
 
@@ -323,7 +318,6 @@ def test_duplicate_tokenizer_alias_is_rejected(engine):
         ),
         ParadeDBField(products.c.description, tokenizer=tokenizer.literal(options={"alias": "desc_alias"})),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
 
     with pytest.raises(ValueError, match="Duplicate tokenizer alias"):
@@ -385,14 +379,11 @@ def test_describe_returns_fields_and_aliases(engine):
         ParadeDBField(products.c.category, tokenizer=tokenizer.literal_normalized(options={"alias": "category_exact"})),
         VectorField(products.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
     metas = describe(engine, products)
     meta = next(m for m in metas if m.index_name == index_name)
-
-    assert meta.key_field == "id"
     assert meta.fields == ("id", "description", "category", "embedding")
     assert meta.aliases == {"category_exact": "category"}
 
@@ -424,7 +415,6 @@ def test_describe_includes_tokenizers(engine):
         ParadeDBField(products.c.description, tokenizer=tokenizer.unicode_words(options={"lowercase": True})),
         ParadeDBField(products.c.category, tokenizer=tokenizer.literal()),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -465,7 +455,6 @@ def test_describe_and_assert_indexed_for_json_expression_tokenizer(engine):
             tokenizer=tokenizer.literal(options={"alias": "metadata_color"}),
         ),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -504,7 +493,6 @@ def test_assert_indexed_passes_and_raises(engine):
         ParadeDBField(tbl.c.id),
         ParadeDBField(tbl.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -543,7 +531,6 @@ def test_describe_and_assert_indexed_with_explicit_schema(engine):
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
     )
     idx.create(engine)
 
@@ -591,7 +578,6 @@ def test_paradedb_partial_index_generates_where_clause(engine):
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
         postgresql_where=products.c.rating > 3,
     )
     idx.create(engine)
@@ -637,7 +623,6 @@ def test_paradedb_partial_index_filters_search_results(engine):
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
         postgresql_where=products.c.rating > 3,
     )
     idx.create(engine)
@@ -687,7 +672,6 @@ def test_paradedb_index_create_concurrently(engine):
         ParadeDBField(products.c.id),
         ParadeDBField(products.c.description),
         postgresql_using="paradedb",
-        postgresql_with={"key_field": "id"},
         postgresql_concurrently=True,
     )
     # CONCURRENTLY cannot run inside a transaction block; use autocommit mode.
