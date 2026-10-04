@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "sqlalchemy-paradedb"
 version = "0.11.0"
-description = "Official ParadeDB integration for SQLAlchemy"
+description = "The official SQLAlchemy integration for ParadeDB."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
