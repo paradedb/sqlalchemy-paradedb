@@ -40,13 +40,13 @@ The official [SQLAlchemy](https://www.sqlalchemy.org/) integration for [ParadeDB
 
 ## Requirements & Compatibility
 
-| Component  | Supported                                                          |
-| ---------- | ------------------------------------------------------------------ |
-| Python     | 3.10+                                                              |
-| SQLAlchemy | 2.0.32+                                                            |
-| ParadeDB   | 0.26.0+                                                            |
-| PostgreSQL | 15+ (with the ParadeDB pg_search extension)                        |
-| pgvector   | Required for vector search (included in the ParadeDB Docker image) |
+| Component  | Supported                                                                                                                                                         |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Python     | 3.10+                                                                                                                                                             |
+| SQLAlchemy | 2.0.32+                                                                                                                                                           |
+| ParadeDB   | 0.26.0+                                                                                                                                                           |
+| PostgreSQL | 15+ (with the ParadeDB pg_search extension)                                                                                                                       |
+| pgvector   | Provides vector data types for ParadeDB’s [native vector search](https://www.paradedb.com/docs/reference/vector/overview) (included in the ParadeDB Docker image) |
 
 ## Contributing
 
