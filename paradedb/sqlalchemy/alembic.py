@@ -273,6 +273,9 @@ def _to_vector_index_options(options: dict[str, object] | None) -> VectorIndexOp
         for name, value in options.items()
         if name in VECTOR_INDEX_OPTIONS
     }
+    for name in ("search_tokenizer", "layer_sizes", "background_layer_sizes"):
+        if name in options:
+            coerced[name] = str(options[name])
     if "partition_by" in options:
         coerced["partition_by"] = str(options["partition_by"]).split(",")
     if "target_segment_count" in options:

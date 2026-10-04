@@ -641,6 +641,27 @@ def test_tokenizer_column_parentheses_do_not_cause_autogenerate_churn():
     assert "'alias=(description)::pdb.simple'" in pdb_alembic._normalize_paradedb_expression(literal)
 
 
+def test_tokenizer_and_tuning_options_render_without_extra_imports():
+    from paradedb.sqlalchemy import IndexOptions, tokenizer
+
+    options = IndexOptions(
+        search_tokenizer=tokenizer.simple(options={"lowercase": False}),
+        layer_sizes="0",
+        background_layer_sizes="100MB, 1GB",
+        mutable_segment_rows=1000,
+    )
+    namespace = {"VectorIndexOptions": VectorIndexOptions}
+    assert dict(eval(repr(options), namespace)) == dict(options)
+    ops = DummyOps()
+    operation = pdb_alembic.CreateParadeDBIndexOp(
+        index_name="idx", table_name="items", expressions=["id", "description"], with_options=options
+    )
+    pdb_alembic._create_paradedb_index_impl(ops, operation)
+    assert "search_tokenizer='simple(lowercase=false)'" in ops.sql[-1]
+    assert "background_layer_sizes='100MB, 1GB'" in ops.sql[-1]
+    assert "mutable_segment_rows=1000" in ops.sql[-1]
+
+
 def test_partition_options_reflection_round_trip():
     options = VectorIndexOptions(partition_by=["rating", "id"], target_segment_count=8)
     assert dict(options) == {"partition_by": "rating,id", "target_segment_count": 8}

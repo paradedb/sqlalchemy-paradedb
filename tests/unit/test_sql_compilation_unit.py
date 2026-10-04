@@ -452,7 +452,7 @@ def test_pdb_helpers_compile():
 
     assert (
         sql
-        == """SELECT products.description::pdb.alias('description_simple') AS description_simple, pdb.score(products.id) AS score, pdb.snippet(products.description, '<mark>', '</mark>', 100) AS snippet, pdb.snippets(products.description, start_tag => '[', end_tag => ']', max_num_chars => 15, "limit" => 1, "offset" => 0, sort_by => 'position') AS snippets, pdb.snippet_positions(products.description) AS positions
+        == """SELECT products.description::pdb.alias('description_simple') AS description_simple, pdb.score(products.id) AS score, pdb.snippet(products.description, start_tag => '<mark>', end_tag => '</mark>', max_num_chars => 100) AS snippet, pdb.snippets(products.description, start_tag => '[', end_tag => ']', max_num_chars => 15, "limit" => 1, "offset" => 0, sort_by => 'position') AS snippets, pdb.snippet_positions(products.description) AS positions
 FROM products"""
     )
 
@@ -499,9 +499,14 @@ def test_match_all_requires_value():
         search.match_all(products.c.description, [])
 
 
-def test_snippet_requires_both_tags():
-    with pytest.raises(ValueError, match="provided together"):
-        pdb.snippet(products.c.description, start_tag="<mark>")
+def test_snippet_allows_independent_tags():
+    sql = str(
+        select(pdb.snippet(products.c.description, start_tag="<mark>")).compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "start_tag => '<mark>'" in sql
+    assert "end_tag" not in sql
 
 
 def test_parse_phrase_prefix_regex_phrase_compile():
