@@ -59,9 +59,7 @@ class DatabaseStartupTests(unittest.TestCase):
                     "bash",
                     str(SCRIPT),
                 ]
-            result = subprocess.run(
-                command, env=env, capture_output=True, text=True, check=False
-            )
+            result = subprocess.run(command, env=env, capture_output=True, text=True, check=False)
             calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
             return result, calls
 
@@ -74,27 +72,19 @@ class DatabaseStartupTests(unittest.TestCase):
     def test_explicit_image_takes_precedence(self):
         result, calls = self.run_script(image="local/paradedb:test")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(
-            next(call for call in calls if call[0] == "run")[-1], "local/paradedb:test"
-        )
+        self.assertEqual(next(call for call in calls if call[0] == "run")[-1], "local/paradedb:test")
 
     def test_matching_existing_container_is_reused(self):
-        result, calls = self.run_script(
-            exists=True, actual_image="paradedb/paradedb:0.26.0-pg18"
-        )
+        result, calls = self.run_script(exists=True, actual_image="paradedb/paradedb:0.26.0-pg18")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(["start", "orm-test"], calls)
         self.assertFalse(any(call[0] in ("run", "rm") for call in calls))
 
     def test_mismatched_container_is_preserved_and_not_started(self):
-        result, calls = self.run_script(
-            exists=True, actual_image="paradedb/paradedb:0.25.0-pg18"
-        )
+        result, calls = self.run_script(exists=True, actual_image="paradedb/paradedb:0.25.0-pg18")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("but paradedb/paradedb:0.26.0-pg18 was requested", result.stderr)
-        self.assertFalse(
-            any(call[0] in ("run", "rm", "start", "exec") for call in calls)
-        )
+        self.assertFalse(any(call[0] in ("run", "rm", "start", "exec") for call in calls))
 
     @unittest.skipIf(
         "set -euo pipefail\n\nPARADEDB_VERSION" in SCRIPT.read_text(),
