@@ -17,30 +17,6 @@ pytestmark = pytest.mark.integration
 # The index set up in conftest.py that these tests rely on.
 _INDEX_NAME = "products_search_idx"
 
-_REQUIRED_FUNCTIONS = {"indexes", "index_segments", "verify_index", "verify_all_indexes"}
-
-
-@pytest.fixture(scope="module", autouse=True)
-def require_diagnostics(engine: Engine) -> None:
-    """Skip the entire module if this pg_search version lacks diagnostics."""
-    with engine.connect() as conn:
-        result = conn.exec_driver_sql(
-            """
-            SELECT DISTINCT p.proname
-            FROM pg_proc AS p
-            JOIN pg_namespace AS n ON n.oid = p.pronamespace
-            WHERE n.nspname = 'pdb'
-              AND p.proname = ANY(%s)
-            """,
-            (list(_REQUIRED_FUNCTIONS),),
-        )
-        available = {row[0] for row in result.fetchall()}
-
-    missing = sorted(_REQUIRED_FUNCTIONS - available)
-    if missing:
-        pytest.skip("ParadeDB diagnostics not available in this pg_search version: " + ", ".join(missing))
-
-
 # ---------------------------------------------------------------------------
 # paradedb_indexes
 # ---------------------------------------------------------------------------

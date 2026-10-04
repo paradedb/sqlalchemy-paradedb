@@ -62,7 +62,7 @@ To run a subset of tests, pass pytest selectors:
 bash scripts/run_integration_tests.sh tests/integration/test_indexing_integration.py::test_paradedb_partial_index_generates_where_clause
 ```
 
-The integration script sets `PARADEDB_TEST_DSN` and `DATABASE_URL` automatically. The default container is `sqlalchemy-paradedb` on port `5432`.
+The integration script sets `PARADEDB_TEST_DSN` and `DATABASE_URL` automatically. The default container is `sqlalchemy-paradedb` on port `5432`. To use an existing test database, set `PARADEDB_TEST_DSN` (or `DATABASE_URL`). The runner preserves the supplied connection and skips local Docker startup.
 
 Some integration tests require newer pg_search versions and are skipped automatically if the feature is not available (for example, diagnostics functions like `pdb.indexes()`).
 
