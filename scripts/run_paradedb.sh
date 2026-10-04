@@ -6,9 +6,14 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   set -euo pipefail
 else
   RUNNING=0
+  __paradedb_shell_opts="$(set +o)"
+  trap 'eval "$__paradedb_shell_opts"; trap - RETURN' RETURN
+  set -euo pipefail
 fi
 
-IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:0.26.0-pg18}"
+PARADEDB_VERSION="${PARADEDB_VERSION:-0.26.0}"
+PARADEDB_POSTGRES_VERSION="${PARADEDB_POSTGRES_VERSION:-18}"
+IMAGE="${PARADEDB_IMAGE:-paradedb/paradedb:${PARADEDB_VERSION}-pg${PARADEDB_POSTGRES_VERSION}}"
 CONTAINER_NAME="${PARADEDB_CONTAINER_NAME:-sqlalchemy-paradedb}"
 export PARADEDB_PORT="${PARADEDB_PORT:-5432}"
 export PARADEDB_USER="${PARADEDB_USER:-postgres}"
@@ -22,6 +27,16 @@ DB="${PARADEDB_DB}"
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required to run ParadeDB" >&2
   if [[ "$RUNNING" == "1" ]]; then exit 1; else return 1; fi
+fi
+
+# Keep a container with a different image intact; never test the wrong release.
+if docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
+  paradedb_actual_image="$(docker inspect --format '{{.Config.Image}}' "${CONTAINER_NAME}")"
+  if [[ "${paradedb_actual_image}" != "${IMAGE}" ]]; then
+    echo "Container ${CONTAINER_NAME} uses ${paradedb_actual_image}, but ${IMAGE} was requested." >&2
+    echo "Choose another PARADEDB_CONTAINER_NAME or remove the old container before retrying." >&2
+    if [[ "${RUNNING}" == "1" ]]; then exit 1; else return 1; fi
+  fi
 fi
 
 # A container left over from a failed run can exist without publishing the
