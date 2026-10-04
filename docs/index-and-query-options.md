@@ -15,11 +15,13 @@ Index(
     ParadeDBField(items.c.description),
     VectorField(items.c.embedding, metric="cosine"),
     postgresql_using="paradedb",
-    postgresql_with=dict(IndexOptions(
-        partition_by="tenant_id",
-        target_segment_count=8,
-        vector_fields={"embedding": {"quantization": False}},
-    )),
+    postgresql_with=dict(
+        IndexOptions(
+            partition_by="tenant_id",
+            target_segment_count=8,
+            vector_fields={"embedding": {"quantization": False}},
+        )
+    ),
 )
 agg({"value_count": {"field": "id"}}, visibility="threshold")
 paradedb_vector_config(engine, "items_search_idx", "embedding")
