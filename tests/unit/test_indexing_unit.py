@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from paradedb import IndexOptions
+
 import pytest
 from sqlalchemy import Column, Index, Integer, MetaData, String, Table, Text
 from sqlalchemy.dialects import postgresql, sqlite
@@ -658,3 +660,8 @@ def test_vector_index_options_class_omits_unset_fields():
     assert dict(VectorIndexOptions(training_sample_ratio=0.01)) == {"training_sample_ratio": 0.01}
     with pytest.raises(KeyError):
         VectorIndexOptions(training_sample_ratio=0.01)["max_leaf_size"]
+
+
+def test_invalid_mutable_segment_rows():
+    with pytest.raises(ValueError, match="mutable_segment_rows"):
+        IndexOptions(mutable_segment_rows=10001)
