@@ -273,6 +273,8 @@ def _to_vector_index_options(options: dict[str, object] | None) -> VectorIndexOp
         for name, value in options.items()
         if name in VECTOR_INDEX_OPTIONS
     }
+    if "vector_router" in options:
+        coerced["vector_router"] = str(options["vector_router"])
     if "partition_by" in options:
         coerced["partition_by"] = str(options["partition_by"])
     if "vector_fields" in options:

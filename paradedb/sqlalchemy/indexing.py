@@ -34,6 +34,8 @@ VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
 
 
 def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
+    if "vector_router" in with_options and with_options["vector_router"] not in ("graph", "ivf"):
+        raise InvalidIndexOptionError("vector_router must be graph or ivf")
     if "partition_by" in with_options:
         value = with_options["partition_by"]
         if not isinstance(value, str) or not value.strip() or any(not field.strip() for field in value.split(",")):
@@ -74,6 +76,7 @@ class VectorIndexOptions:
     training_sample_ratio: float | None = None
     max_leaf_size: int | None = None
     partition_by: str | None = None
+    vector_router: str | None = None
     target_segment_count: int | None = None
     vector_fields: dict[str, dict[str, Any]] | None = None
 
@@ -564,7 +567,7 @@ def _compile_create_index(element, compiler, **kw):
     original = ", ".join(f"{name} = {value}" for name, value in options.items())
     values = []
     for name, value in options.items():
-        if name in ("partition_by", "vector_fields"):
+        if name in ("partition_by", "vector_fields", "vector_router"):
             value = "'" + str(value).replace("'", "''") + "'"
         values.append(f"{name} = {value}")
     return rendered.replace(f"WITH ({original})", "WITH (" + ", ".join(values) + ")", 1)
