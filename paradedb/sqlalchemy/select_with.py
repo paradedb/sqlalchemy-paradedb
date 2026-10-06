@@ -25,8 +25,6 @@ def snippet(
     start_tag: str | None = None,
     end_tag: str | None = None,
     max_num_chars: int | None = None,
-    limit: int | None = None,
-    offset: int | None = None,
 ) -> Select:
     _assert_snippet_supported(stmt)
     return stmt.add_columns(
@@ -35,8 +33,6 @@ def snippet(
             start_tag=start_tag,
             end_tag=end_tag,
             max_num_chars=max_num_chars,
-            limit=limit,
-            offset=offset,
         ).label(label)
     )
 

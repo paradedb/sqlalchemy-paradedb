@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from paradedb.sqlalchemy import pdb
-
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, Text, and_, column, select, table
 from sqlalchemy.dialects import postgresql
@@ -149,8 +147,3 @@ def test_vector_result_processor_parses_text():
 
 def test_vector_registered_for_reflection():
     assert ischema_names["vector"] is Vector
-
-
-def test_conflicting_direct_aggregate_visibility():
-    with pytest.raises(ValueError, match="not both"):
-        pdb.aggregate("idx", "*", {}, solve_mvcc=True, visibility="raw")

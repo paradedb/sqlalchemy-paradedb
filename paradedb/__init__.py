@@ -13,13 +13,9 @@ from .sqlalchemy.indexing import IndexOptions, ParadeDBField, VectorField, Vecto
 from .sqlalchemy.tokenizer import Tokenizer
 from .sqlalchemy.vector import Vector, cosine_distance, inner_product, l2_distance
 from .sqlalchemy import tokenizer
-from .sqlalchemy.pdb import aggregate, agg, alias, score, snippet, snippet_positions, snippets
+from .sqlalchemy.pdb import agg, alias, score, snippet, snippet_positions, snippets
 from .sqlalchemy.search import (
     ProximityExpr,
-    query_input,
-    boolean_query,
-    disjunction_max,
-    query,
     all,
     exists,
     match_all,
@@ -47,11 +43,6 @@ __all__ = [
     "VectorIndexOptions",
     "IndexOptions",
     "agg",
-    "aggregate",
-    "query_input",
-    "boolean_query",
-    "disjunction_max",
-    "query",
     "alias",
     "all",
     "assert_indexed",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 from collections.abc import Sequence
 from typing import Any
@@ -387,47 +386,3 @@ def more_like_this(
     payload = document if isinstance(document, str) else json.dumps(document, separators=(",", ":"), sort_keys=True)
     payload_arg = _text_literal(payload) if isinstance(payload, str) else literal(payload)
     return field.operate(_QUERY, _build_mlt_call(payload_arg, include_fields=False))
-
-
-def query_input(query: str | ClauseElement, *, lenient: bool = False, conjunction_mode: bool = False) -> ClauseElement:
-    """Parse a query string (including field qualifiers) into searchqueryinput."""
-    return func.paradedb.parse(_to_text_clause(query), lenient, conjunction_mode)
-
-
-def _query_input(value: str | ClauseElement) -> ClauseElement:
-    return query_input(value) if isinstance(value, str) else value
-
-
-def _query_array(values: Sequence[str | ClauseElement]) -> ClauseElement:
-    if isinstance(values, str):
-        raise InvalidArgumentError("clauses must be a sequence of query inputs")
-    return PDBCast(array([_query_input(value) for value in values]), None, raw_cast="paradedb.searchqueryinput[]")
-
-
-def boolean_query(
-    *,
-    must: Sequence[str | ClauseElement] = (),
-    should: Sequence[str | ClauseElement] = (),
-    must_not: Sequence[str | ClauseElement] = (),
-    minimum_should_match: int | None = None,
-) -> ClauseElement:
-    if minimum_should_match is not None:
-        if isinstance(minimum_should_match, bool) or not isinstance(minimum_should_match, int):
-            raise InvalidArgumentError("minimum_should_match must be a non-negative integer")
-        require_non_negative(minimum_should_match, field_name="minimum_should_match")
-    return func.paradedb.boolean(_query_array(must), _query_array(should), _query_array(must_not), minimum_should_match)
-
-
-def disjunction_max(disjuncts: Sequence[str | ClauseElement], *, tie_breaker: float | None = None) -> ClauseElement:
-    if not disjuncts:
-        raise InvalidArgumentError("disjuncts must not be empty")
-    if tie_breaker is not None and (
-        isinstance(tie_breaker, bool) or not math.isfinite(tie_breaker) or not 0 <= tie_breaker <= 1
-    ):
-        raise InvalidArgumentError("tie_breaker must be between 0 and 1")
-    return func.paradedb.disjunction_max(_query_array(disjuncts), PDBCast(literal(tie_breaker), None, raw_cast="real"))
-
-
-def query(field: ColumnElement, value: str | ClauseElement) -> ColumnElement[bool]:
-    """Apply a composed searchqueryinput to an indexed key column."""
-    return field.operate(_QUERY, _query_input(value))

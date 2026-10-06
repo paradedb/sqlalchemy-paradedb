@@ -5,13 +5,11 @@ Mirrors django-paradedb's test_snippet_functions.py using the mock_items dataset
 
 from __future__ import annotations
 
-from paradedb.sqlalchemy import pdb, search, select_with
-from sqlalchemy import text
-
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from conftest import MockItem, assert_uses_paradedb_scan
+from paradedb.sqlalchemy import pdb, search, select_with
 from paradedb.sqlalchemy.errors import SnippetWithFuzzyPredicateError
 
 pytestmark = pytest.mark.integration
@@ -237,26 +235,17 @@ def test_snippet_and_score_together(mock_session):
     assert rows == [(3, 3.3322046, RUNNING_EM_SNIPPET)]
 
 
-def test_sparse_snippet_options_and_position_pagination(engine, api_parameter_items):
+def test_snippet_position_pagination(engine, api_parameter_items):
     items = api_parameter_items
     with engine.connect() as conn:
-        stmt = select(items.c.id).where(search.query(items.c.id, "description:shoes"))
-        stmt = select_with.snippet(stmt, items.c.description, max_num_chars=20, limit=1, offset=0)
+        stmt = select(items.c.id).where(search.match_any(items.c.description, "shoes"))
         stmt = select_with.snippet_positions(stmt, items.c.description, limit=0, offset=1)
         rows = conn.execute(stmt).all()
         assert len(rows) == 2
-        assert all((row.snippet is not None for row in rows))
         expected = conn.execute(
             text(
-                'SELECT id, pdb.snippet_positions(description, "limit" => 0, "offset" => 1) FROM api_items WHERE description ||| \'shoes\' ORDER BY id'
-            )
+                'SELECT id, pdb.snippet_positions(description, "limit" => 0, "offset" => 1) FROM api_items WHERE description ||| :term ORDER BY id'
+            ),
+            {"term": "shoes"},
         ).all()
-        assert sorted(((row.id, row.snippet_positions) for row in rows)) == expected
-        assert (
-            conn.scalar(
-                select(pdb.snippet(items.c.description, end_tag="</mark>")).where(
-                    search.query(items.c.id, "description:red")
-                )
-            )
-            is not None
-        )
+        assert sorted(rows) == expected

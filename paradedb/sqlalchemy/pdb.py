@@ -31,20 +31,28 @@ def snippet(
     start_tag: str | None = None,
     end_tag: str | None = None,
     max_num_chars: int | None = None,
-    limit: int | None = None,
-    offset: int | None = None,
 ) -> ClauseElement:
-    for name, value in (("max_num_chars", max_num_chars), ("limit", limit), ("offset", offset)):
-        if value is not None:
-            (require_positive if name == "max_num_chars" else require_non_negative)(value, field_name=name)
-    options = [
-        ("start_tag", start_tag),
-        ("end_tag", end_tag),
-        ("max_num_chars", max_num_chars),
-        ('"limit"', limit),
-        ('"offset"', offset),
-    ]
-    return PDBFunctionWithNamedArgs("snippet", [field], [(name, value) for name, value in options if value is not None])
+    if (start_tag is None) != (end_tag is None):
+        raise InvalidArgumentError("start_tag and end_tag must be provided together")
+    if start_tag is not None:
+        require_non_empty_string(start_tag, field_name="start_tag")
+    if end_tag is not None:
+        require_non_empty_string(end_tag, field_name="end_tag")
+    if max_num_chars is not None:
+        require_positive(max_num_chars, field_name="max_num_chars")
+
+    if max_num_chars is not None and start_tag is None and end_tag is None:
+        # ParadeDB versions in CI don't support pdb.snippet(field, max_num_chars)
+        # directly. Supplying default tags targets the supported 4-arg form.
+        start_tag = "<b>"
+        end_tag = "</b>"
+
+    args: list[Any] = [field]
+    if start_tag is not None and end_tag is not None:
+        args.extend([start_tag, end_tag])
+    if max_num_chars is not None:
+        args.append(max_num_chars)
+    return func.pdb.snippet(*args)
 
 
 def snippets(
@@ -117,34 +125,3 @@ def agg(
     # false = approximate (skip heap visibility checks, ~2-4x faster but may include
     # stale rows). approximate=True → pass false; approximate=False → pass true.
     return func.pdb.agg(payload_expr, literal(not approximate))
-
-
-def aggregate(
-    index: str,
-    query: str | ClauseElement,
-    spec: dict[str, Any],
-    *,
-    solve_mvcc: bool | None = None,
-    memory_limit: int = 500000000,
-    bucket_limit: int | None = None,
-    visibility: str | None = None,
-) -> ClauseElement:
-    """Direct index aggregate; execute with connection.scalar(select(...))."""
-    from .search import _query_input
-
-    for name, value in (("memory_limit", memory_limit), ("bucket_limit", bucket_limit)):
-        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
-            raise InvalidArgumentError(f"{name} must be a positive integer")
-    if visibility is not None and visibility not in ("transaction", "raw", "threshold"):
-        raise InvalidArgumentError("visibility must be transaction, raw, or threshold")
-    if solve_mvcc is not None and visibility is not None:
-        raise InvalidArgumentError("Specify solve_mvcc or visibility, not both")
-    return func.paradedb.aggregate(
-        PDBCast(literal(index), None, raw_cast="regclass"),
-        _query_input(query),
-        PDBCast(literal(json.dumps(spec)), None, raw_cast="json"),
-        solve_mvcc,
-        memory_limit,
-        bucket_limit,
-        visibility,
-    )
