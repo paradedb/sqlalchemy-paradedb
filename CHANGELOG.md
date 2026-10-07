@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
+### Added
+
+- Index partitioning, target segment count, and vector quantization configuration.
+- Vector storage, configuration, and estimator diagnostics, plus aggregation visibility modes.
+- Snippet-position pagination with `limit` and `offset`.
+- Index layer sizes, background layer sizes, and mutable segment row limits.
+- Index search tokenizer configuration.
+
 ### Changed
 
 - **Breaking:** Rename the facet query helpers’ `key_field` argument to `field`; it selects the column for the match-all predicate.
@@ -87,6 +97,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.12.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.12.0
 [0.11.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.11.0
 [0.10.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.10.0
 [0.9.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.9.0
