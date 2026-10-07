@@ -357,7 +357,7 @@ def test_suppress_standard_paradedb_ops_noop_when_no_paradedb_indexes():
 def test_normalize_paradedb_expression_keeps_dotted_literal_content():
     expr = "(description)::pdb.regex_pattern('run.*')"
     normalized = pdb_alembic._normalize_paradedb_expression(expr)
-    assert normalized == "(description)::pdb.regex_pattern('run.*')"
+    assert normalized == "description::pdb.regex_pattern('run.*')"
 
 
 def test_normalize_paradedb_expression_strips_relation_qualifiers_only():
@@ -489,13 +489,19 @@ def test_create_sql_generation_with_all_vector_options():
         index_name="items_search_idx",
         table_name="items",
         expressions=["id", "embedding vector_cosine_ops"],
-        with_options=VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32),
+        with_options=VectorIndexOptions(
+            training_sample_ratio=0.01,
+            max_leaf_size=32,
+            partition_by=["id"],
+            target_segment_count=8,
+            vector_fields={"embedding": {"quantization": False}},
+        ),
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
         'CREATE INDEX "items_search_idx" ON "items" '
         "USING paradedb (id, embedding vector_cosine_ops) "
-        "WITH (training_sample_ratio=0.01, max_leaf_size=32)"
+        "WITH (training_sample_ratio=0.01, max_leaf_size=32, partition_by='id', target_segment_count=8, vector_fields='{\"embedding\":{\"quantization\":false}}')"
     )
 
 
@@ -625,3 +631,17 @@ def test_with_options_changed():
     assert pdb_alembic._with_options_changed({}, {"training_sample_ratio": 0.01})
     assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {})
     assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {"training_sample_ratio": 0.02})
+
+
+def test_tokenizer_column_parentheses_do_not_cause_autogenerate_churn():
+    db = "(description::pdb.simple('pnorms=true'))"
+    metadata = "((items.description)::pdb.simple('pnorms=true'))"
+    assert pdb_alembic._normalize_paradedb_expression(db) == pdb_alembic._normalize_paradedb_expression(metadata)
+    literal = "(description::pdb.simple('alias=(description)::pdb.simple'))"
+    assert "'alias=(description)::pdb.simple'" in pdb_alembic._normalize_paradedb_expression(literal)
+
+
+def test_partition_options_reflection_round_trip():
+    options = VectorIndexOptions(partition_by=["rating", "id"], target_segment_count=8)
+    assert dict(options) == {"partition_by": "rating,id", "target_segment_count": 8}
+    assert pdb_alembic._to_vector_index_options(dict(options)) == options
