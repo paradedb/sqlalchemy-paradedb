@@ -947,3 +947,10 @@ def test_distance_accepts_sql_expressions():
         == """SELECT products.id
 FROM products ORDER BY products.embedding <-> products.embedding"""
     )
+
+
+@pytest.mark.parametrize("visibility", ["transaction", "raw", "threshold"])
+def test_aggregate_visibility_sql(visibility):
+    aggregate = pdb.agg({"value_count": {"field": "id"}}, visibility=visibility)
+    assert f'pdb.agg(\'{{"value_count":{{"field":"id"}}}}\', \'{visibility}\')' in _sql(select(aggregate))
+    assert "OVER ()" in _sql(select(aggregate.over()))

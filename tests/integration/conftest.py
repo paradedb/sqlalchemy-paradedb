@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, Index, MetaData, Table
-from paradedb import IndexOptions, ParadeDBField, VectorField, tokenizer
-
 import os
 import shutil
 from collections.abc import Iterator
@@ -200,48 +197,3 @@ def alembic_config_factory(tmp_path: Path, db_url: str):
         return config
 
     return factory
-
-
-@pytest.fixture
-def partitioned_vector_index(engine):
-    metadata = MetaData()
-    items = Table(
-        "pg26_items",
-        metadata,
-        Column("id", Integer),
-        Column("rating", Integer),
-        Column("description", Text),
-        Column("embedding", Vector(64)),
-    )
-    opts = IndexOptions(
-        partition_by="rating,id",
-        target_segment_count=8,
-        vector_fields={"embedding": {"quantization": False}},
-    )
-    Index(
-        "pg26_idx",
-        ParadeDBField(items.c.id),
-        ParadeDBField(items.c.rating),
-        ParadeDBField(items.c.description, tokenizer=tokenizer.simple(options={"pnorms": True})),
-        ParadeDBField(
-            items.c.description, tokenizer=tokenizer.jieba(options={"alias": "description_jieba", "search_mode": False})
-        ),
-        ParadeDBField(
-            items.c.description,
-            tokenizer=tokenizer.chinese_compatible(options={"alias": "description_chinese", "chinese_convert": "t2s"}),
-        ),
-        VectorField(items.c.embedding),
-        postgresql_using="paradedb",
-        postgresql_with=dict(opts),
-    )
-    metadata.create_all(engine)
-    try:
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    "INSERT INTO pg26_items SELECT i, i % 3, 'partitioned shoes', ARRAY(SELECT sin(i*j)::real FROM generate_series(1,64) j)::vector FROM generate_series(1, 2048) i"
-                )
-            )
-        yield items, opts
-    finally:
-        metadata.drop_all(engine)

@@ -554,13 +554,19 @@ def test_vector_index_options_compile():
         VectorField(products.c.embedding, metric="cosine"),
         postgresql_using="paradedb",
         postgresql_with={
-            **VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32),
+            **VectorIndexOptions(
+                training_sample_ratio=0.01,
+                max_leaf_size=32,
+                partition_by=["id"],
+                target_segment_count=8,
+                vector_fields={"embedding": {"quantization": False}},
+            ),
         },
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (training_sample_ratio = 0.01, max_leaf_size = 32)"""
+CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (training_sample_ratio = 0.01, max_leaf_size = 32, partition_by = 'id', target_segment_count = 8, vector_fields = '{"embedding":{"quantization":false}}')"""
     )
     validate_paradedb_index(idx)
 

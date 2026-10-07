@@ -274,7 +274,9 @@ def _to_vector_index_options(options: dict[str, object] | None) -> VectorIndexOp
         if name in VECTOR_INDEX_OPTIONS
     }
     if "partition_by" in options:
-        coerced["partition_by"] = str(options["partition_by"])
+        coerced["partition_by"] = str(options["partition_by"]).split(",")
+    if "target_segment_count" in options:
+        coerced["target_segment_count"] = int(str(options["target_segment_count"]))
     if "vector_fields" in options:
         coerced["vector_fields"] = json.loads(str(options["vector_fields"]))
     return VectorIndexOptions(**coerced) if coerced else None

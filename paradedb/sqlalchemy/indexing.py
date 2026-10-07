@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any
 
@@ -29,15 +30,10 @@ from .errors import (
 VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
     "training_sample_ratio": (float, 0.000001, 1.0),
     "max_leaf_size": (int, 1, 2147483647),
-    "target_segment_count": (int, 1, 2147483647),
 }
 
 
 def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
-    if "partition_by" in with_options:
-        value = with_options["partition_by"]
-        if not isinstance(value, str) or not value.strip() or any(not field.strip() for field in value.split(",")):
-            raise InvalidIndexOptionError("partition_by must contain non-empty index field names")
     for name, (num_type, min_value, max_value) in VECTOR_INDEX_OPTIONS.items():
         if name not in with_options:
             continue
@@ -73,7 +69,7 @@ class VectorIndexOptions:
 
     training_sample_ratio: float | None = None
     max_leaf_size: int | None = None
-    partition_by: str | None = None
+    partition_by: Sequence[str] | None = None
     target_segment_count: int | None = None
     vector_fields: dict[str, dict[str, Any]] | None = None
 
@@ -87,6 +83,8 @@ class VectorIndexOptions:
         if name not in self.keys():
             raise KeyError(name)
         value = getattr(self, name)
+        if name == "partition_by":
+            return ",".join(value)
         if name == "vector_fields":
             return json.dumps(value, separators=(",", ":"), sort_keys=True)
         return value

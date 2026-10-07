@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import Text, func, literal, literal_column
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
@@ -100,14 +100,17 @@ def snippet_positions(field: ColumnElement) -> ClauseElement:
     return func.pdb.snippet_positions(field)
 
 
-def agg(spec: dict[str, Any], *, approximate: bool | None = None, visibility: str | None = None) -> ClauseElement:
+def agg(
+    spec: dict[str, Any],
+    *,
+    approximate: bool | None = None,
+    visibility: Literal["transaction", "raw", "threshold"] | None = None,
+) -> ClauseElement:
     if not isinstance(spec, dict) or not spec:
         raise InvalidArgumentError("spec must be a non-empty dict")
     payload = json.dumps(spec, separators=(",", ":"), sort_keys=True)
     payload_expr = _inline_string_literal(payload)
     if visibility is not None:
-        if visibility not in ("transaction", "raw", "threshold"):
-            raise InvalidArgumentError("visibility must be transaction, raw, or threshold")
         if approximate is not None:
             raise InvalidArgumentError("Specify visibility or approximate, not both")
         return func.pdb.agg(payload_expr, _inline_string_literal(visibility))

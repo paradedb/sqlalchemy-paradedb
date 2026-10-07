@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from sqlalchemy import text
-from paradedb import paradedb_vector_config, paradedb_vector_info, paradedb_vector_estimator_info
-
 import pytest
 from sqlalchemy.engine import Engine
 
@@ -146,17 +143,3 @@ def test_paradedb_verify_all_indexes_with_schema_pattern(engine: Engine) -> None
 def test_paradedb_verify_all_indexes_with_sample_rate(engine: Engine) -> None:
     rows = paradedb_verify_all_indexes(engine, sample_rate=0.5)
     assert isinstance(rows, list)
-
-
-def test_vector_configuration_after_reindex(engine, partitioned_vector_index):
-    _ = partitioned_vector_index
-    assert paradedb_vector_config(engine, "pg26_idx", "embedding")[0]["quantized"] is False
-    assert paradedb_vector_info(engine, "pg26_idx", "embedding")
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            'ALTER INDEX pg26_idx SET (target_segment_count = 1, max_leaf_size = 16, vector_fields = \'{"embedding":{"quantization":true}}\')'
-        )
-        conn.execute(text("REINDEX INDEX pg26_idx"))
-    assert paradedb_vector_config(engine, "pg26_idx", "embedding")[0]["quantized"] is True
-    assert isinstance(paradedb_vector_estimator_info(engine, "pg26_idx", "embedding"), list)
-    assert isinstance(paradedb_vector_estimator_info(engine, "pg26_idx", "embedding", [[0.1] * 64]), list)

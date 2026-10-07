@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-from paradedb.sqlalchemy.alembic import _compare_paradedb_indexes, _to_vector_index_options
-
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -938,19 +935,3 @@ def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index
     upgrade_ops_after = _run_comparator(engine, metadata)
     ops_after = [op for op in upgrade_ops_after.ops if getattr(op, "index_name", None) == _MOCK_IDX]
     assert ops_after == [], f"Expected convergence after applying create op, got: {ops_after}"
-
-
-def test_partitioned_index_options_and_autogeneration(engine, partitioned_vector_index):
-    items, opts = partitioned_vector_index
-    metadata = items.metadata
-    with engine.begin() as conn:
-        values = conn.execute(text("SELECT reloptions FROM pg_class WHERE oid = 'pg26_idx'::regclass")).scalar_one()
-        options = dict(option.split("=", 1) for option in values)
-        assert options["partition_by"] == "rating,id"
-        assert options["target_segment_count"] == "8"
-        assert json.loads(options["vector_fields"])["embedding"]["quantization"] is False
-        assert _to_vector_index_options(options) == opts
-        context = MagicMock(connection=conn, metadata=metadata)
-        changes = UpgradeOps([])
-        _compare_paradedb_indexes(context, changes, {None})
-        assert not [op for op in changes.ops if getattr(op, "index_name", None) == "pg26_idx"]

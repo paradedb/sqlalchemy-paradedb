@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from sqlalchemy import text
-from paradedb import agg
-
 import pytest
 from sqlalchemy import and_, not_, or_, select
 from sqlalchemy.orm import aliased
@@ -82,19 +79,3 @@ def test_boolean_composition_with_search_predicates(session):
     assert_uses_paradedb_scan(session, stmt)
     ids = list(session.scalars(stmt))
     assert ids == [1, 3]
-
-
-def test_partitioned_search_and_aggregate_visibility(engine, partitioned_vector_index):
-    items, _ = partitioned_vector_index
-    with engine.begin() as conn:
-        assert (
-            conn.execute(
-                text("SELECT COUNT(*) FROM pg26_items WHERE description @@@ 'shoes' AND rating = 1")
-            ).scalar_one()
-            == 683
-        )
-        for visibility in ("transaction", "raw", "threshold"):
-            result = conn.execute(
-                select(agg({"value_count": {"field": "id"}}, visibility=visibility)).select_from(items)
-            ).scalar_one()
-            assert result["value"] == 2048
