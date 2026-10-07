@@ -96,8 +96,13 @@ def snippets(
     return PDBFunctionWithNamedArgs("snippets", [field], named_args)
 
 
-def snippet_positions(field: ColumnElement) -> ClauseElement:
-    return func.pdb.snippet_positions(field)
+def snippet_positions(field: ColumnElement, *, limit: int | None = None, offset: int | None = None) -> ClauseElement:
+    options = []
+    for name, value in (("limit", limit), ("offset", offset)):
+        if value is not None:
+            require_non_negative(value, field_name=name)
+            options.append((f'"{name}"', value))
+    return PDBFunctionWithNamedArgs("snippet_positions", [field], options)
 
 
 def agg(

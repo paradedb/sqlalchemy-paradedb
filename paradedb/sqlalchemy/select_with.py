@@ -68,6 +68,8 @@ def snippet_positions(
     field: ColumnElement,
     *,
     label: str = "snippet_positions",
+    limit: int | None = None,
+    offset: int | None = None,
 ) -> Select:
     _assert_snippet_supported(stmt)
-    return stmt.add_columns(pdb.snippet_positions(field).label(label))
+    return stmt.add_columns(pdb.snippet_positions(field, limit=limit, offset=offset).label(label))

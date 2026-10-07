@@ -949,6 +949,14 @@ FROM products ORDER BY products.embedding <-> products.embedding"""
     )
 
 
+def test_snippet_position_pagination():
+    stmt = select_with.snippet_positions(select(products.c.id), products.c.description, limit=0, offset=1)
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert 'pdb.snippet_positions(products.description, "limit" => 0, "offset" => 1)' in sql
+    with pytest.raises(ValueError, match="offset"):
+        pdb.snippet_positions(products.c.description, offset=-1)
+
+
 @pytest.mark.parametrize("visibility", ["transaction", "raw", "threshold"])
 def test_aggregate_visibility_sql(visibility):
     aggregate = pdb.agg({"value_count": {"field": "id"}}, visibility=visibility)

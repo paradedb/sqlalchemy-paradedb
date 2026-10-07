@@ -30,10 +30,14 @@ from .errors import (
 VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
     "training_sample_ratio": (float, 0.000001, 1.0),
     "max_leaf_size": (int, 1, 2147483647),
+    "mutable_segment_rows": (int, 0, 10000),
 }
 
 
 def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
+    for option in ("search_tokenizer", "layer_sizes", "background_layer_sizes"):
+        if option in with_options and (not isinstance(with_options[option], str) or not with_options[option].strip()):
+            raise InvalidIndexOptionError(f"{option} must be a non-empty string")
     for name, (num_type, min_value, max_value) in VECTOR_INDEX_OPTIONS.items():
         if name not in with_options:
             continue
@@ -72,6 +76,10 @@ class VectorIndexOptions:
     partition_by: Sequence[str] | None = None
     target_segment_count: int | None = None
     vector_fields: dict[str, dict[str, Any]] | None = None
+    search_tokenizer: Tokenizer | str | None = None
+    layer_sizes: str | None = None
+    background_layer_sizes: str | None = None
+    mutable_segment_rows: int | None = None
 
     def __post_init__(self) -> None:
         _validate_vector_index_options(dict(self))
@@ -83,6 +91,8 @@ class VectorIndexOptions:
         if name not in self.keys():
             raise KeyError(name)
         value = getattr(self, name)
+        if name == "search_tokenizer" and isinstance(value, Tokenizer):
+            return value.render_search()
         if name == "partition_by":
             return ",".join(value)
         if name == "vector_fields":
@@ -90,7 +100,9 @@ class VectorIndexOptions:
         return value
 
     def __repr__(self) -> str:
-        args = ", ".join(f"{name}={getattr(self, name)!r}" for name in self.keys())
+        args = ", ".join(
+            f"{name}={self[name] if name == 'search_tokenizer' else getattr(self, name)!r}" for name in self.keys()
+        )
         return f"VectorIndexOptions({args})"
 
 
@@ -562,7 +574,7 @@ def _compile_create_index(element, compiler, **kw):
     original = ", ".join(f"{name} = {value}" for name, value in options.items())
     values = []
     for name, value in options.items():
-        if name in ("partition_by", "vector_fields"):
+        if name in ("partition_by", "vector_fields", "search_tokenizer", "layer_sizes", "background_layer_sizes"):
             value = "'" + str(value).replace("'", "''") + "'"
         values.append(f"{name} = {value}")
     return rendered.replace(f"WITH ({original})", "WITH (" + ", ".join(values) + ")", 1)

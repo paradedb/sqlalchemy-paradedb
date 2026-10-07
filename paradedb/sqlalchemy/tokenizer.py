@@ -25,6 +25,11 @@ class Tokenizer:
             args.extend([_quote_term(f"{key}={_render_config_value(value)}") for key, value in self.options.items()])
         return f"pdb.{self.name}({','.join(args)})"
 
+    def render_search(self) -> str:
+        args = [_render_config_value(value) for value in (self.positional_args or ())]
+        args.extend(f"{key}={_render_config_value(value)}" for key, value in (self.options or {}).items())
+        return self.name + (f"({','.join(args)})" if args else "")
+
     def extract_alias(self) -> str | None:
         if self.options is None:
             return None

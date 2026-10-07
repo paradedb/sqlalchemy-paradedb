@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, create_engine, text
+from sqlalchemy import MetaData, Table, Boolean, DateTime, Integer, String, Text, create_engine, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
@@ -197,3 +197,17 @@ def alembic_config_factory(tmp_path: Path, db_url: str):
         return config
 
     return factory
+
+
+@pytest.fixture
+def api_parameter_items(engine):
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE api_items (id int PRIMARY KEY, description text)"))
+        conn.execute(text("INSERT INTO api_items VALUES (1, 'red shoes'), (2, 'red boots'), (3, 'blue shoes')"))
+        conn.execute(text("CREATE INDEX api_idx ON api_items USING paradedb (id, description)"))
+    try:
+        items = Table("api_items", MetaData(), autoload_with=engine)
+        yield items
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE api_items"))

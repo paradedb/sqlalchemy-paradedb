@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from sqlalchemy.schema import CreateIndex
+from paradedb import IndexOptions
+from paradedb.sqlalchemy.alembic import _to_vector_index_options
+
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -935,3 +939,30 @@ def test_autogenerate_round_trip_converges_with_options(engine, mock_items_index
     upgrade_ops_after = _run_comparator(engine, metadata)
     ops_after = [op for op in upgrade_ops_after.ops if getattr(op, "index_name", None) == _MOCK_IDX]
     assert ops_after == [], f"Expected convergence after applying create op, got: {ops_after}"
+
+
+def test_index_options_and_alembic_round_trip(engine):
+    metadata = MetaData()
+    items = Table("api_options_items", metadata, Column("id", Integer), Column("description", Text))
+    opts = IndexOptions(
+        search_tokenizer=tokenizer.simple(options={"lowercase": False}),
+        layer_sizes="0",
+        background_layer_sizes="100MB, 1GB",
+        mutable_segment_rows=1000,
+    )
+    index = Index(
+        "api_options_idx",
+        ParadeDBField(items.c.id),
+        ParadeDBField(items.c.description),
+        postgresql_using="paradedb",
+        postgresql_with=dict(opts),
+    )
+    metadata.create_all(engine)
+    try:
+        with engine.connect() as conn:
+            reloptions = conn.scalar(text("SELECT reloptions FROM pg_class WHERE oid = 'api_options_idx'::regclass"))
+        actual = dict((option.split("=", 1) for option in reloptions))
+        assert dict(_to_vector_index_options(actual)) == dict(opts)
+        assert "search_tokenizer = 'simple(lowercase=false)'" in str(CreateIndex(index).compile(dialect=engine.dialect))
+    finally:
+        metadata.drop_all(engine)

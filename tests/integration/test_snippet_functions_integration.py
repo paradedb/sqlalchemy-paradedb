@@ -6,7 +6,7 @@ Mirrors django-paradedb's test_snippet_functions.py using the mock_items dataset
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from conftest import MockItem, assert_uses_paradedb_scan
 from paradedb.sqlalchemy import pdb, search, select_with
@@ -233,3 +233,19 @@ def test_snippet_and_score_together(mock_session):
     assert_uses_paradedb_scan(mock_session, stmt, index_name="mock_items_search_idx")
     rows = mock_session.execute(stmt).all()
     assert rows == [(3, 3.3322046, RUNNING_EM_SNIPPET)]
+
+
+def test_snippet_position_pagination(engine, api_parameter_items):
+    items = api_parameter_items
+    with engine.connect() as conn:
+        stmt = select(items.c.id).where(search.match_any(items.c.description, "shoes"))
+        stmt = select_with.snippet_positions(stmt, items.c.description, limit=0, offset=1)
+        rows = conn.execute(stmt).all()
+        assert len(rows) == 2
+        expected = conn.execute(
+            text(
+                'SELECT id, pdb.snippet_positions(description, "limit" => 0, "offset" => 1) FROM api_items WHERE description ||| :term ORDER BY id'
+            ),
+            {"term": "shoes"},
+        ).all()
+        assert sorted(rows) == expected
