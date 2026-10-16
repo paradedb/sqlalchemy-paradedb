@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects import postgresql
 
 from conftest import MockItem, Product, assert_uses_paradedb_scan
@@ -14,6 +14,29 @@ pytestmark = pytest.mark.integration
 def _sql(stmt) -> str:
     sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
     return "\n".join(line.rstrip() for line in sql.split("\n")).strip()
+
+
+def test_combine_agg_across_groups(session):
+    stmt = (
+        select(
+            Product.rating,
+            func.count().label("group_rows"),
+            pdb.combine_agg(pdb.agg({"value_count": {"field": "id"}})).over().label("total"),
+        )
+        .where(search.all(Product.id))
+        .group_by(Product.rating)
+        .order_by(Product.rating)
+    )
+    assert (
+        _sql(stmt)
+        == """SELECT products.rating, count(*) AS group_rows, pdb.combine_agg(pdb.agg('{"value_count":{"field":"id"}}')) OVER () AS total
+FROM products
+WHERE products.id @@@ pdb.all() GROUP BY products.rating ORDER BY products.rating"""
+    )
+    rows = session.execute(stmt).all()
+    assert len(rows) == 4
+    assert all(row.total["value"] == 5 for row in rows)
+    assert sum(row.group_rows for row in rows) == 5
 
 
 def test_agg_value_count_with_search_predicate(session):

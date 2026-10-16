@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-16
+
+### Added
+
+- Cross-group facets using `pdb.combine_agg(pdb.agg(...)).over()`.
+
+### Changed
+
+- **Breaking:** Require ParadeDB 0.26.2 or newer.
+
 ## [0.12.0] - 2026-10-07
 
 ### Added
@@ -97,6 +107,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.13.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.12.0
 [0.11.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.11.0
 [0.10.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.10.0

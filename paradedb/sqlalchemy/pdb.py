@@ -105,6 +105,14 @@ def snippet_positions(field: ColumnElement, *, limit: int | None = None, offset:
     return PDBFunctionWithNamedArgs("snippet_positions", [field], options)
 
 
+def combine_agg(aggregate: ClauseElement) -> ClauseElement:
+    """Combine a pdb.agg expression across groups.
+
+    Use ``combine_agg(agg(spec)).over()`` in a GROUP BY query.
+    """
+    return func.pdb.combine_agg(aggregate)
+
+
 def agg(
     spec: dict[str, Any],
     *,
