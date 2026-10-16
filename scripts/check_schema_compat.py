@@ -10,7 +10,7 @@ checked in both directions:
             (surfaces new paradedb APIs that haven't been wrapped yet).
 
 Example:
-    python scripts/check_schema_compat.py 0.26.0
+    python scripts/check_schema_compat.py 0.26.2
 
 The ignore list is read automatically from apiignore.json5 (repo root) if it exists.
 """
@@ -107,7 +107,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=("Download pg_search.schema.sql for a ParadeDB release and check it against this repo's api.json5.")
     )
-    parser.add_argument("version", help="ParadeDB version to check, for example 0.26.0")
+    parser.add_argument("version", help="ParadeDB version to check, for example 0.26.2")
     return parser.parse_args(argv)
 
 
