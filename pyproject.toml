@@ -68,7 +68,6 @@ test = [
 dev = [
   "ruff>=0.15.0",
   "mypy>=2.3.1",
-  "pre-commit>=4.0.0",
   "json5>=0.9",
 ]
 
