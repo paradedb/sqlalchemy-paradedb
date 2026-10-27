@@ -68,7 +68,6 @@ test = [
 dev = [
   "ruff>=0.15.0",
   "mypy>=2.3.1",
-  "pre-commit>=4.0.0; python_version >= '3.11'",
   "json5>=0.9",
 ]
 
@@ -77,14 +76,6 @@ addopts = "-ra"
 testpaths = ["tests"]
 markers = [
   "integration: marks tests that require a running ParadeDB instance",
-]
-
-[tool.uv]
-# Patched filelock requires Python 3.11, so run pre-commit on Python 3.11+.
-# The library and its unit tests continue to support Python 3.10.
-constraint-dependencies = [
-  "filelock>=4.2.1",
-  "virtualenv>=21.14.13",
 ]
 
 [tool.ruff]
