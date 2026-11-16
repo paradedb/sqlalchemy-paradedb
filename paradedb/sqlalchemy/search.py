@@ -5,10 +5,10 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Text, cast, func, literal, literal_column
+from sqlalchemy import Text, cast, func, literal, literal_column, select
 from sqlalchemy.dialects.postgresql import ARRAY, array
-from sqlalchemy.sql import operators
-from sqlalchemy.sql.elements import ClauseElement, ColumnElement
+from sqlalchemy.sql import operators, visitors
+from sqlalchemy.sql.elements import BindParameter, ClauseElement, ColumnElement
 
 from paradedb.sqlalchemy.tokenizer import Tokenizer
 
@@ -107,6 +107,48 @@ def fuzzy(
 
 def tokenize(value: _SearchValue, tokenizer: Tokenizer) -> ClauseElement:
     return PDBCast(_to_search_value(value), None, raw_cast=tokenizer.render())
+
+
+def _inline_bind_values(clause: ColumnElement[bool]) -> ColumnElement[bool]:
+    def replace(element: Any, **kw: Any) -> Any:
+        if isinstance(element, BindParameter):
+            return element.render_literal_execute()
+        return None
+
+    return visitors.replacement_traverse(clause, {}, replace)
+
+
+def expand(
+    value: _TextClause,
+    rule: ColumnElement,
+    *,
+    where: ColumnElement[bool] | None = None,
+) -> ClauseElement:
+    """Expand a search value with the synonym rules in a table.
+
+    Pass the result to ``match_any`` or ``match_all``. ``fuzzy`` and ``boost`` accept it too.
+
+    Args:
+        value: The text to search for.
+        rule: The ``pdb.synonym_rule`` column of the rules table.
+        where: Optional filter that picks one set of rules, e.g.
+               ``Synonym.set_name == "shop"``. Write it like the ``WHERE``
+               of the partial synonym index that holds the set.
+
+    The values in ``where`` go into the SQL text and not into bind parameters.
+    With a parameter there, the generic plan of a prepared statement can't
+    pick the partial synonym index.
+
+    Generates::
+
+        field ||| (SELECT pdb.expand('sofa', shop_synonyms.rule) AS expand_1 FROM shop_synonyms)
+        field ||| (SELECT pdb.expand('sofa', synonyms.rule) AS expand_1 FROM synonyms
+                   WHERE synonyms.set_name = 'shop')
+    """
+    rules = select(func.pdb.expand(_to_text_clause(value), rule))
+    if where is not None:
+        rules = rules.where(_inline_bind_values(where))
+    return rules.scalar_subquery()
 
 
 def match_all(

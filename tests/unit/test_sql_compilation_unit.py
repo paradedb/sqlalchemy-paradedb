@@ -32,6 +32,9 @@ products = table(
     column("embedding", Vector(3)),
 )
 
+shop_synonyms = table("shop_synonyms", column("rule", Text))
+synonyms = table("synonyms", column("set_name", Text), column("rule", Text))
+
 
 class SearchTerm(StrEnum):
     running = "running"
@@ -446,6 +449,37 @@ def test_match_any_const_compile():
 FROM products
 WHERE products.description ||| 'shoes'::pdb.const(1.0)"""
     )
+
+
+def test_expand_compile():
+    rules = search.expand("sofa", shop_synonyms.c.rule)
+    subquery = "(SELECT pdb.expand('sofa', shop_synonyms.rule) AS expand_1\nFROM shop_synonyms)"
+    cases = [
+        (search.match_any(products.c.description, rules), f"||| {subquery}"),
+        (search.match_all(products.c.description, rules), f"&&& {subquery}"),
+        (search.match_any(products.c.description, search.fuzzy(rules, 1)), f"||| {subquery}::pdb.fuzzy(1)"),
+        (search.match_any(products.c.description, search.boost(rules, 2)), f"||| {subquery}::pdb.boost(2)"),
+    ]
+    for predicate, expected in cases:
+        assert _sql(select(products.c.id).where(predicate)) == (
+            f"SELECT products.id\nFROM products\nWHERE products.description {expected}"
+        )
+
+
+def test_expand_where_values_are_inline():
+    stmt = select(products.c.id).where(
+        search.match_any(
+            products.c.description,
+            search.expand("sofa", synonyms.c.rule, where=synonyms.c.set_name == "men's shoes"),
+        )
+    )
+    compiled = stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True})
+    assert str(compiled) == (
+        "SELECT products.id \nFROM products \n"
+        "WHERE products.description ||| (SELECT pdb.expand(%(param_1)s, synonyms.rule) AS expand_1 \n"
+        "FROM synonyms \nWHERE synonyms.set_name = 'men''s shoes')"
+    )
+    assert compiled.params == {"param_1": "sofa"}
 
 
 def test_exists_compile():
