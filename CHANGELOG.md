@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-16
+
+### Fixed
+
+- Fix literal percent handling in queries, index definitions, and Alembic migrations.
+
 ## [0.13.0] - 2026-10-16
 
 ### Added
@@ -107,6 +113,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.14.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.12.0
 [0.11.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.11.0
