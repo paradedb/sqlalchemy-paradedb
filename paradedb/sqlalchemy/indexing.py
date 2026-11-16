@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any
 
-from sqlalchemy import Index, event, text
+from sqlalchemy import Index, String, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import CompileError
 from sqlalchemy.ext.compiler import compiles
@@ -134,7 +134,7 @@ def _compile_paradedb_field(element: ParadeDBField, compiler, **kw: Any) -> str:
         if isinstance(element.expr, PDBCast) or _paradedb_field_name(element) is None:
             return f"({expr_sql})"
         return expr_sql
-    return f"(({expr_sql})::{element.tokenizer.render()})"
+    return f"(({expr_sql})::{compiler.post_process_text(element.tokenizer.render())})"
 
 
 @compiles(ParadeDBField)
@@ -575,6 +575,6 @@ def _compile_create_index(element, compiler, **kw):
     values = []
     for name, value in options.items():
         if name in ("partition_by", "vector_fields", "search_tokenizer", "layer_sizes", "background_layer_sizes"):
-            value = "'" + str(value).replace("'", "''") + "'"
+            value = compiler.sql_compiler.render_literal_value(str(value), String())
         values.append(f"{name} = {value}")
     return rendered.replace(f"WITH ({original})", "WITH (" + ", ".join(values) + ")", 1)

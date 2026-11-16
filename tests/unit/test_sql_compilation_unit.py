@@ -249,6 +249,33 @@ WHERE products.description ||| 'running shoes'::pdb.whitespace"""
     )
 
 
+@pytest.mark.parametrize("value", ["50%", "100%%", "%s"])
+@pytest.mark.parametrize("paramstyle", ["pyformat", "format", "named"])
+@pytest.mark.parametrize("literal_binds", [False, True])
+def test_casts_preserve_literal_percents(value, paramstyle, literal_binds):
+    stmt = select(products.c.id).where(
+        search.match_any(
+            pdb.alias(products.c.description, value),
+            search.tokenize(value, tokenizer.regex_pattern(value)),
+        )
+    )
+    compiled = stmt.compile(
+        dialect=postgresql.dialect(paramstyle=paramstyle),
+        compile_kwargs={"literal_binds": literal_binds},
+    )
+    escaped = value if paramstyle == "named" else value.replace("%", "%%")
+    term = (
+        f"'{escaped}'"
+        if literal_binds
+        else {"pyformat": "%(param_1)s", "format": "%s", "named": ":param_1"}[paramstyle]
+    )
+    assert str(compiled) == (
+        "SELECT products.id \nFROM products \n"
+        f"WHERE products.description::pdb.alias('{escaped}') ||| {term}::pdb.regex_pattern('{escaped}')"
+    )
+    assert compiled.params == ({} if literal_binds else {"param_1": value})
+
+
 def test_match_all_with_str_enum_and_tokenizer_compile():
     stmt = select(products.c.id).where(
         search.match_all(products.c.description, search.tokenize(SearchTerm.phrase, tokenizer.whitespace()))
