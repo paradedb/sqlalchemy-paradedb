@@ -322,7 +322,7 @@ def _autogen_paradedb_db_indexes(conn, effective_schemas: set[str]) -> dict[tupl
 
 
 def _render_paradedb_expression(expr: ClauseElement) -> str:
-    return str(expr.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))  # type: ignore[no-untyped-call]
+    return str(expr.compile(dialect=postgresql.dialect(paramstyle="named"), compile_kwargs={"literal_binds": True}))  # type: ignore[no-untyped-call]
 
 
 def _strip_relation_qualifiers(expr: str, table_name: str, schema_name: str | None) -> str:
@@ -480,12 +480,7 @@ def _render_where_from_index(index) -> str | None:
         return None
     if isinstance(where_clause, ClauseElement):
         return _strip_relation_qualifiers(
-            str(
-                where_clause.compile(
-                    dialect=postgresql.dialect(),  # type: ignore[no-untyped-call]
-                    compile_kwargs={"literal_binds": True},
-                )
-            ),
+            _render_paradedb_expression(where_clause),
             index.table.name,
             index.table.schema,
         )

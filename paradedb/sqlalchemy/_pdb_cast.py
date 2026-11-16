@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import literal
+from sqlalchemy import String, literal
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
@@ -42,7 +42,7 @@ def _render_cast_arg(arg: Any, compiler, **kw: Any) -> str:
     if isinstance(arg, (int, float)):
         return str(arg)
     if isinstance(arg, str):
-        return "'" + arg.replace("'", "''") + "'"
+        return compiler.render_literal_value(arg, String())
     return compiler.process(literal(arg), **kw)
 
 
@@ -50,7 +50,7 @@ def _render_cast_arg(arg: Any, compiler, **kw: Any) -> str:
 def _compile_pdb_cast(element: PDBCast, compiler, **kw: Any) -> str:
     expr_sql = compiler.process(element.expr, **kw)
     if element.raw_cast:
-        return f"{expr_sql}::{element.raw_cast}"
+        return f"{expr_sql}::{compiler.post_process_text(element.raw_cast)}"
     if element.args:
         args_sql = ", ".join(_render_cast_arg(arg, compiler, **kw) for arg in element.args)
         return f"{expr_sql}::pdb.{element.type_name}({args_sql})"

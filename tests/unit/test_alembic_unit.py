@@ -5,11 +5,13 @@ from alembic.autogenerate.api import AutogenContext
 from alembic.autogenerate.render import render_op
 from alembic.migration import MigrationContext
 from alembic.operations.ops import CreateIndexOp, DowngradeOps, DropIndexOp, ModifyTableOps, UpgradeOps
-from sqlalchemy import Column, Integer, MetaData, Table, Text
+from sqlalchemy import Column, Index, Integer, MetaData, Table, Text, func, text
+from sqlalchemy.dialects import postgresql
 
 import paradedb.sqlalchemy.alembic as pdb_alembic
 from paradedb.sqlalchemy.indexing import ParadeDBField, VectorField, VectorIndexOptions
 from paradedb.sqlalchemy.vector import Vector
+from paradedb.sqlalchemy import tokenizer
 
 
 class DummyOps:
@@ -18,6 +20,42 @@ class DummyOps:
 
     def execute(self, sql: str) -> None:
         self.sql.append(sql)
+
+
+@pytest.mark.parametrize("value", ["50%", "100%%", "%s"])
+@pytest.mark.parametrize("paramstyle", ["pyformat", "format", "named"])
+def test_migration_sql_preserves_literal_percents(value, paramstyle):
+    products = Table("products", MetaData(), Column("id", Integer), Column("description", Text))
+    index = Index(
+        "percent_idx",
+        ParadeDBField(products.c.id),
+        ParadeDBField(func.coalesce(products.c.description, value), tokenizer=tokenizer.regex_pattern(value)),
+        postgresql_using="paradedb",
+        postgresql_where=products.c.description == value,
+    )
+    expressions = [
+        pdb_alembic._strip_relation_qualifiers(pdb_alembic._render_paradedb_expression(expr), "products", None)
+        for expr in index.expressions
+    ]
+    where = pdb_alembic._render_where_from_index(index)
+    assert expressions == ["id", f"((coalesce(description, '{value}'))::pdb.regex_pattern('{value}'))"]
+    assert where == f"description = '{value}'"
+    ops = DummyOps()
+    pdb_alembic._create_paradedb_index_impl(
+        ops, pdb_alembic.CreateParadeDBIndexOp("percent_idx", "products", expressions, where=where)
+    )
+    assert ops.sql == [
+        'CREATE INDEX "percent_idx" ON "products" USING paradedb '
+        f"(id, ((coalesce(description, '{value}'))::pdb.regex_pattern('{value}'))) WHERE description = '{value}'"
+    ]
+    compiled = text(ops.sql[0]).compile(dialect=postgresql.dialect(paramstyle=paramstyle))
+    escaped = value if paramstyle == "named" else value.replace("%", "%%")
+    assert str(compiled) == (
+        'CREATE INDEX "percent_idx" ON "products" USING paradedb '
+        f"(id, ((coalesce(description, '{escaped}'))::pdb.regex_pattern('{escaped}'))) "
+        f"WHERE description = '{escaped}'"
+    )
+    assert compiled.params == {}
 
 
 def test_create_drop_reindex_sql_generation():

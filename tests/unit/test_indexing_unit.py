@@ -97,6 +97,30 @@ def test_tokenizer_invalid_argument_types():
         Tokenizer("ngram", positional_args=(None,)).render()
 
 
+@pytest.mark.parametrize("value", ["50%", "100%%", "%s"])
+@pytest.mark.parametrize("paramstyle", ["pyformat", "format", "named"])
+def test_index_preserves_literal_percents(value, paramstyle):
+    config = tokenizer.regex_pattern(value, options={"alias": value})
+    assert config.render() == f"pdb.regex_pattern('{value}','alias={value}')"
+    assert config.render_search() == f"regex_pattern({value},alias={value})"
+    idx = Index(
+        "percent_idx",
+        ParadeDBField(products.c.id),
+        ParadeDBField(products.c.description, tokenizer=config),
+        postgresql_using="paradedb",
+        postgresql_with={"search_tokenizer": config.render_search()},
+        postgresql_where=products.c.category == value,
+    )
+    compiled = CreateIndex(idx).compile(dialect=postgresql.dialect(paramstyle=paramstyle))
+    escaped = value if paramstyle == "named" else value.replace("%", "%%")
+    assert str(compiled) == (
+        "CREATE INDEX percent_idx ON products USING paradedb "
+        f"(id, ((description)::pdb.regex_pattern('{escaped}','alias={escaped}'))) "
+        f"WITH (search_tokenizer = 'regex_pattern({escaped},alias={escaped})') WHERE category = '{escaped}'"
+    )
+    assert compiled.params is None
+
+
 def test_paradedb_index_compile_with_tokenizers():
     idx = Index(
         "products_search_idx",
