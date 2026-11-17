@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from sqlalchemy import cast, literal, select
+from sqlalchemy import cast, literal, select, text
 
 from conftest import MockItem, assert_uses_paradedb_scan
 from paradedb import tokenizer
@@ -397,6 +397,22 @@ def test_score_ordering_descending(mock_session):
     assert len(rows) > 0
     scores = [row[1] for row in rows]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_explain_score_has_the_score(mock_session):
+    if not mock_session.execute(
+        text("SELECT to_regprocedure('pdb.explain_score(anyelement)') IS NOT NULL")
+    ).scalar_one():
+        pytest.skip("this ParadeDB version has no pdb.explain_score")
+    stmt = (
+        select(MockItem.id, pdb.score(MockItem.id), pdb.explain_score(MockItem.id))
+        .where(search.match_any(MockItem.description, "shoes"))
+        .order_by(pdb.score(MockItem.id).desc(), MockItem.id.asc())
+        .limit(1)
+    )
+    _, score, explanation = mock_session.execute(stmt).one()
+    assert explanation["value"] == score
+    assert explanation["description"] == "TermQuery, product of..."
 
 
 def test_boost_does_not_change_result_set(mock_session):

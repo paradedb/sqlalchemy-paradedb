@@ -20,6 +20,7 @@ from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
 
 from paradedb.sqlalchemy import pdb, search, select_with, vector
+from paradedb.sqlalchemy.errors import InvalidArgumentError
 from paradedb.sqlalchemy.vector import Vector
 
 
@@ -459,11 +460,21 @@ def test_expand_compile():
         (search.match_all(products.c.description, rules), f"&&& {subquery}"),
         (search.match_any(products.c.description, search.fuzzy(rules, 1)), f"||| {subquery}::pdb.fuzzy(1)"),
         (search.match_any(products.c.description, search.boost(rules, 2)), f"||| {subquery}::pdb.boost(2)"),
+        (search.phrase(products.c.description, rules), f"### {subquery}"),
+        (search.phrase(products.c.description, search.slop(rules, 2)), f"### {subquery}::pdb.slop(2)"),
+        (search.parse(products.c.description, rules), f"@@@ {subquery}"),
+        (search.parse(products.c.description, search.fuzzy(rules, 1)), f"@@@ {subquery}::pdb.fuzzy(1)"),
     ]
     for predicate, expected in cases:
         assert _sql(select(products.c.id).where(predicate)) == (
             f"SELECT products.id\nFROM products\nWHERE products.description {expected}"
         )
+
+
+def test_parse_options_do_not_apply_to_an_expansion():
+    rules = search.expand("sofa", shop_synonyms.c.rule)
+    with pytest.raises(InvalidArgumentError, match="do not apply to an expansion"):
+        search.parse(products.c.description, rules, lenient=True)
 
 
 def test_expand_where_values_are_inline():
@@ -528,6 +539,18 @@ def test_match_any_against_aliased_field_compile():
         == """SELECT products.id
 FROM products
 WHERE products.description::pdb.alias('description_simple') ||| 'running'"""
+    )
+
+
+def test_explain_score_compile():
+    stmt = select(products.c.id, pdb.explain_score(products.c.id)).where(
+        search.match_any(products.c.description, "running")
+    )
+    assert (
+        _sql(stmt)
+        == """SELECT products.id, pdb.explain_score(products.id) AS explain_score_1
+FROM products
+WHERE products.description ||| 'running'"""
     )
 
 

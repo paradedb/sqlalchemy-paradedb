@@ -102,6 +102,18 @@ def test_expand_with_partial_synonym_index(synonym_session, set_name, expected_i
     assert list(synonym_session.scalars(stmt)) == expected_ids
 
 
+def test_expand_with_phrase_and_parse(synonym_session):
+    phrase = select(MockItem.id).where(
+        search.phrase(MockItem.description, search.expand("leather couch", ShopSynonym.rule))
+    )
+    parse = select(MockItem.id).where(
+        search.parse(MockItem.description, search.expand("leather AND couch", ShopSynonym.rule))
+    )
+    for stmt in (phrase, parse):
+        assert _synonym_indexes(synonym_session, stmt) == ["shop_synonyms_idx"]
+        assert list(synonym_session.scalars(stmt)) == [24]
+
+
 def test_expand_with_fuzzy(synonym_session):
     stmt = (
         select(MockItem.id)

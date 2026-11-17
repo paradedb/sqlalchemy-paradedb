@@ -9,6 +9,7 @@ from sqlalchemy import Text, cast, func, literal, literal_column, select
 from sqlalchemy.dialects.postgresql import ARRAY, array
 from sqlalchemy.sql import operators, visitors
 from sqlalchemy.sql.elements import BindParameter, ClauseElement, ColumnElement
+from sqlalchemy.types import UserDefinedType
 
 from paradedb.sqlalchemy.tokenizer import Tokenizer
 
@@ -118,6 +119,21 @@ def _inline_bind_values(clause: ColumnElement[bool]) -> ColumnElement[bool]:
     return visitors.replacement_traverse(clause, {}, replace)
 
 
+class _QueryType(UserDefinedType):
+    """The type of a ``pdb.query`` value. ``parse`` reads it to tell an expansion from text."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return "pdb.query"
+
+
+def _is_expansion(value: Any) -> bool:
+    while isinstance(value, PDBCast):
+        value = value.expr
+    return isinstance(getattr(value, "type", None), _QueryType)
+
+
 def expand(
     value: _TextClause,
     rule: ColumnElement,
@@ -126,7 +142,8 @@ def expand(
 ) -> ClauseElement:
     """Expand a search value with the synonym rules in a table.
 
-    Pass the result to ``match_any`` or ``match_all``. ``fuzzy`` and ``boost`` accept it too.
+    Pass the result to ``match_any``, ``match_all``, ``phrase`` or ``parse``. ``fuzzy``, ``boost`` and
+    ``slop`` accept it too.
 
     Args:
         value: The text to search for.
@@ -145,7 +162,7 @@ def expand(
         field ||| (SELECT pdb.expand('sofa', synonyms.rule) AS expand_1 FROM synonyms
                    WHERE synonyms.set_name = 'shop')
     """
-    rules = select(func.pdb.expand(_to_text_clause(value), rule))
+    rules = select(func.pdb.expand(_to_text_clause(value), rule, type_=_QueryType()))
     if where is not None:
         rules = rules.where(_inline_bind_values(where))
     return rules.scalar_subquery()
@@ -255,6 +272,11 @@ def _proximity_chain(
 def parse(
     field: ColumnElement, query: _TextClause, *, lenient: bool = False, conjunction_mode: bool = False
 ) -> ColumnElement[bool]:
+    # `pdb.parse` takes only text, and `expand` already returns a query.
+    if _is_expansion(query):
+        if lenient or conjunction_mode:
+            raise InvalidArgumentError("lenient and conjunction_mode do not apply to an expansion")
+        return field.operate(_QUERY, query)
     return field.operate(_QUERY, func.pdb.parse(_to_text_clause(query), lenient, conjunction_mode))
 
 
