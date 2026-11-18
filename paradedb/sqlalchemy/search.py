@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import Text, cast, func, literal, literal_column, select
 from sqlalchemy.dialects.postgresql import ARRAY, array
-from sqlalchemy.sql import operators, visitors
+from sqlalchemy.sql import coercions, operators, roles, visitors
 from sqlalchemy.sql.elements import BindParameter, ClauseElement, ColumnElement
 from sqlalchemy.types import UserDefinedType
 
@@ -124,9 +124,6 @@ class _QueryType(UserDefinedType):
 
     cache_ok = True
 
-    def get_col_spec(self, **kw: Any) -> str:
-        return "pdb.query"
-
 
 def _is_expansion(value: Any) -> bool:
     while isinstance(value, PDBCast):
@@ -154,7 +151,12 @@ def expand(
 
     The values in ``where`` go into the SQL text and not into bind parameters.
     With a parameter there, the generic plan of a prepared statement can't
-    pick the partial synonym index.
+    pick the partial synonym index. SQLAlchemy writes these literals for the
+    ``standard_conforming_strings`` setting that it read at its first
+    connection, so don't change that setting in a session.
+
+    ``parse`` takes only the result of this function as an expansion. It
+    gives a subquery that you write by hand to ``pdb.parse``.
 
     Generates::
 
@@ -162,9 +164,11 @@ def expand(
         field ||| (SELECT pdb.expand('sofa', synonyms.rule) AS expand_1 FROM synonyms
                    WHERE synonyms.set_name = 'shop')
     """
+    if not isinstance(value, (str, ClauseElement)):
+        raise InvalidArgumentError("value must be a string or a SQL expression")
     rules = select(func.pdb.expand(_to_text_clause(value), rule, type_=_QueryType()))
     if where is not None:
-        rules = rules.where(_inline_bind_values(where))
+        rules = rules.where(_inline_bind_values(coercions.expect(roles.WhereHavingRole, where)))
     return rules.scalar_subquery()
 
 

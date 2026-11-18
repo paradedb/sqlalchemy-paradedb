@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from sqlalchemy import JSON, Text, func, literal, literal_column
+from sqlalchemy import Text, func, literal, literal_column
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from .errors import InvalidArgumentError
@@ -22,7 +23,7 @@ def score(field: ColumnElement) -> ClauseElement:
 
 def explain_score(field: ColumnElement) -> ClauseElement:
     """Explain the BM25 score of the row. Pass the same column as to ``score``."""
-    return func.pdb.explain_score(field, type_=JSON())
+    return func.pdb.explain_score(field, type_=JSONB())
 
 
 def alias(field: ColumnElement, name: str) -> ClauseElement:

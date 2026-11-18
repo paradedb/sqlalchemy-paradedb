@@ -16,6 +16,7 @@ except ImportError:
 import pytest
 from sqlalchemy import Integer, String, Text, and_, func, not_, or_, select
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
 
@@ -477,18 +478,29 @@ def test_parse_options_do_not_apply_to_an_expansion():
         search.parse(products.c.description, rules, lenient=True)
 
 
-def test_expand_where_values_are_inline():
+def test_expand_arguments_are_checked():
+    with pytest.raises(InvalidArgumentError, match="string or a SQL expression"):
+        search.expand(["sofa"], shop_synonyms.c.rule)
+    with pytest.raises(ArgumentError):
+        search.expand("sofa", synonyms.c.rule, where="set_name = 'shop'")
+
+
+@pytest.mark.parametrize(
+    ("where", "rendered"),
+    [
+        (synonyms.c.set_name == "men's shoes", "synonyms.set_name = 'men''s shoes'"),
+        (synonyms.c.set_name.in_(["shop", "men's shoes"]), "synonyms.set_name IN ('shop', 'men''s shoes')"),
+    ],
+)
+def test_expand_where_values_are_inline(where, rendered):
     stmt = select(products.c.id).where(
-        search.match_any(
-            products.c.description,
-            search.expand("sofa", synonyms.c.rule, where=synonyms.c.set_name == "men's shoes"),
-        )
+        search.match_any(products.c.description, search.expand("sofa", synonyms.c.rule, where=where))
     )
     compiled = stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True})
     assert str(compiled) == (
         "SELECT products.id \nFROM products \n"
         "WHERE products.description ||| (SELECT pdb.expand(%(param_1)s, synonyms.rule) AS expand_1 \n"
-        "FROM synonyms \nWHERE synonyms.set_name = 'men''s shoes')"
+        f"FROM synonyms \nWHERE {rendered})"
     )
     assert compiled.params == {"param_1": "sofa"}
 

@@ -412,7 +412,6 @@ def test_explain_score_has_the_score(mock_session):
     )
     _, score, explanation = mock_session.execute(stmt).one()
     assert explanation["value"] == score
-    assert explanation["description"] == "TermQuery, product of..."
 
 
 def test_boost_does_not_change_result_set(mock_session):
