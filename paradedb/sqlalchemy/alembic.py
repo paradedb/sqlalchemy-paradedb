@@ -280,8 +280,8 @@ def _to_vector_index_options(options: dict[str, object] | None) -> VectorIndexOp
         coerced["partition_by"] = str(options["partition_by"]).split(",")
     if "target_segment_count" in options:
         coerced["target_segment_count"] = int(str(options["target_segment_count"]))
-    if "vector_fields" in options:
-        coerced["vector_fields"] = json.loads(str(options["vector_fields"]))
+    if "quantization" in options:
+        coerced["quantization"] = json.loads(str(options["quantization"]))
     return VectorIndexOptions(**coerced) if coerced else None
 
 
@@ -455,7 +455,7 @@ def _with_option_values_equal(db_value: object, meta_value: object) -> bool:
     db_text = _normalize_reloption_value(str(db_value)) or ""
     meta_text = _normalize_reloption_value(str(meta_value)) or ""
     try:
-        if db_text.startswith("{") and meta_text.startswith("{"):
+        if db_text.startswith(("{", "[")) and meta_text.startswith(("{", "[")):
             return json.loads(db_text) == json.loads(meta_text)
         return math.isclose(float(db_text), float(meta_text), rel_tol=1e-6)
     except ValueError:

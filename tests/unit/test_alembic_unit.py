@@ -529,17 +529,17 @@ def test_create_sql_generation_with_all_vector_options():
         expressions=["id", "embedding vector_cosine_ops"],
         with_options=VectorIndexOptions(
             training_sample_ratio=0.01,
-            max_leaf_size=32,
+            target_leaf_size=32,
             partition_by=["id"],
             target_segment_count=8,
-            vector_fields={"embedding": {"quantization": False}},
+            quantization=[1, 4],
         ),
     )
     pdb_alembic._create_paradedb_index_impl(ops, create_op)
     assert ops.sql[-1] == (
         'CREATE INDEX "items_search_idx" ON "items" '
         "USING paradedb (id, embedding vector_cosine_ops) "
-        "WITH (training_sample_ratio=0.01, max_leaf_size=32, partition_by='id', target_segment_count=8, vector_fields='{\"embedding\":{\"quantization\":false}}')"
+        "WITH (training_sample_ratio=0.01, target_leaf_size=32, partition_by='id', target_segment_count=8, quantization='[1,4]')"
     )
 
 
@@ -583,12 +583,12 @@ def test_renderer_emits_with_options_kwarg():
             index_name="items_search_idx",
             table_name="items",
             expressions=["id", "embedding vector_cosine_ops"],
-            with_options=VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32),
+            with_options=VectorIndexOptions(training_sample_ratio=0.01, target_leaf_size=32),
         ),
     )
     assert lines == [
         "op.create_paradedb_index('items_search_idx', 'items', ['id', 'embedding vector_cosine_ops'], "
-        "with_options=VectorIndexOptions(training_sample_ratio=0.01, max_leaf_size=32))"
+        "with_options=VectorIndexOptions(training_sample_ratio=0.01, target_leaf_size=32))"
     ]
     assert "from paradedb.sqlalchemy import VectorIndexOptions" in autogen_ctx.imports
 
@@ -645,10 +645,10 @@ def test_drop_paradedb_index_reverse_carries_with_options():
 
 
 def test_parse_index_reloptions():
-    reloptions = ["training_sample_ratio=0.01", "max_leaf_size=32"]
+    reloptions = ["training_sample_ratio=0.01", "target_leaf_size=32"]
     assert pdb_alembic._parse_index_reloptions(reloptions) == {
         "training_sample_ratio": "0.01",
-        "max_leaf_size": "32",
+        "target_leaf_size": "32",
     }
     assert pdb_alembic._parse_index_reloptions(None) == {}
 
@@ -657,14 +657,15 @@ def test_with_option_values_equal_tolerates_real_normalization():
     assert pdb_alembic._with_option_values_equal("0.0099999998", 0.01)
     assert pdb_alembic._with_option_values_equal("0.01", "0.01")
     assert pdb_alembic._with_option_values_equal("32", 32)
+    assert pdb_alembic._with_option_values_equal("[1, 4]", "[1,4]")
     assert not pdb_alembic._with_option_values_equal("0.02", 0.01)
 
 
 def test_with_options_changed():
     assert not pdb_alembic._with_options_changed({}, {})
     assert not pdb_alembic._with_options_changed(
-        {"training_sample_ratio": "0.0099999998", "max_leaf_size": "32"},
-        {"training_sample_ratio": 0.01, "max_leaf_size": 32},
+        {"training_sample_ratio": "0.0099999998", "target_leaf_size": "32"},
+        {"training_sample_ratio": 0.01, "target_leaf_size": 32},
     )
     assert pdb_alembic._with_options_changed({}, {"training_sample_ratio": 0.01})
     assert pdb_alembic._with_options_changed({"training_sample_ratio": "0.01"}, {})
