@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal
 
 from sqlalchemy import Text, func, literal, literal_column
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from .errors import InvalidArgumentError
@@ -18,6 +19,11 @@ def _inline_string_literal(value: str) -> ClauseElement:
 
 def score(field: ColumnElement) -> ClauseElement:
     return func.pdb.score(field)
+
+
+def explain_score(field: ColumnElement) -> ClauseElement:
+    """Explain the BM25 score of the row. Pass the same column as to ``score``."""
+    return func.pdb.explain_score(field, type_=JSONB())
 
 
 def alias(field: ColumnElement, name: str) -> ClauseElement:

@@ -399,6 +399,17 @@ def test_score_ordering_descending(mock_session):
     assert scores == sorted(scores, reverse=True)
 
 
+def test_explain_score_has_the_score(mock_session):
+    stmt = (
+        select(MockItem.id, pdb.score(MockItem.id), pdb.explain_score(MockItem.id))
+        .where(search.match_any(MockItem.description, "shoes"))
+        .order_by(pdb.score(MockItem.id).desc(), MockItem.id.asc())
+        .limit(1)
+    )
+    _, score, explanation = mock_session.execute(stmt).one()
+    assert explanation["value"] == score
+
+
 def test_boost_does_not_change_result_set(mock_session):
     """boost() only affects score, not which rows match."""
     stmt_base = select(MockItem.id).where(search.match_any(MockItem.description, "shoes"))

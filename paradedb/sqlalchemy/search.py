@@ -5,10 +5,11 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Text, cast, func, literal, literal_column
+from sqlalchemy import Text, cast, func, literal, literal_column, select
 from sqlalchemy.dialects.postgresql import ARRAY, array
-from sqlalchemy.sql import operators
-from sqlalchemy.sql.elements import ClauseElement, ColumnElement
+from sqlalchemy.sql import coercions, operators, roles, visitors
+from sqlalchemy.sql.elements import BindParameter, ClauseElement, ColumnElement
+from sqlalchemy.types import UserDefinedType
 
 from paradedb.sqlalchemy.tokenizer import Tokenizer
 
@@ -107,6 +108,68 @@ def fuzzy(
 
 def tokenize(value: _SearchValue, tokenizer: Tokenizer) -> ClauseElement:
     return PDBCast(_to_search_value(value), None, raw_cast=tokenizer.render())
+
+
+def _inline_bind_values(clause: ColumnElement[bool]) -> ColumnElement[bool]:
+    def replace(element: Any, **kw: Any) -> Any:
+        if isinstance(element, BindParameter):
+            return element.render_literal_execute()
+        return None
+
+    return visitors.replacement_traverse(clause, {}, replace)
+
+
+class _QueryType(UserDefinedType):
+    """The type of a ``pdb.query`` value. ``parse`` reads it to tell an expansion from text."""
+
+    cache_ok = True
+
+
+def _is_expansion(value: Any) -> bool:
+    while isinstance(value, PDBCast):
+        value = value.expr
+    return isinstance(getattr(value, "type", None), _QueryType)
+
+
+def expand(
+    value: _TextClause,
+    rule: ColumnElement,
+    *,
+    where: ColumnElement[bool] | None = None,
+) -> ClauseElement:
+    """Expand a search value with the synonym rules in a table.
+
+    Pass the result to ``match_any``, ``match_all``, ``phrase`` or ``parse``. ``fuzzy``, ``boost`` and
+    ``slop`` accept it too.
+
+    Args:
+        value: The text to search for.
+        rule: The ``pdb.synonym_rule`` column of the rules table.
+        where: Optional filter that picks one set of rules, e.g.
+               ``Synonym.set_name == "shop"``. Write it like the ``WHERE``
+               of the partial synonym index that holds the set.
+
+    The values in ``where`` go into the SQL text and not into bind parameters.
+    With a parameter there, the generic plan of a prepared statement can't
+    pick the partial synonym index. SQLAlchemy writes these literals for the
+    ``standard_conforming_strings`` setting that it read at its first
+    connection, so don't change that setting in a session.
+
+    ``parse`` takes only the result of this function as an expansion. It
+    gives a subquery that you write by hand to ``pdb.parse``.
+
+    Generates::
+
+        field ||| (SELECT pdb.expand('sofa', shop_synonyms.rule) AS expand_1 FROM shop_synonyms)
+        field ||| (SELECT pdb.expand('sofa', synonyms.rule) AS expand_1 FROM synonyms
+                   WHERE synonyms.set_name = 'shop')
+    """
+    if not isinstance(value, (str, ClauseElement)):
+        raise InvalidArgumentError("value must be a string or a SQL expression")
+    rules = select(func.pdb.expand(_to_text_clause(value), rule, type_=_QueryType()))
+    if where is not None:
+        rules = rules.where(_inline_bind_values(coercions.expect(roles.WhereHavingRole, where)))
+    return rules.scalar_subquery()
 
 
 def match_all(
@@ -213,6 +276,11 @@ def _proximity_chain(
 def parse(
     field: ColumnElement, query: _TextClause, *, lenient: bool = False, conjunction_mode: bool = False
 ) -> ColumnElement[bool]:
+    # `pdb.parse` takes only text, and `expand` already returns a query.
+    if _is_expansion(query):
+        if lenient or conjunction_mode:
+            raise InvalidArgumentError("lenient and conjunction_mode do not apply to an expansion")
+        return field.operate(_QUERY, query)
     return field.operate(_QUERY, func.pdb.parse(_to_text_clause(query), lenient, conjunction_mode))
 
 

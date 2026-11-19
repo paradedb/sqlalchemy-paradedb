@@ -16,10 +16,12 @@ except ImportError:
 import pytest
 from sqlalchemy import Integer, String, Text, and_, func, not_, or_, select
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.sql import column, table
 from sqlalchemy.orm import aliased
 
 from paradedb.sqlalchemy import pdb, search, select_with, vector
+from paradedb.sqlalchemy.errors import InvalidArgumentError
 from paradedb.sqlalchemy.vector import Vector
 
 
@@ -31,6 +33,9 @@ products = table(
     column("rating", Integer),
     column("embedding", Vector(3)),
 )
+
+shop_synonyms = table("shop_synonyms", column("rule", Text))
+synonyms = table("synonyms", column("set_name", Text), column("rule", Text))
 
 
 class SearchTerm(StrEnum):
@@ -448,6 +453,58 @@ WHERE products.description ||| 'shoes'::pdb.const(1.0)"""
     )
 
 
+def test_expand_compile():
+    rules = search.expand("sofa", shop_synonyms.c.rule)
+    subquery = "(SELECT pdb.expand('sofa', shop_synonyms.rule) AS expand_1\nFROM shop_synonyms)"
+    cases = [
+        (search.match_any(products.c.description, rules), f"||| {subquery}"),
+        (search.match_all(products.c.description, rules), f"&&& {subquery}"),
+        (search.match_any(products.c.description, search.fuzzy(rules, 1)), f"||| {subquery}::pdb.fuzzy(1)"),
+        (search.match_any(products.c.description, search.boost(rules, 2)), f"||| {subquery}::pdb.boost(2)"),
+        (search.phrase(products.c.description, rules), f"### {subquery}"),
+        (search.phrase(products.c.description, search.slop(rules, 2)), f"### {subquery}::pdb.slop(2)"),
+        (search.parse(products.c.description, rules), f"@@@ {subquery}"),
+        (search.parse(products.c.description, search.fuzzy(rules, 1)), f"@@@ {subquery}::pdb.fuzzy(1)"),
+    ]
+    for predicate, expected in cases:
+        assert _sql(select(products.c.id).where(predicate)) == (
+            f"SELECT products.id\nFROM products\nWHERE products.description {expected}"
+        )
+
+
+def test_parse_options_do_not_apply_to_an_expansion():
+    rules = search.expand("sofa", shop_synonyms.c.rule)
+    with pytest.raises(InvalidArgumentError, match="do not apply to an expansion"):
+        search.parse(products.c.description, rules, lenient=True)
+
+
+def test_expand_arguments_are_checked():
+    with pytest.raises(InvalidArgumentError, match="string or a SQL expression"):
+        search.expand(["sofa"], shop_synonyms.c.rule)
+    with pytest.raises(ArgumentError):
+        search.expand("sofa", synonyms.c.rule, where="set_name = 'shop'")
+
+
+@pytest.mark.parametrize(
+    ("where", "rendered"),
+    [
+        (synonyms.c.set_name == "men's shoes", "synonyms.set_name = 'men''s shoes'"),
+        (synonyms.c.set_name.in_(["shop", "men's shoes"]), "synonyms.set_name IN ('shop', 'men''s shoes')"),
+    ],
+)
+def test_expand_where_values_are_inline(where, rendered):
+    stmt = select(products.c.id).where(
+        search.match_any(products.c.description, search.expand("sofa", synonyms.c.rule, where=where))
+    )
+    compiled = stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True})
+    assert str(compiled) == (
+        "SELECT products.id \nFROM products \n"
+        "WHERE products.description ||| (SELECT pdb.expand(%(param_1)s, synonyms.rule) AS expand_1 \n"
+        f"FROM synonyms \nWHERE {rendered})"
+    )
+    assert compiled.params == {"param_1": "sofa"}
+
+
 def test_exists_compile():
     stmt = select(products.c.id).where(search.exists(products.c.rating))
     sql = _sql(stmt)
@@ -494,6 +551,18 @@ def test_match_any_against_aliased_field_compile():
         == """SELECT products.id
 FROM products
 WHERE products.description::pdb.alias('description_simple') ||| 'running'"""
+    )
+
+
+def test_explain_score_compile():
+    stmt = select(products.c.id, pdb.explain_score(products.c.id)).where(
+        search.match_any(products.c.description, "running")
+    )
+    assert (
+        _sql(stmt)
+        == """SELECT products.id, pdb.explain_score(products.id) AS explain_score_1
+FROM products
+WHERE products.description ||| 'running'"""
     )
 
 
