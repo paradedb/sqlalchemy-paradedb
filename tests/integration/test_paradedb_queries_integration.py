@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from sqlalchemy import cast, literal, select, text
+from sqlalchemy import cast, literal, select
 
 from conftest import MockItem, assert_uses_paradedb_scan
 from paradedb import tokenizer
@@ -400,10 +400,6 @@ def test_score_ordering_descending(mock_session):
 
 
 def test_explain_score_has_the_score(mock_session):
-    if not mock_session.execute(
-        text("SELECT to_regprocedure('pdb.explain_score(anyelement)') IS NOT NULL")
-    ).scalar_one():
-        pytest.skip("this ParadeDB version has no pdb.explain_score")
     stmt = (
         select(MockItem.id, pdb.score(MockItem.id), pdb.explain_score(MockItem.id))
         .where(search.match_any(MockItem.description, "shoes"))

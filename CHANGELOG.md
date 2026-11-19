@@ -6,8 +6,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
-- Synonym search using `search.expand`, which builds the `pdb.expand` subquery for `search.match_any`, `search.match_all`, `search.phrase` and `search.parse`. It needs a ParadeDB version that has `pdb.expand`.
-- `pdb.explain_score`, which explains the BM25 score of a row. It needs a ParadeDB version that has `pdb.explain_score`.
+- Synonym search using `search.expand`, which builds the `pdb.expand` subquery for `search.match_any`, `search.match_all`, `search.phrase` and `search.parse`.
+- `pdb.explain_score`, which explains the BM25 score of a row.
 
 ### Changed
 

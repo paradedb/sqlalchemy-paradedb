@@ -35,8 +35,6 @@ class Synonym(SynonymBase):
 @pytest.fixture(scope="module")
 def synonym_engine(engine: Engine, db_url: str, paradedb_ready: None) -> Iterator[Engine]:
     with engine.begin() as conn:
-        if not conn.execute(text("SELECT to_regprocedure('pdb.expand(text, text)') IS NOT NULL")).scalar_one():
-            pytest.skip("this ParadeDB version has no pdb.expand")
         conn.execute(text("DROP TABLE IF EXISTS shop_synonyms, synonyms"))
         conn.execute(text("CREATE TABLE shop_synonyms (rule pdb.synonym_rule NOT NULL)"))
         conn.execute(text("INSERT INTO shop_synonyms VALUES ('sofa, couch, divan'), ('sneakers => running shoes')"))
