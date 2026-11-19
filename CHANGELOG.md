@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-19
+
 ### Added
 
 - Synonym search using `search.expand`, which builds the `pdb.expand` subquery for `search.match_any`, `search.match_all`, `search.phrase` and `search.parse`.
@@ -123,6 +125,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.15.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/paradedb/sqlalchemy-paradedb/releases/tag/v0.12.0
