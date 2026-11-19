@@ -582,17 +582,17 @@ def test_vector_index_options_compile():
         postgresql_with={
             **VectorIndexOptions(
                 training_sample_ratio=0.01,
-                max_leaf_size=32,
+                target_leaf_size=32,
                 partition_by=["id"],
                 target_segment_count=8,
-                vector_fields={"embedding": {"quantization": False}},
+                quantization=[1, 4],
             ),
         },
     )
     assert (
         _sql(CreateIndex(idx).compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         == """\
-CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (training_sample_ratio = 0.01, max_leaf_size = 32, partition_by = 'id', target_segment_count = 8, vector_fields = '{"embedding":{"quantization":false}}')"""
+CREATE INDEX products_vector_options_idx ON products USING paradedb (id, embedding vector_cosine_ops) WITH (training_sample_ratio = 0.01, target_leaf_size = 32, partition_by = 'id', target_segment_count = 8, quantization = '[1,4]')"""
     )
     validate_paradedb_index(idx)
 
@@ -629,17 +629,17 @@ _INVALID_OPTION_VALUES = [
     ("training_sample_ratio", 1.5),
     ("training_sample_ratio", "not-a-number"),
     ("training_sample_ratio", True),
-    ("max_leaf_size", 0),
-    ("max_leaf_size", 2147483648),
-    ("max_leaf_size", 32.5),
+    ("target_leaf_size", 0),
+    ("target_leaf_size", 2147483648),
+    ("target_leaf_size", 32.5),
 ]
 
 _BOUNDARY_OPTION_VALUES = [
     ("training_sample_ratio", 0.000001),
     ("training_sample_ratio", 1.0),
     ("training_sample_ratio", "0.01"),
-    ("max_leaf_size", 1),
-    ("max_leaf_size", 2147483647),
+    ("target_leaf_size", 1),
+    ("target_leaf_size", 2147483647),
 ]
 
 
@@ -683,7 +683,7 @@ def test_vector_index_options_class_omits_unset_fields():
     assert dict(VectorIndexOptions()) == {}
     assert dict(VectorIndexOptions(training_sample_ratio=0.01)) == {"training_sample_ratio": 0.01}
     with pytest.raises(KeyError):
-        VectorIndexOptions(training_sample_ratio=0.01)["max_leaf_size"]
+        VectorIndexOptions(training_sample_ratio=0.01)["target_leaf_size"]
 
 
 def test_invalid_mutable_segment_rows():

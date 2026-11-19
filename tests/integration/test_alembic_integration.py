@@ -831,8 +831,8 @@ def test_autogen_comparator_reports_no_vector_index_churn(engine, paradedb_ready
 # ---------------------------------------------------------------------------
 
 _MOCK_IDX = "mock_items_search_idx"
-_VIOPT_OPTIONS = {"training_sample_ratio": 0.01, "max_leaf_size": 32}
-_VIOPT_OPTIONS_SQL = ", training_sample_ratio=0.01, max_leaf_size=32"
+_VIOPT_OPTIONS = {"training_sample_ratio": 0.01, "target_leaf_size": 32, "quantization": 0}
+_VIOPT_OPTIONS_SQL = ", training_sample_ratio=0.01, target_leaf_size=32, quantization=0"
 
 
 @pytest.fixture()
@@ -868,7 +868,8 @@ def test_alembic_create_index_with_options_sets_reloptions(engine, mock_items_in
         reloptions = _index_reloptions(conn, _MOCK_IDX)
         options = dict(opt.split("=", 1) for opt in reloptions)
         assert float(options["training_sample_ratio"]) == pytest.approx(0.01)
-        assert options["max_leaf_size"] == "32"
+        assert options["target_leaf_size"] == "32"
+        assert options["quantization"] == "0"
 
 
 def test_autogenerate_no_op_when_index_options_match(engine, mock_items_index):

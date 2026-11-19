@@ -29,7 +29,7 @@ from .errors import (
 
 VECTOR_INDEX_OPTIONS: dict[str, tuple[type, int | float, int | float]] = {
     "training_sample_ratio": (float, 0.000001, 1.0),
-    "max_leaf_size": (int, 1, 2147483647),
+    "target_leaf_size": (int, 1, 2147483647),
     "mutable_segment_rows": (int, 0, 10000),
 }
 
@@ -55,7 +55,7 @@ def _validate_vector_index_options(with_options: dict[str, Any]) -> None:
 
 @dataclass(frozen=True)
 class VectorIndexOptions:
-    """Vector index build options (pg_search 0.26.0+), validated at construction.
+    """Vector index build options (pg_search 0.27.0+), validated at construction.
 
     Unpack into ``postgresql_with``::
 
@@ -72,10 +72,10 @@ class VectorIndexOptions:
     """
 
     training_sample_ratio: float | None = None
-    max_leaf_size: int | None = None
+    target_leaf_size: int | None = None
     partition_by: Sequence[str] | None = None
     target_segment_count: int | None = None
-    vector_fields: dict[str, dict[str, Any]] | None = None
+    quantization: Sequence[int] | int | None = None
     search_tokenizer: Tokenizer | str | None = None
     layer_sizes: str | None = None
     background_layer_sizes: str | None = None
@@ -95,8 +95,8 @@ class VectorIndexOptions:
             return value.render_search()
         if name == "partition_by":
             return ",".join(value)
-        if name == "vector_fields":
-            return json.dumps(value, separators=(",", ":"), sort_keys=True)
+        if name == "quantization":
+            return json.dumps(value, separators=(",", ":"))
         return value
 
     def __repr__(self) -> str:
@@ -574,7 +574,7 @@ def _compile_create_index(element, compiler, **kw):
     original = ", ".join(f"{name} = {value}" for name, value in options.items())
     values = []
     for name, value in options.items():
-        if name in ("partition_by", "vector_fields", "search_tokenizer", "layer_sizes", "background_layer_sizes"):
+        if name in ("partition_by", "quantization", "search_tokenizer", "layer_sizes", "background_layer_sizes"):
             value = compiler.sql_compiler.render_literal_value(str(value), String())
         values.append(f"{name} = {value}")
     return rendered.replace(f"WITH ({original})", "WITH (" + ", ".join(values) + ")", 1)
