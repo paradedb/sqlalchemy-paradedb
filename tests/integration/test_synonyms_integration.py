@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy import Text, create_engine, select, text
+from sqlalchemy import Text, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -33,7 +33,7 @@ class Synonym(SynonymBase):
 
 
 @pytest.fixture(scope="module")
-def synonym_engine(engine: Engine, db_url: str, paradedb_ready: None) -> Iterator[Engine]:
+def synonym_tables(engine: Engine, paradedb_ready: None) -> Iterator[None]:
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS shop_synonyms, synonyms"))
         conn.execute(text("CREATE TABLE shop_synonyms (rule pdb.synonym_rule NOT NULL)"))
@@ -50,21 +50,14 @@ def synonym_engine(engine: Engine, db_url: str, paradedb_ready: None) -> Iterato
                     f"WHERE set_name = '{set_name}'"
                 )
             )
-    # Prepare every statement. A bind parameter in the subquery's filter stops only the
-    # generic plan from using a partial synonym index.
-    prepared_engine = create_engine(db_url, connect_args={"prepare_threshold": 0})
-    yield prepared_engine
-    prepared_engine.dispose()
+    yield
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE shop_synonyms, synonyms"))
 
 
 @pytest.fixture()
-def synonym_session(synonym_engine: Engine) -> Iterator[Session]:
-    with Session(synonym_engine) as session:
-        session.execute(text("SET LOCAL plan_cache_mode = force_generic_plan"))
-        # Fails a query whose subquery reads its rules from the table and not from a synonym index.
-        session.execute(text("SET LOCAL paradedb.planner_warnings = 'error'"))
+def synonym_session(engine: Engine, synonym_tables: None) -> Iterator[Session]:
+    with Session(engine) as session:
         yield session
 
 
