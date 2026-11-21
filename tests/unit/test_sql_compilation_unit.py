@@ -14,7 +14,7 @@ except ImportError:
 
 
 import pytest
-from sqlalchemy import Integer, String, Text, and_, func, not_, or_, select
+from sqlalchemy import Integer, String, Text, and_, func, literal, not_, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.sql import column, table
@@ -264,16 +264,10 @@ def test_casts_preserve_literal_percents(value, paramstyle, literal_binds):
             search.tokenize(value, tokenizer.regex_pattern(value)),
         )
     )
-    compiled = stmt.compile(
-        dialect=postgresql.dialect(paramstyle=paramstyle),
-        compile_kwargs={"literal_binds": literal_binds},
-    )
+    dialect = postgresql.dialect(paramstyle=paramstyle)
+    compiled = stmt.compile(dialect=dialect, compile_kwargs={"literal_binds": literal_binds})
     escaped = value if paramstyle == "named" else value.replace("%", "%%")
-    term = (
-        f"'{escaped}'"
-        if literal_binds
-        else {"pyformat": "%(param_1)s", "format": "%s", "named": ":param_1"}[paramstyle]
-    )
+    term = f"'{escaped}'" if literal_binds else str(literal(value).compile(dialect=dialect))
     assert str(compiled) == (
         "SELECT products.id \nFROM products \n"
         f"WHERE products.description::pdb.alias('{escaped}') ||| {term}::pdb.regex_pattern('{escaped}')"
@@ -496,10 +490,12 @@ def test_expand_where_values_are_inline(where, rendered):
     stmt = select(products.c.id).where(
         search.match_any(products.c.description, search.expand("sofa", synonyms.c.rule, where=where))
     )
-    compiled = stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True})
+    dialect = postgresql.dialect()
+    compiled = stmt.compile(dialect=dialect, compile_kwargs={"render_postcompile": True})
+    term = literal("sofa").compile(dialect=dialect)
     assert str(compiled) == (
         "SELECT products.id \nFROM products \n"
-        "WHERE products.description ||| (SELECT pdb.expand(%(param_1)s, synonyms.rule) AS expand_1 \n"
+        f"WHERE products.description ||| (SELECT pdb.expand({term}, synonyms.rule) AS expand_1 \n"
         f"FROM synonyms \nWHERE {rendered})"
     )
     assert compiled.params == {"param_1": "sofa"}
