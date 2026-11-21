@@ -29,10 +29,9 @@ def test_percent_index_and_query(engine, value):
             search.match_any(pdb.alias(items.c.description, value), search.tokenize(value, config))
         )
         assert conn.execute(stmt).scalars().all() == [1]
-        # Literal execution also passes an empty parameter collection to psycopg.
-        assert conn.execute(
-            stmt.compile(dialect=conn.dialect, compile_kwargs={"literal_binds": True})
-        ).scalars().all() == [1]
+        # Pass an empty parameter collection so psycopg processes percent escapes.
+        literal_sql = str(stmt.compile(dialect=conn.dialect, compile_kwargs={"literal_binds": True}))
+        assert conn.exec_driver_sql(literal_sql, {}).scalars().all() == [1]
         assert conn.execute(
             text("SELECT reloptions FROM pg_class WHERE relname = :name"), {"name": index.name}
         ).scalar_one() == [f"search_tokenizer={config.render_search()}"]
