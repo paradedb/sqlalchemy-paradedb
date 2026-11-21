@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-21
+
+### Added
+
+- Add support for Python 3.15 with SQLAlchemy 2.1.
+
+### Changed
+
+- **Breaking:** Require Python 3.11 or newer. Python 3.10 has reached end of life.
+
 ## [0.15.0] - 2026-11-19
 
 ### Added
@@ -125,6 +135,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.16.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.12.0...v0.13.0
