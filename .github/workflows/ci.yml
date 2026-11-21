@@ -68,23 +68,14 @@ jobs:
         run: bash scripts/smoke_package_install.sh
 
   matrix-tests:
-    name: Python ${{ matrix.runtime.python-version }} / SQLAlchemy ${{ matrix.runtime.sqlalchemy-version }} / PG ${{ matrix.postgres-version }}
+    name: Python ${{ matrix.python-version }} / SQLAlchemy ${{ matrix.sqlalchemy-version }} / PG ${{ matrix.postgres-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         postgres-version: ["15", "16", "17", "18"]
-        runtime:
-          - sqlalchemy-version: "2.0"
-            python-version: "3.10"
-          - sqlalchemy-version: "2.1"
-            python-version: "3.11"
-          - sqlalchemy-version: "2.1"
-            python-version: "3.12"
-          - sqlalchemy-version: "2.1"
-            python-version: "3.13"
-          - sqlalchemy-version: "2.1"
-            python-version: "3.14"
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+        sqlalchemy-version: ["2.1"]
 
     services:
       paradedb:
@@ -105,16 +96,16 @@ jobs:
       PARADEDB_TEST_DSN: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
       PGPASSWORD: postgres
-      SQLALCHEMY_SPEC: SQLAlchemy~=${{ matrix.runtime.sqlalchemy-version }}.0
+      SQLALCHEMY_SPEC: SQLAlchemy~=${{ matrix.sqlalchemy-version }}.0
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Set up Python ${{ matrix.runtime.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
-          python-version: ${{ matrix.runtime.python-version }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -123,7 +114,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv venv --python "${{ matrix.runtime.python-version }}"
+          uv venv --python "${{ matrix.python-version }}"
           uv sync --extra test --extra dev
 
       - name: Run unit tests
@@ -136,7 +127,7 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           files: ./coverage.xml
-          flags: sqlalchemy-paradedb,py${{ matrix.runtime.python-version }},sa${{ matrix.runtime.sqlalchemy-version }},pg${{ matrix.postgres-version }}
+          flags: sqlalchemy-paradedb,py${{ matrix.python-version }},sa${{ matrix.sqlalchemy-version }},pg${{ matrix.postgres-version }}
           fail_ci_if_error: false
           verbose: true
         env:
