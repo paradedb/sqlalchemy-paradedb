@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Require SQLAlchemy 2.1 or newer.
+
 ## [0.16.0] - 2026-11-21
 
 ### Added

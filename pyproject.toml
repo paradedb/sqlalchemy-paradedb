@@ -47,7 +47,7 @@ classifiers = [
   "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-  "sqlalchemy>=2.0.32",
+  "sqlalchemy>=2.1",
 ]
 
 [project.urls]
