@@ -1,17 +1,8 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 from paradedb import tokenizer
-
-try:
-    from enum import StrEnum
-except ImportError:
-    # StrEnum was introduced in Python 3.11, so we use this fallback when testing against 3.10
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        def __str__(self) -> str:
-            return str(self.value)
-
 
 import pytest
 from sqlalchemy import Integer, String, Text, and_, func, literal, not_, or_, select

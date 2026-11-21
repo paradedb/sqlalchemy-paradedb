@@ -8,7 +8,7 @@ version = "0.15.0"
 description = "The official SQLAlchemy integration for ParadeDB."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
   { name = "ParadeDB", email = "support@paradedb.com" },
 ]
@@ -35,7 +35,6 @@ classifiers = [
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -87,7 +86,7 @@ select = ["E", "F", "W", "B"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_unused_configs = true
 packages = ["paradedb"]
 check_untyped_defs = true
