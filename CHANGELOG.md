@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-21
+
+### Changed
+
+- **Breaking:** Require SQLAlchemy 2.1 or newer.
+
 ## [0.16.0] - 2026-11-21
 
 ### Added
@@ -135,6 +141,7 @@ All notable changes to this project will be documented in this file. The format 
 - CI workflow for lint, typing, unit, and integration checks.
 - Example scripts for quickstart, facets, autocomplete, MLT, hybrid RRF, and RAG retrieval.
 
+[0.17.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/paradedb/sqlalchemy-paradedb/compare/v0.13.0...v0.14.0
